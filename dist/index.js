@@ -21472,20 +21472,20 @@ Then run ${bold("nole")} again.
     }
     process.exit(0);
   }
-  const { OPENROUTER_API_KEY: OPENROUTER_API_KEY2, OPENAI_API_KEY: OPENAI_API_KEY2 } = await Promise.resolve().then(() => (init_env(), exports_env));
-  let primaryKey = token;
+  const { OPENROUTER_API_KEY: OPENROUTER_API_KEY2, OPENAI_API_KEY: OPENAI_API_KEY2, MINIMAX_API_KEY: minimaxKey } = await Promise.resolve().then(() => (init_env(), exports_env));
+  console.error(`[DEBUG] token=${token ? "YES" : "NO"}, minimaxKey=${minimaxKey ? "YES" : "NO"}, OPENROUTER=${OPENROUTER_API_KEY2 ? "YES" : "NO"}`);
+  let primaryKey = token || minimaxKey;
   let primaryModel = settings.model || "MiniMax-M2.7";
-  if (OPENROUTER_API_KEY2 && !token) {
+  if (!primaryKey && OPENROUTER_API_KEY2) {
     primaryKey = OPENROUTER_API_KEY2;
     primaryModel = settings.model || "google/gemini-2.5-flash";
-  } else if (!token && OPENAI_API_KEY2) {
+  }
+  if (!primaryKey && OPENAI_API_KEY2) {
     primaryKey = OPENAI_API_KEY2;
     primaryModel = settings.model || "gpt-4o-mini";
   }
-  if (!primaryKey) {
-    primaryKey = token || OPENROUTER_API_KEY2 || OPENAI_API_KEY2;
-  }
   const client = new LLMClient(primaryKey, primaryModel);
+  client.setModel(primaryModel);
   activeClient = client;
   try {
     await loadMCPServers();

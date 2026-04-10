@@ -169,7 +169,6 @@ async function runRepl(opts: CliOptions) {
   // First-run onboarding — guide new users through setup
   const { hasAnyProvider } = await import('./utils/env.js')
   const token = getMiniMaxToken()
-
   if (!token && !hasAnyProvider()) {
     console.clear()
     console.log(`
@@ -208,25 +207,25 @@ Then run ${bold('nole')} again.
     process.exit(0)
   }
 
-  // Determine which API key to use (OpenRouter preferred, then MiniMax, then OpenAI)
-  const { OPENROUTER_API_KEY, OPENAI_API_KEY } = await import('./utils/env.js')
-  let primaryKey = token
+  // Determine which API key to use — priority: MiniMax (OAuth or API key) > OpenRouter > OpenAI
+  const { OPENROUTER_API_KEY, OPENAI_API_KEY, MINIMAX_API_KEY: minimaxKey } = await import('./utils/env.js')
+  console.error(`[DEBUG] token=${token ? 'YES' : 'NO'}, minimaxKey=${minimaxKey ? 'YES' : 'NO'}, OPENROUTER=${OPENROUTER_API_KEY ? 'YES' : 'NO'}`)
+  let primaryKey = token || minimaxKey
   let primaryModel = settings.model || 'MiniMax-M2.7'
 
-  // If OpenRouter is set and no explicit model override, use it as primary
-  if (OPENROUTER_API_KEY && !token) {
+  // If no MiniMax, try OpenRouter
+  if (!primaryKey && OPENROUTER_API_KEY) {
     primaryKey = OPENROUTER_API_KEY
     primaryModel = settings.model || 'google/gemini-2.5-flash'
-  } else if (!token && OPENAI_API_KEY) {
+  }
+  // If no MiniMax or OpenRouter, try OpenAI
+  if (!primaryKey && OPENAI_API_KEY) {
     primaryKey = OPENAI_API_KEY
     primaryModel = settings.model || 'gpt-4o-mini'
   }
 
-  if (!primaryKey) {
-    primaryKey = token || OPENROUTER_API_KEY || OPENAI_API_KEY
-  }
-
   const client = new LLMClient(primaryKey, primaryModel)
+  client.setModel(primaryModel)  // Auto-detect provider from model name
   activeClient = client
 
   // Load MCP servers
