@@ -134,7 +134,7 @@ function detectPlanIntent(input: string): string | null {
 function getBanner(cwd: string, verbose = false) {
   const v = verbose ? `${dim('· ')}verbose` : ''
   return `
-${bold(c.cyan('▐▛███▜▌'))} ${bold('Nole Code v1.16')} ${dim('· MiniMax')}
+${bold(c.cyan('▐▛███▜▌'))} ${bold('Nole Code v1.17')} ${dim('· MiniMax')}
 ${dim('▝▜█████▛▘')} ${dim(cwd)} ${v}
 
 ${divider()}
@@ -267,6 +267,17 @@ Then run ${bold('nole')} again.
   // Load project context
   const projectContext = loadProjectContext(opts.cwd || process.cwd())
 
+  // Index the project (fast scan of files, exports, structure)
+  let projectIndex = ''
+  try {
+    const { indexProject, formatIndexForPrompt } = await import('./services/indexer.js')
+    const index = indexProject(cwd)
+    if (index.fileCount > 0) {
+      projectIndex = formatIndexForPrompt(index)
+      console.log(dim(`  Indexed ${index.fileCount} files (${Object.keys(index.languages).join(', ')})`))
+    }
+  } catch {}
+
   // Load session memory for context
   const { getMemorySummary } = await import('./session-memory/index.js')
   const memorySummary = getMemorySummary(session.id)
@@ -380,6 +391,7 @@ You have access to these tools. Call them when needed — do not ask for permiss
 - For multi-step tasks, use TodoWrite to track progress
 - Report errors clearly with what went wrong and how to fix it
 - Users can reference files with @filename — the contents are inlined into the message
+${projectIndex ? `\n${projectIndex}` : ''}
 ${projectContext ? `\n# Project Context (from NOLE.md)\n${projectContext}` : ''}
 ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
 
@@ -634,9 +646,18 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
         const { estimateTotalTokens: estTokens } = await import('./utils/count-tokens.js')
         const currentTokens = estTokens(session!.messages)
         if (currentTokens > 100000) {
-          console.log(dim(`  Context large (~${(currentTokens/1000).toFixed(0)}K tokens), compacting...`))
-          const { maybeCompact: compact } = await import('./services/compact/index.js')
-          compact(session!.messages, session!.id)
+          console.log(dim(`  Context large (~${(currentTokens/1000).toFixed(0)}K tokens), summarizing...`))
+          try {
+            const { summarizeMessages } = await import('./services/summarize.js')
+            const { summary, messagesRemoved } = await summarizeMessages(session!.messages, client)
+            if (messagesRemoved > 0) {
+              console.log(dim(`  Summarized ${messagesRemoved} messages`))
+            }
+          } catch {
+            // Fallback to basic compaction
+            const { maybeCompact: compact } = await import('./services/compact/index.js')
+            compact(session!.messages, session!.id)
+          }
           saveSession(session!)
         }
 
@@ -912,7 +933,7 @@ function parseArgs(): CliOptions {
         process.exit(0)
         break
       case '--version':
-        console.log('Nole Code v1.16.0')
+        console.log('Nole Code v1.17.0')
         process.exit(0)
         break
       case '--help':

@@ -583,7 +583,8 @@ registerCommand({
     if (args.length === 0) {
       const { loadSettings } = await import('../project/onboarding.js')
       const s = loadSettings()
-      return `Current model: ${s.model || 'MiniMax-M2.7'}\n\nUsage: /model <name>\nExamples: /model MiniMax-M2.7, /model MiniMax-Text-01`
+      const provider = (() => { try { const { activeClient: c } = require('../index.js'); return c?.getActiveProviderName() || '?' } catch { return '?' } })()
+      return `Current model: ${s.model || 'MiniMax-M2.7'} (${provider})\n\nUsage: /model <name>\n\nExamples:\n  /model google/gemini-2.5-flash    (OpenRouter)\n  /model anthropic/claude-sonnet-4  (OpenRouter)\n  /model meta-llama/llama-4-scout   (OpenRouter)\n  /model gpt-4o-mini                (OpenAI)\n  /model MiniMax-M2.7               (MiniMax)\n\nProvider auto-detected from model name.`
     }
 
     const { saveSettings } = await import('../project/onboarding.js')

@@ -95,6 +95,17 @@ export class LLMClient {
 
   setModel(model: string): void {
     this.model = model
+    // Auto-detect provider from model name
+    if (model.startsWith('gpt-') || model.startsWith('o1') || model.startsWith('o3')) {
+      const idx = this.providers.findIndex(p => p.name === 'openai')
+      if (idx >= 0) this.activeProvider = idx
+    } else if (model.includes('/') || model.startsWith('google/') || model.startsWith('anthropic/') || model.startsWith('meta-llama/')) {
+      const idx = this.providers.findIndex(p => p.name === 'openrouter')
+      if (idx >= 0) this.activeProvider = idx
+    } else if (model.startsWith('MiniMax') || model.startsWith('minimax')) {
+      const idx = this.providers.findIndex(p => p.name === 'minimax')
+      if (idx >= 0) this.activeProvider = idx
+    }
   }
 
   getModel(): string {

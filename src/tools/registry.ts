@@ -13,6 +13,7 @@ import { spawnAgent, onAgentMessage } from '../agents/spawner.js'
 import { createTeam } from '../agents/team.js'
 import { checkCommandSecurity, validatePath } from '../permissions/bash-security.js'
 import { logToolCall } from '../utils/audit.js'
+import { getPreHooks, getPostHooks, runHooks } from '../hooks/index.js'
 import { checkPermission, type PermissionContext } from '../permissions/rules-engine.js'
 import { feature } from '../feature-flags/index.js'
 import type { ToolDefinition } from '../api/llm.js'
@@ -140,6 +141,17 @@ export async function executeTool(
 ): Promise<{ content: string; isError?: boolean }> {
   const toolStart = Date.now()
 
+  // Run pre-hooks
+  const preHooks = getPreHooks(name)
+  if (preHooks.length > 0) {
+    const hookResults = await runHooks(preHooks, { tool: name, input, cwd: ctx.cwd })
+    for (const r of hookResults) {
+      if (r.startsWith('Hook error:')) {
+        return { content: r, isError: true }
+      }
+    }
+  }
+
   // Permission check
   if (feature('PERMISSION_RULES')) {
     const permCtx: PermissionContext = {
@@ -194,6 +206,15 @@ export async function executeTool(
       } catch (err) {
         result = { content: `Error: ${err}`, isError: true }
       }
+    }
+  }
+
+  // Run post-hooks
+  const postHooks = getPostHooks(name)
+  if (postHooks.length > 0) {
+    const hookResults = await runHooks(postHooks, { tool: name, input, cwd: ctx.cwd })
+    if (hookResults.length > 0) {
+      result.content += '\n' + hookResults.join('\n')
     }
   }
 
