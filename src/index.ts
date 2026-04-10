@@ -166,15 +166,67 @@ async function runRepl(opts: CliOptions) {
   // Load user settings
   const settings = loadSettings()
 
-  // Initialize LLM client
+  // First-run onboarding — guide new users through setup
+  const { hasAnyProvider } = await import('./utils/env.js')
   const token = getMiniMaxToken()
-  if (!token) {
-    printError('MINIMAX_API_KEY not found', {
-      details: 'Set MINIMAX_API_KEY or ensure ~/.openclaw/agents/main/agent/auth-profiles.json exists'
-    })
-    process.exit(1)
+
+  if (!token && !hasAnyProvider()) {
+    console.clear()
+    console.log(`
+${bold(c.cyan('▐▛███▜▌'))} ${bold('Welcome to Nole Code!')}
+${dim('▝▜█████▛▘')} ${dim('First-time setup')}
+
+${bold('You need an API key to get started.')}
+
+${c.cyan('Option 1 — OpenRouter')} ${dim('(recommended, many free models)')}
+  1. Go to ${c.cyan('https://openrouter.ai/keys')}
+  2. Create a free account and generate a key
+  3. Run: ${bold('export OPENROUTER_API_KEY=sk-or-...')}
+
+${c.cyan('Option 2 — MiniMax')} ${dim('(free tier, can be slow)')}
+  1. Go to ${c.cyan('https://platform.minimaxi.com')}
+  2. Get your API key
+  3. Run: ${bold('export MINIMAX_API_KEY=your-key')}
+
+${c.cyan('Option 3 — OpenAI')}
+  1. Go to ${c.cyan('https://platform.openai.com/api-keys')}
+  2. Run: ${bold('export OPENAI_API_KEY=sk-...')}
+
+${dim('Or add keys to ~/.nole-code/.env:')}
+  ${dim('echo "OPENROUTER_API_KEY=sk-or-..." > ~/.nole-code/.env')}
+
+Then run ${bold('nole')} again.
+`)
+
+    // Create config directory
+    const configDir = join(homedir(), '.nole-code')
+    if (!existsSync(configDir)) {
+      mkdirSync(configDir, { recursive: true })
+      console.log(dim(`  Created ${configDir}/`))
+    }
+
+    process.exit(0)
   }
-  const client = new LLMClient(token, settings.model || 'MiniMax-M2.7')
+
+  // Determine which API key to use (OpenRouter preferred, then MiniMax, then OpenAI)
+  const { OPENROUTER_API_KEY, OPENAI_API_KEY } = await import('./utils/env.js')
+  let primaryKey = token
+  let primaryModel = settings.model || 'MiniMax-M2.7'
+
+  // If OpenRouter is set and no explicit model override, use it as primary
+  if (OPENROUTER_API_KEY && !token) {
+    primaryKey = OPENROUTER_API_KEY
+    primaryModel = settings.model || 'google/gemini-2.5-flash'
+  } else if (!token && OPENAI_API_KEY) {
+    primaryKey = OPENAI_API_KEY
+    primaryModel = settings.model || 'gpt-4o-mini'
+  }
+
+  if (!primaryKey) {
+    primaryKey = token || OPENROUTER_API_KEY || OPENAI_API_KEY
+  }
+
+  const client = new LLMClient(primaryKey, primaryModel)
   activeClient = client
 
   // Load MCP servers
@@ -766,6 +818,16 @@ function parseArgs(): CliOptions {
   const opts: CliOptions = { cwd: process.cwd() }
   const args = process.argv.slice(2)
 
+  // Handle subcommands first
+  if (args[0] === 'init') {
+    const { createNoleMd } = require('./project/onboarding.js')
+    const cwd = args[1] || process.cwd()
+    const path = createNoleMd(cwd)
+    console.log(`Created ${path}`)
+    console.log('Edit this file to configure project context for Nole.')
+    process.exit(0)
+  }
+
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case '-s':
@@ -810,6 +872,8 @@ ${bold('Nole Code')} — AI Coding Assistant
 
 ${dim('Usage:')}
   nole [options]
+  nole init              Create NOLE.md in current project
+  nole -m "do something" Run a single task and exit
 
 ${dim('Options:')}
   -s, --session <id>    Resume a session

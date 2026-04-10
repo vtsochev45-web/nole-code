@@ -1,4 +1,28 @@
-// Environment utilities
+// Environment utilities — load .env from cwd and ~/.nole-code/
+import { existsSync, readFileSync } from 'fs'
+import { join } from 'path'
+import { homedir } from 'os'
+
+// Load .env files (cwd first, then ~/.nole-code/, don't override existing)
+function loadEnvFile(path: string) {
+  if (!existsSync(path)) return
+  try {
+    const content = readFileSync(path, 'utf-8')
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      const eqIdx = trimmed.indexOf('=')
+      if (eqIdx < 0) continue
+      const key = trimmed.slice(0, eqIdx).trim()
+      const val = trimmed.slice(eqIdx + 1).trim()
+      if (!process.env[key]) process.env[key] = val
+    }
+  } catch {}
+}
+
+loadEnvFile(join(process.cwd(), '.env'))
+loadEnvFile(join(homedir(), '.nole-code', '.env'))
+loadEnvFile(join(homedir(), 'nole-code', '.env'))
 
 export const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || ''
 export const MINIMAX_BASE_URL = process.env.MINIMAX_BASE_URL || 'https://api.minimax.chat/v1'
@@ -22,7 +46,17 @@ export interface ProviderConfig {
 export function getProviders(): ProviderConfig[] {
   const providers: ProviderConfig[] = []
 
-  // Primary: MiniMax
+  // OpenRouter first — most reliable, many free models
+  if (OPENROUTER_API_KEY) {
+    providers.push({
+      name: 'openrouter',
+      baseUrl: 'https://openrouter.ai/api/v1/chat/completions',
+      apiKey: OPENROUTER_API_KEY,
+      model: 'google/gemini-2.5-flash',
+    })
+  }
+
+  // MiniMax — free but often overloaded
   if (MINIMAX_API_KEY) {
     providers.push({
       name: 'minimax',
@@ -33,17 +67,7 @@ export function getProviders(): ProviderConfig[] {
     })
   }
 
-  // Fallback: OpenRouter (supports many models)
-  if (OPENROUTER_API_KEY) {
-    providers.push({
-      name: 'openrouter',
-      baseUrl: 'https://openrouter.ai/api/v1/chat/completions',
-      apiKey: OPENROUTER_API_KEY,
-      model: 'google/gemini-2.5-flash',
-    })
-  }
-
-  // Fallback: OpenAI-compatible
+  // OpenAI
   if (OPENAI_API_KEY) {
     providers.push({
       name: 'openai',
@@ -54,4 +78,9 @@ export function getProviders(): ProviderConfig[] {
   }
 
   return providers
+}
+
+// Check if any provider is configured
+export function hasAnyProvider(): boolean {
+  return !!(MINIMAX_API_KEY || OPENROUTER_API_KEY || OPENAI_API_KEY)
 }
