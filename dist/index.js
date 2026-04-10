@@ -204,9 +204,14 @@ class LLMClient {
   }
   async chat(messages, options = {}) {
     const { tools, temperature = 0.7, max_tokens = 4096, model } = options;
+    let systemPrompt = "";
     const anthropicMessages = [];
     for (const msg of messages) {
-      if (msg.role === "tool") {
+      if (msg.role === "system") {
+        systemPrompt += (systemPrompt ? `
+` : "") + msg.content;
+        continue;
+      } else if (msg.role === "tool") {
         if (process.env.DEBUG_TOOL) {
           console.error(`[DEBUG_TOOL] sending tool_result tool_use_id=${msg.tool_call_id}`);
         }
@@ -247,8 +252,8 @@ class LLMClient {
       max_tokens: max_tokens || 4096,
       messages: anthropicMessages
     };
-    if (options.system) {
-      body.system = options.system;
+    if (systemPrompt || options.system) {
+      body.system = options.system || systemPrompt;
     }
     if (tools && tools.length > 0) {
       body.tools = tools.map((t) => ({

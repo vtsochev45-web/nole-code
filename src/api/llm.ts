@@ -109,13 +109,18 @@ export class LLMClient {
     const { tools, temperature = 0.7, max_tokens = 4096, model } = options
 
     // Convert messages to Anthropic format
+    // Extract system messages — Anthropic API requires system as a top-level param, not in messages
+    let systemPrompt = ''
     const anthropicMessages: Array<{
       role: string
       content: string | Array<{ type: string; text?: string; name?: string; input?: Record<string, unknown>; id?: string }>
     }> = []
 
     for (const msg of messages) {
-      if (msg.role === 'tool') {
+      if (msg.role === 'system') {
+        systemPrompt += (systemPrompt ? '\n' : '') + msg.content
+        continue
+      } else if (msg.role === 'tool') {
         if (process.env.DEBUG_TOOL) {
           console.error(`[DEBUG_TOOL] sending tool_result tool_use_id=${msg.tool_call_id}`)
         }
@@ -160,8 +165,8 @@ export class LLMClient {
       messages: anthropicMessages,
     }
 
-    if (options.system) {
-      body.system = options.system
+    if (systemPrompt || options.system) {
+      body.system = options.system || systemPrompt
     }
 
     if (tools && tools.length > 0) {
