@@ -79,12 +79,50 @@ export function registerTool(tool: Tool) {
   tools.set(tool.name, tool)
 }
 
-export function getToolDefinitions(): ToolDefinition[] {
-  const defs: ToolDefinition[] = Array.from(tools.values()).map(t => ({
-    name: t.name,
-    description: t.description,
-    input_schema: t.inputSchema,
-  }))
+// Core tools always sent (most commonly needed)
+const CORE_TOOLS = new Set([
+  'Bash', 'Read', 'Write', 'Edit', 'Glob', 'Grep',
+  'WebSearch', 'WebFetch', 'TodoWrite', 'LS',
+])
+
+// Extended tools sent when conversation references relevant keywords
+const TOOL_KEYWORDS: Record<string, string[]> = {
+  'MultiEdit': ['edit', 'refactor', 'rename', 'replace', 'change'],
+  'Tree': ['structure', 'layout', 'directory', 'project', 'overview'],
+  'HttpRequest': ['api', 'http', 'request', 'endpoint', 'curl', 'fetch', 'post', 'webhook'],
+  'FindReplace': ['replace', 'find', 'sed', 'across', 'rename', 'refactor'],
+  'GitStatus': ['git', 'branch', 'commit', 'changes', 'status'],
+  'GitDiff': ['git', 'diff', 'changes', 'compare'],
+  'GitCommit': ['git', 'commit', 'save', 'push'],
+  'RunTests': ['test', 'spec', 'jest', 'vitest', 'pytest', 'failing'],
+  'Spawn': ['server', 'start', 'run', 'background', 'dev', 'watch'],
+  'Diff': ['compare', 'diff', 'difference'],
+  'Rename': ['rename', 'move', 'mv'],
+  'Delete': ['delete', 'remove', 'rm', 'clean'],
+  'Agent': ['agent', 'parallel', 'spawn', 'delegate'],
+  'TeamCreate': ['team', 'agent', 'coordinate'],
+  'SendMessage': ['agent', 'message', 'send'],
+  'NotebookEdit': ['notebook', 'jupyter', 'ipynb'],
+}
+
+export function getToolDefinitions(context?: string): ToolDefinition[] {
+  const contextLower = (context || '').toLowerCase()
+
+  const defs: ToolDefinition[] = Array.from(tools.values())
+    .filter(t => {
+      // Always include core tools
+      if (CORE_TOOLS.has(t.name)) return true
+      // Include extended tools if context mentions relevant keywords
+      const keywords = TOOL_KEYWORDS[t.name]
+      if (!keywords) return true // unknown tools always included
+      if (!context) return true // no context = include everything (first turn)
+      return keywords.some(kw => contextLower.includes(kw))
+    })
+    .map(t => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.inputSchema,
+    }))
 
   // Add MCP tools (if registry has tools)
   const mcpTools = mcpRegistry.getTools()
@@ -352,7 +390,43 @@ registerTool({
       const oldText = input.old_text as string
       const newText = input.new_text as string
       if (!content.includes(oldText)) {
-        return `Could not find the specified text in ${path}. Make sure you use exact text match.`
+        // Fuzzy match: try trimming whitespace differences
+        const oldTrimmed = oldText.replace(/[ \t]+/g, ' ').trim()
+        const contentNorm = content.replace(/[ \t]+/g, ' ')
+        const fuzzyIdx = contentNorm.indexOf(oldTrimmed)
+
+        if (fuzzyIdx >= 0) {
+          // Find the actual text in the original content that matches
+          // by locating the first line of old_text
+          const firstLine = oldText.split('\n')[0].trim()
+          const lineIdx = content.indexOf(firstLine)
+          if (lineIdx >= 0) {
+            // Find the extent of the match
+            const lastLine = oldText.split('\n').pop()!.trim()
+            const endIdx = content.indexOf(lastLine, lineIdx)
+            if (endIdx >= 0) {
+              const actualOld = content.slice(lineIdx, endIdx + lastLine.length)
+              content = content.replace(actualOld, newText)
+              writeFileSync(path, content, 'utf-8')
+              const relPath = relative(process.cwd(), path) || path
+              const diffLines = [`${relPath} (fuzzy match — whitespace differences):`]
+              for (const l of actualOld.split('\n')) diffLines.push(`\x1b[31m- ${l}\x1b[0m`)
+              for (const l of newText.split('\n')) diffLines.push(`\x1b[32m+ ${l}\x1b[0m`)
+              return diffLines.join('\n')
+            }
+          }
+        }
+
+        // Show helpful context
+        const lines = content.split('\n')
+        const firstOldLine = oldText.split('\n')[0].trim()
+        const similar = lines.filter(l => l.includes(firstOldLine.slice(0, 20))).slice(0, 3)
+        let hint = `Could not find the specified text in ${relative(process.cwd(), path)}.`
+        if (similar.length > 0) {
+          hint += `\nSimilar lines found:\n${similar.map(l => `  ${l.trim()}`).join('\n')}`
+        }
+        hint += `\nTip: Use Read to check the exact content first.`
+        return hint
       }
       content = content.replace(oldText, newText)
       writeFileSync(path, content, 'utf-8')

@@ -17339,8 +17339,18 @@ async function promptPermission(toolName, input, reason) {
 function registerTool(tool) {
   tools.set(tool.name, tool);
 }
-function getToolDefinitions() {
-  const defs = Array.from(tools.values()).map((t) => ({
+function getToolDefinitions(context) {
+  const contextLower = (context || "").toLowerCase();
+  const defs = Array.from(tools.values()).filter((t) => {
+    if (CORE_TOOLS.has(t.name))
+      return true;
+    const keywords = TOOL_KEYWORDS[t.name];
+    if (!keywords)
+      return true;
+    if (!context)
+      return true;
+    return keywords.some((kw) => contextLower.includes(kw));
+  }).map((t) => ({
     name: t.name,
     description: t.description,
     input_schema: t.inputSchema
@@ -17472,7 +17482,7 @@ function formatSize(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}G`;
 }
-var execAsync, tools, TASKS_FILE;
+var execAsync, tools, CORE_TOOLS, TOOL_KEYWORDS, TASKS_FILE;
 var init_registry = __esm(() => {
   init_client3();
   init_spawner();
@@ -17483,6 +17493,36 @@ var init_registry = __esm(() => {
   init_feature_flags();
   execAsync = promisify(exec);
   tools = new Map;
+  CORE_TOOLS = new Set([
+    "Bash",
+    "Read",
+    "Write",
+    "Edit",
+    "Glob",
+    "Grep",
+    "WebSearch",
+    "WebFetch",
+    "TodoWrite",
+    "LS"
+  ]);
+  TOOL_KEYWORDS = {
+    MultiEdit: ["edit", "refactor", "rename", "replace", "change"],
+    Tree: ["structure", "layout", "directory", "project", "overview"],
+    HttpRequest: ["api", "http", "request", "endpoint", "curl", "fetch", "post", "webhook"],
+    FindReplace: ["replace", "find", "sed", "across", "rename", "refactor"],
+    GitStatus: ["git", "branch", "commit", "changes", "status"],
+    GitDiff: ["git", "diff", "changes", "compare"],
+    GitCommit: ["git", "commit", "save", "push"],
+    RunTests: ["test", "spec", "jest", "vitest", "pytest", "failing"],
+    Spawn: ["server", "start", "run", "background", "dev", "watch"],
+    Diff: ["compare", "diff", "difference"],
+    Rename: ["rename", "move", "mv"],
+    Delete: ["delete", "remove", "rm", "clean"],
+    Agent: ["agent", "parallel", "spawn", "delegate"],
+    TeamCreate: ["team", "agent", "coordinate"],
+    SendMessage: ["agent", "message", "send"],
+    NotebookEdit: ["notebook", "jupyter", "ipynb"]
+  };
   registerTool({
     name: "Bash",
     description: "Execute a shell command. Use for git, npm, builds, tests, and system commands.",
@@ -17635,7 +17675,49 @@ ${content}`;
         const oldText = input.old_text;
         const newText = input.new_text;
         if (!content.includes(oldText)) {
-          return `Could not find the specified text in ${path}. Make sure you use exact text match.`;
+          const oldTrimmed = oldText.replace(/[ \t]+/g, " ").trim();
+          const contentNorm = content.replace(/[ \t]+/g, " ");
+          const fuzzyIdx = contentNorm.indexOf(oldTrimmed);
+          if (fuzzyIdx >= 0) {
+            const firstLine = oldText.split(`
+`)[0].trim();
+            const lineIdx = content.indexOf(firstLine);
+            if (lineIdx >= 0) {
+              const lastLine = oldText.split(`
+`).pop().trim();
+              const endIdx = content.indexOf(lastLine, lineIdx);
+              if (endIdx >= 0) {
+                const actualOld = content.slice(lineIdx, endIdx + lastLine.length);
+                content = content.replace(actualOld, newText);
+                writeFileSync3(path, content, "utf-8");
+                const relPath2 = relative2(process.cwd(), path) || path;
+                const diffLines2 = [`${relPath2} (fuzzy match — whitespace differences):`];
+                for (const l of actualOld.split(`
+`))
+                  diffLines2.push(`\x1B[31m- ${l}\x1B[0m`);
+                for (const l of newText.split(`
+`))
+                  diffLines2.push(`\x1B[32m+ ${l}\x1B[0m`);
+                return diffLines2.join(`
+`);
+              }
+            }
+          }
+          const lines = content.split(`
+`);
+          const firstOldLine = oldText.split(`
+`)[0].trim();
+          const similar = lines.filter((l) => l.includes(firstOldLine.slice(0, 20))).slice(0, 3);
+          let hint = `Could not find the specified text in ${relative2(process.cwd(), path)}.`;
+          if (similar.length > 0) {
+            hint += `
+Similar lines found:
+${similar.map((l) => `  ${l.trim()}`).join(`
+`)}`;
+          }
+          hint += `
+Tip: Use Read to check the exact content first.`;
+          return hint;
         }
         content = content.replace(oldText, newText);
         writeFileSync3(path, content, "utf-8");
@@ -21040,7 +21122,7 @@ function detectPlanIntent(input) {
 function getBanner(cwd, verbose = false) {
   const v = verbose ? `${dim("· ")}verbose` : "";
   return `
-${bold(c2.cyan("▐▛███▜▌"))} ${bold("Nole Code v1.15")} ${dim("· MiniMax")}
+${bold(c2.cyan("▐▛███▜▌"))} ${bold("Nole Code v1.16")} ${dim("· MiniMax")}
 ${dim("▝▜█████▛▘")} ${dim(cwd)} ${v}
 
 ${divider()}
@@ -21460,7 +21542,7 @@ ${truncated}
       content: expandedInput,
       timestamp: new Date().toISOString()
     });
-    const toolDefs = getToolDefinitions();
+    const toolDefs = getToolDefinitions(expandedInput);
     let responseText = "";
     let toolCalls = [];
     console.log(`
@@ -21654,8 +21736,11 @@ ${c2.yellow("⚠")} Reached maximum ${MAX_TURNS} turns in agentic loop.
       const pct = Math.min(100, Math.round(totalTokens / maxCtx * 100));
       const elapsed = ((Date.now() - sessionStartTime) / 1000).toFixed(1);
       const turnInfo = turn > 1 ? ` · ${turn} turns` : "";
+      const toolInfo = "";
       const warning = pct > 80 ? " ⚠ context filling up" : "";
-      console.log(dim(`${elapsed}s · ~${totalTokens} tokens (${pct}%)${turnInfo}${warning}`));
+      const provider = client.getActiveProviderName();
+      const providerTag = provider !== "minimax" ? ` · ${provider}` : "";
+      console.log(dim(`${elapsed}s · ~${totalTokens} tokens (${pct}%)${turnInfo}${toolInfo}${providerTag}${warning}`));
       saveSession(session);
       const { extractMemoryFromConversation: extractMemoryFromConversation2 } = await Promise.resolve().then(() => (init_session_memory(), exports_session_memory));
       extractMemoryFromConversation2(session.messages, session.id).catch(() => {});
@@ -21731,7 +21816,7 @@ Sessions:`);
         process.exit(0);
         break;
       case "--version":
-        console.log("Nole Code v1.15.0");
+        console.log("Nole Code v1.16.0");
         process.exit(0);
         break;
       case "--help":
