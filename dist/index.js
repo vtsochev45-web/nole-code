@@ -21404,7 +21404,29 @@ ${divider()}
         let spinnerInterval = null;
         let hasOutput = false;
         const SPINNER_CHARS = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-        const VERBS = ["Thinking", "Reasoning", "Crafting", "Computing", "Processing", "Analyzing", "Working"];
+        const VERBS = [
+          "Thinking",
+          "Reasoning",
+          "Analyzing",
+          "Compiling thoughts",
+          "Reticulating splines",
+          "Allocating braincells",
+          "Herding tokens",
+          "Milking the API",
+          "Harvesting answers",
+          "Consulting the oracle",
+          "Summoning wisdom",
+          "Warming up hamsters",
+          "Polishing the crystal ball",
+          "Asking nicely",
+          "Feeding the squirrels",
+          "Definitely not guessing",
+          "Almost there probably",
+          "Winging it professionally",
+          "Faking confidence",
+          "Pretending to work",
+          "Bribing the AI gods"
+        ];
         let spinFrame = 0;
         spinnerInterval = setInterval(() => {
           if (!hasOutput && process.stdout.writable) {
