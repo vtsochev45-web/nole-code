@@ -21328,6 +21328,13 @@ ${dim("Press Ctrl+C again to exit, or type a message.")}`);
       prompt();
       return;
     }
+    if (input.length > 50000) {
+      console.log(`
+${c2.yellow("⚠")} Message too large (${(input.length / 1024).toFixed(0)}KB). Max ~50KB.`);
+      console.log(dim("Use @filename to reference files instead of pasting contents."));
+      prompt();
+      return;
+    }
     const planIntent = detectPlanIntent(input);
     if (planIntent) {
       const { generatePlanSteps: generatePlanSteps2, enterPlanMode: enterPlanMode2 } = await Promise.resolve().then(() => (init_plan(), exports_plan));
@@ -21441,6 +21448,14 @@ ${divider()}
         toolCalls = [];
         if (cancelRequested)
           break;
+        const { estimateTotalTokens: estTokens } = await Promise.resolve().then(() => exports_count_tokens);
+        const currentTokens = estTokens(session.messages);
+        if (currentTokens > 1e5) {
+          console.log(dim(`  Context large (~${(currentTokens / 1000).toFixed(0)}K tokens), compacting...`));
+          const { maybeCompact: compact } = await Promise.resolve().then(() => (init_compact(), exports_compact));
+          compact(session.messages, session.id);
+          saveSession(session);
+        }
         let spinnerInterval = null;
         let hasOutput = false;
         const SPINNER_CHARS = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];

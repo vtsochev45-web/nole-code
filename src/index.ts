@@ -503,6 +503,14 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
       return
     }
 
+    // Reject oversized messages before they corrupt the session
+    if (input.length > 50000) {
+      console.log(`\n${c.yellow('⚠')} Message too large (${(input.length / 1024).toFixed(0)}KB). Max ~50KB.`)
+      console.log(dim('Use @filename to reference files instead of pasting contents.'))
+      prompt()
+      return
+    }
+
   // Check for plan intent in natural language
     const planIntent = detectPlanIntent(input)
     if (planIntent) {
@@ -621,6 +629,16 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
         toolCalls = []
 
         if (cancelRequested) break
+
+        // Pre-flight: check if context is too large, auto-compact if needed
+        const { estimateTotalTokens: estTokens } = await import('./utils/count-tokens.js')
+        const currentTokens = estTokens(session!.messages)
+        if (currentTokens > 100000) {
+          console.log(dim(`  Context large (~${(currentTokens/1000).toFixed(0)}K tokens), compacting...`))
+          const { maybeCompact: compact } = await import('./services/compact/index.js')
+          compact(session!.messages, session!.id)
+          saveSession(session!)
+        }
 
         // Animated spinner during LLM call
         let spinnerInterval: ReturnType<typeof setInterval> | null = null
