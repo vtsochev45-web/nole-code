@@ -1,0 +1,50 @@
+{
+  "name": "nole-code",
+  "version": "1.13.0",
+  "description": "AI coding assistant CLI — 31 tools, multi-provider, agentic tool loop",
+  "type": "module",
+  "bin": {
+    "nole": "./dist/index.js",
+    "nole-code": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target node",
+    "dev": "bun run src/index.ts",
+    "start": "node dist/index.js",
+    "test": "bun test",
+    "prepublishOnly": "bun run build"
+  },
+  "keywords": [
+    "ai",
+    "coding",
+    "cli",
+    "assistant",
+    "minimax",
+    "openrouter",
+    "tools",
+    "agents",
+    "mcp"
+  ],
+  "author": "Tim Vtsochev",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vtsochev45-web/nole-code"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    ".env.example"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.0",
+    "typescript": "^5.4.0"
+  }
+}
