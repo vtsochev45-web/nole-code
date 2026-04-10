@@ -116,11 +116,23 @@ export class LLMClient {
       content: string | Array<{ type: string; text?: string; name?: string; input?: Record<string, unknown>; id?: string }>
     }> = []
 
+    // Collect valid tool_use IDs from assistant messages so we can validate tool_results
+    const validToolIds = new Set<string>()
+    for (const msg of messages) {
+      if (msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          if (tc.id) validToolIds.add(tc.id)
+        }
+      }
+    }
+
     for (const msg of messages) {
       if (msg.role === 'system') {
         systemPrompt += (systemPrompt ? '\n' : '') + msg.content
         continue
       } else if (msg.role === 'tool') {
+        // Skip orphaned tool results that have no matching tool_use
+        if (msg.tool_call_id && !validToolIds.has(msg.tool_call_id)) continue
         if (process.env.DEBUG_TOOL) {
           console.error(`[DEBUG_TOOL] sending tool_result tool_use_id=${msg.tool_call_id}`)
         }
@@ -133,20 +145,39 @@ export class LLMClient {
           }],
         })
       } else if (msg.tool_calls) {
-        anthropicMessages.push({
-          role: 'assistant',
-          content: msg.tool_calls.map(tc => ({
-            type: 'tool_use',
-            id: tc.id || `call_${Date.now()}`,
-            name: tc.name,
-            input: tc.input,
-          })),
-        })
+        const blocks: Array<{ type: string; [k: string]: unknown }> = []
+        if (msg.content && typeof msg.content === 'string' && msg.content.trim()) {
+          blocks.push({ type: 'text', text: msg.content })
+        }
+        blocks.push(...msg.tool_calls.map(tc => ({
+          type: 'tool_use' as const,
+          id: tc.id || `call_${Date.now()}`,
+          name: tc.name,
+          input: tc.input,
+        })))
+        anthropicMessages.push({ role: 'assistant', content: blocks })
       } else {
         anthropicMessages.push({
           role: msg.role as string,
           content: msg.content,
         })
+      }
+    }
+
+    // Merge consecutive same-role messages (Anthropic requires alternating user/assistant)
+    const merged: typeof anthropicMessages = []
+    for (const msg of anthropicMessages) {
+      if (merged.length > 0 && merged[merged.length - 1].role === msg.role) {
+        const prev = merged[merged.length - 1]
+        if (typeof prev.content === 'string' && typeof msg.content === 'string') {
+          prev.content += '\n' + msg.content
+        } else {
+          const prevArr = Array.isArray(prev.content) ? prev.content : [{ type: 'text', text: prev.content }]
+          const msgArr = Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: msg.content }]
+          prev.content = [...prevArr, ...msgArr] as any
+        }
+      } else {
+        merged.push({ ...msg })
       }
     }
 
@@ -162,7 +193,7 @@ export class LLMClient {
     const body: Record<string, unknown> = {
       model: model || this.model,
       max_tokens: max_tokens || 4096,
-      messages: anthropicMessages,
+      messages: merged,
     }
 
     if (systemPrompt || options.system) {
@@ -255,11 +286,23 @@ export class LLMClient {
       content: string | Array<{ type: string; [key: string]: unknown }>
     }> = []
 
+    // Collect valid tool_use IDs for validation
+    const validToolIds = new Set<string>()
+    for (const msg of messages) {
+      if (msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          if (tc.id) validToolIds.add(tc.id)
+        }
+      }
+    }
+
     let systemPrompt = ''
     for (const msg of messages) {
       if (msg.role === 'system') {
         systemPrompt += (systemPrompt ? '\n' : '') + msg.content
       } else if (msg.role === 'tool') {
+        // Skip orphaned tool results
+        if (msg.tool_call_id && !validToolIds.has(msg.tool_call_id)) continue
         anthropicMessages.push({
           role: 'user',
           content: [{

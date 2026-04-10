@@ -206,12 +206,23 @@ class LLMClient {
     const { tools, temperature = 0.7, max_tokens = 4096, model } = options;
     let systemPrompt = "";
     const anthropicMessages = [];
+    const validToolIds = new Set;
+    for (const msg of messages) {
+      if (msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          if (tc.id)
+            validToolIds.add(tc.id);
+        }
+      }
+    }
     for (const msg of messages) {
       if (msg.role === "system") {
         systemPrompt += (systemPrompt ? `
 ` : "") + msg.content;
         continue;
       } else if (msg.role === "tool") {
+        if (msg.tool_call_id && !validToolIds.has(msg.tool_call_id))
+          continue;
         if (process.env.DEBUG_TOOL) {
           console.error(`[DEBUG_TOOL] sending tool_result tool_use_id=${msg.tool_call_id}`);
         }
@@ -224,20 +235,38 @@ class LLMClient {
           }]
         });
       } else if (msg.tool_calls) {
-        anthropicMessages.push({
-          role: "assistant",
-          content: msg.tool_calls.map((tc) => ({
-            type: "tool_use",
-            id: tc.id || `call_${Date.now()}`,
-            name: tc.name,
-            input: tc.input
-          }))
-        });
+        const blocks = [];
+        if (msg.content && typeof msg.content === "string" && msg.content.trim()) {
+          blocks.push({ type: "text", text: msg.content });
+        }
+        blocks.push(...msg.tool_calls.map((tc) => ({
+          type: "tool_use",
+          id: tc.id || `call_${Date.now()}`,
+          name: tc.name,
+          input: tc.input
+        })));
+        anthropicMessages.push({ role: "assistant", content: blocks });
       } else {
         anthropicMessages.push({
           role: msg.role,
           content: msg.content
         });
+      }
+    }
+    const merged = [];
+    for (const msg of anthropicMessages) {
+      if (merged.length > 0 && merged[merged.length - 1].role === msg.role) {
+        const prev = merged[merged.length - 1];
+        if (typeof prev.content === "string" && typeof msg.content === "string") {
+          prev.content += `
+` + msg.content;
+        } else {
+          const prevArr = Array.isArray(prev.content) ? prev.content : [{ type: "text", text: prev.content }];
+          const msgArr = Array.isArray(msg.content) ? msg.content : [{ type: "text", text: msg.content }];
+          prev.content = [...prevArr, ...msgArr];
+        }
+      } else {
+        merged.push({ ...msg });
       }
     }
     if (process.env.DEBUG_TOOL) {
@@ -250,7 +279,7 @@ class LLMClient {
     const body = {
       model: model || this.model,
       max_tokens: max_tokens || 4096,
-      messages: anthropicMessages
+      messages: merged
     };
     if (systemPrompt || options.system) {
       body.system = options.system || systemPrompt;
@@ -319,12 +348,23 @@ class LLMClient {
   async chatStream(messages, options, onChunk, onToolCall) {
     const { tools, temperature = 0.7, max_tokens = 4096, model } = options;
     const anthropicMessages = [];
+    const validToolIds = new Set;
+    for (const msg of messages) {
+      if (msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          if (tc.id)
+            validToolIds.add(tc.id);
+        }
+      }
+    }
     let systemPrompt = "";
     for (const msg of messages) {
       if (msg.role === "system") {
         systemPrompt += (systemPrompt ? `
 ` : "") + msg.content;
       } else if (msg.role === "tool") {
+        if (msg.tool_call_id && !validToolIds.has(msg.tool_call_id))
+          continue;
         anthropicMessages.push({
           role: "user",
           content: [{
