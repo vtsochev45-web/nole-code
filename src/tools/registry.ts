@@ -162,14 +162,21 @@ async function runBash(command: string, timeout = 30000): Promise<string> {
       maxBuffer: 10 * 1024 * 1024,
     })
     let out = stdout
-    if (stderr) out += `\nSTDERR: ${stderr}`
+    if (stderr) {
+      // Show stderr only if there's actual error content (not just warnings)
+      const stderrClean = stderr.trim()
+      if (stderrClean) out += `\n${stderrClean}`
+    }
     return out || '(no output)'
   } catch (e: unknown) {
-    const err = e as { message?: string; stdout?: string; stderr?: string }
-    let out = err.message || 'Unknown error'
-    if (err.stdout) out += `\n${err.stdout}`
-    if (err.stderr) out += `\n${err.stderr}`
-    return out
+    const err = e as { code?: number; message?: string; stdout?: string; stderr?: string; killed?: boolean }
+    const parts: string[] = []
+    if (err.killed) parts.push('Command timed out')
+    else if (err.code) parts.push(`Exit code ${err.code}`)
+    if (err.stdout) parts.push(err.stdout)
+    if (err.stderr) parts.push(err.stderr)
+    if (parts.length === 0) parts.push(err.message || 'Unknown error')
+    return parts.join('\n')
   }
 }
 
@@ -177,17 +184,26 @@ async function runBash(command: string, timeout = 30000): Promise<string> {
 
 registerTool({
   name: 'Bash',
-  description: 'Execute a shell command and return the output. Use for git, npm, file operations, and running scripts.',
+  description: 'Execute a shell command. Use for git, npm, builds, tests, and system commands.',
   inputSchema: {
     type: 'object',
     properties: {
       command: { type: 'string', description: 'Shell command to execute' },
       timeout: { type: 'number', description: 'Timeout in milliseconds (default: 30000)' },
+      cwd: { type: 'string', description: 'Working directory (default: project root)' },
     },
     required: ['command'],
   },
-  execute: async (input, _ctx) => {
-    return runBash(input.command as string, input.timeout as number)
+  execute: async (input, ctx) => {
+    const bashCwd = (input.cwd as string) ? resolve(process.cwd(), input.cwd as string) : ctx.cwd || process.cwd()
+    // Temporarily change cwd for this command
+    const origCwd = process.cwd()
+    try {
+      process.chdir(bashCwd)
+      return await runBash(input.command as string, (input.timeout as number) || 30000)
+    } finally {
+      process.chdir(origCwd)
+    }
   },
 })
 

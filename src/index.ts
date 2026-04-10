@@ -134,7 +134,7 @@ function detectPlanIntent(input: string): string | null {
 function getBanner(cwd: string, verbose = false) {
   const v = verbose ? `${dim('· ')}verbose` : ''
   return `
-${bold(c.cyan('▐▛███▜▌'))} ${bold('Nole Code v1.13')} ${dim('· MiniMax')}
+${bold(c.cyan('▐▛███▜▌'))} ${bold('Nole Code v1.14')} ${dim('· MiniMax')}
 ${dim('▝▜█████▛▘')} ${dim(cwd)} ${v}
 
 ${divider()}
@@ -699,61 +699,69 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
         }
 
         // ========== TOOL EXECUTION ==========
-        for (const tc of toolCalls) {
-          const toolStartTime = Date.now()
+        // Run tools in parallel when possible (independent tools run concurrently)
+        const MAX_TOOL_RESULT = 8000 // truncate before sending to LLM
+        const toolResults: Array<{ tc: typeof toolCalls[0]; result: { content: string; isError?: boolean }; ms: number }> = []
 
-          // Verbose tool header with spinner
-          if (opts.verbose) {
-            process.stdout.write('\r' + formatToolSpinner(tc.name, tc.input.command as string || undefined, { verbose: true }))
-            advanceSpinner()
-            console.log('')
-          } else {
-            const preview = tc.input.command
-              ? tc.input.command.toString().slice(0, 60)
-              : JSON.stringify(tc.input).slice(0, 60)
-            process.stdout.write('\r' + formatToolSpinner(tc.name, preview, { verbose: false }))
-            advanceSpinner()
-            console.log('')
-          }
-
-          // Check for cancel
-          if (cancelRequested) {
-            console.log(formatCancelled('Skipped remaining tools'))
-            break
-          }
-
-          // Execute tool
-          const result = await executeTool(tc.name, tc.input, {
-            cwd: opts.cwd || process.cwd(),
-            sessionId: session!.id,
+        if (cancelRequested) {
+          console.log(formatCancelled('Skipped tools'))
+        } else if (toolCalls.length === 1) {
+          // Single tool — run directly
+          const tc = toolCalls[0]
+          const toolStart = Date.now()
+          const preview = tc.input.command ? String(tc.input.command).slice(0, 60) : JSON.stringify(tc.input).slice(0, 60)
+          process.stdout.write(`\r${c.cyan('⟳')} ${tc.name} ${dim(`(${preview})`)}\n`)
+          const result = await executeTool(tc.name, tc.input, { cwd: opts.cwd || process.cwd(), sessionId: session!.id })
+          toolResults.push({ tc, result, ms: Date.now() - toolStart })
+        } else {
+          // Multiple tools — run in parallel
+          console.log(dim(`  Running ${toolCalls.length} tools in parallel...`))
+          const promises = toolCalls.map(async (tc) => {
+            const toolStart = Date.now()
+            const result = await executeTool(tc.name, tc.input, { cwd: opts.cwd || process.cwd(), sessionId: session!.id })
+            return { tc, result, ms: Date.now() - toolStart }
           })
+          const results = await Promise.all(promises)
+          toolResults.push(...results)
+        }
 
-          // Save tool result
+        // Process results: display, truncate for LLM, save to session
+        for (const { tc, result, ms } of toolResults) {
+          // Truncate long results before saving to session (saves LLM tokens)
+          let llmContent = result.content
+          if (llmContent.length > MAX_TOOL_RESULT) {
+            const lines = llmContent.split('\n')
+            const kept = lines.slice(0, 50)
+            const tail = lines.slice(-5)
+            llmContent = kept.join('\n') + `\n\n[... ${lines.length - 55} lines truncated ...]\n\n` + tail.join('\n')
+          }
+
           session!.messages.push({
             role: 'tool',
-            content: result.content,
+            content: llmContent,
             tool_call_id: tc.id,
             name: tc.name,
             timestamp: new Date().toISOString(),
           })
 
-          // Format tool result
-          const lines = result.content.split('\n')
+          // Display to user (full output, not truncated)
+          const displayLines = result.content.split('\n')
           const maxLines = opts.verbose ? 50 : 10
+          const elapsed = ms > 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`
 
           if (opts.verbose) {
             console.log(formatVerboseResult(tc.name, result.content, {
               isError: result.isError,
-              timestamp: toolStartTime,
+              timestamp: Date.now() - ms,
               maxLines,
             }))
           } else {
             if (result.isError) toolErrorCount++
-            void streamOutput(lines, maxLines, lines.length > 20 ? 5 : 0)
+            void streamOutput(displayLines, maxLines, displayLines.length > 20 ? 5 : 0)
           }
 
           const status = result.isError ? '❌' : '✅'
-          console.log(`  ${status} ${tc.name}\n`)
+          console.log(`  ${status} ${tc.name} ${dim(`[${elapsed}]`)}\n`)
         }
 
         // If cancelled during tool execution, stop the loop
@@ -862,7 +870,7 @@ function parseArgs(): CliOptions {
         process.exit(0)
         break
       case '--version':
-        console.log('Nole Code v1.13.0')
+        console.log('Nole Code v1.14.0')
         process.exit(0)
         break
       case '--help':
