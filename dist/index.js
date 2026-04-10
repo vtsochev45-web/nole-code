@@ -316,7 +316,16 @@ class LLMClient {
       }
       throw new Error(`API error ${response.status}: ${parseApiError(errorText)}`);
     }
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      const text = await response.text().catch(() => "(empty)");
+      throw new Error(`API returned invalid JSON: ${text.slice(0, 200)}`);
+    }
+    if (data.error) {
+      throw new Error(`API error: ${data.error.message || JSON.stringify(data.error)}`);
+    }
     let content = "";
     const toolCalls = [];
     if (data.content) {
@@ -18647,231 +18656,6 @@ ${output.slice(0, 500) || "(no output yet)"}`;
   });
 });
 
-// src/project/onboarding.ts
-var exports_onboarding = {};
-__export(exports_onboarding, {
-  saveSettings: () => saveSettings,
-  markOnboardingComplete: () => markOnboardingComplete,
-  loadSettings: () => loadSettings,
-  loadProjectContext: () => loadProjectContext,
-  isOnboardingComplete: () => isOnboardingComplete,
-  isDirEmpty: () => isDirEmpty,
-  getOnboardingSteps: () => getOnboardingSteps,
-  createNoleMd: () => createNoleMd
-});
-import {
-  existsSync as existsSync7,
-  readFileSync as readFileSync7,
-  writeFileSync as writeFileSync4,
-  mkdirSync as mkdirSync4
-} from "fs";
-import { join as join8 } from "path";
-import { homedir as homedir7 } from "os";
-function loadProjectConfig() {
-  mkdirSync4(CONFIG_DIR, { recursive: true });
-  if (existsSync7(PROJECT_CONFIG)) {
-    try {
-      return JSON.parse(readFileSync7(PROJECT_CONFIG, "utf-8"));
-    } catch {}
-  }
-  return {};
-}
-function saveProjectConfig(config2) {
-  mkdirSync4(CONFIG_DIR, { recursive: true });
-  writeFileSync4(PROJECT_CONFIG, JSON.stringify(config2, null, 2));
-}
-function isDirEmpty(cwd) {
-  try {
-    const { execSync: execSync2 } = __require("child_process");
-    const output = execSync2(`ls -A "${cwd}" 2>/dev/null`, { encoding: "utf-8" });
-    return !output.trim();
-  } catch {
-    return true;
-  }
-}
-function getOnboardingSteps(cwd) {
-  const noleMdPath = join8(cwd, "NOLE.md");
-  const empty = isDirEmpty(cwd);
-  return [
-    {
-      key: "workspace",
-      text: "Create a new app or clone a repository",
-      isComplete: !empty,
-      isCompletable: true,
-      isEnabled: empty
-    },
-    {
-      key: "nolemd",
-      text: "Run /init to create a NOLE.md file",
-      isComplete: existsSync7(noleMdPath),
-      isCompletable: true,
-      isEnabled: !empty
-    },
-    {
-      key: "context",
-      text: "Add project context files",
-      isComplete: existsSync7(join8(cwd, ".nolecode")) || existsSync7(join8(cwd, "NOLE.md")),
-      isCompletable: true,
-      isEnabled: !empty
-    }
-  ];
-}
-function isOnboardingComplete(cwd) {
-  return getOnboardingSteps(cwd).filter((s) => s.isCompletable && s.isEnabled).every((s) => s.isComplete);
-}
-function markOnboardingComplete(cwd) {
-  const config2 = loadProjectConfig();
-  if (!config2[cwd])
-    config2[cwd] = {};
-  config2[cwd].hasCompletedOnboarding = true;
-  saveProjectConfig(config2);
-}
-function createNoleMd(cwd, projectName) {
-  const name = projectName || cwd.split("/").pop() || "this project";
-  let techStack = "";
-  let commands = "";
-  let description = "Brief description of what this project does.";
-  const pkgPath = join8(cwd, "package.json");
-  if (existsSync7(pkgPath)) {
-    try {
-      const pkg = JSON.parse(readFileSync7(pkgPath, "utf-8"));
-      if (pkg.description)
-        description = pkg.description;
-      const deps = Object.keys(pkg.dependencies || {});
-      const devDeps = Object.keys(pkg.devDependencies || {});
-      const allDeps = [...deps, ...devDeps];
-      const detected = [];
-      if (allDeps.some((d) => d.includes("react")))
-        detected.push("React");
-      if (allDeps.some((d) => d.includes("vue")))
-        detected.push("Vue");
-      if (allDeps.some((d) => d.includes("next")))
-        detected.push("Next.js");
-      if (allDeps.some((d) => d.includes("express")))
-        detected.push("Express");
-      if (allDeps.some((d) => d.includes("fastify")))
-        detected.push("Fastify");
-      if (devDeps.some((d) => d.includes("typescript")))
-        detected.push("TypeScript");
-      if (allDeps.some((d) => d.includes("prisma")))
-        detected.push("Prisma");
-      if (allDeps.some((d) => d.includes("drizzle")))
-        detected.push("Drizzle");
-      if (detected.length > 0)
-        techStack = detected.join(", ");
-      else
-        techStack = deps.slice(0, 5).join(", ") || "Node.js";
-      const scripts = pkg.scripts || {};
-      const cmdLines = [];
-      if (scripts.dev)
-        cmdLines.push(`npm run dev    # ${scripts.dev.slice(0, 40)}`);
-      if (scripts.build)
-        cmdLines.push(`npm run build  # ${scripts.build.slice(0, 40)}`);
-      if (scripts.test)
-        cmdLines.push(`npm test       # ${scripts.test.slice(0, 40)}`);
-      if (scripts.start)
-        cmdLines.push(`npm start      # ${scripts.start.slice(0, 40)}`);
-      commands = cmdLines.join(`
-`) || "npm run dev";
-    } catch {}
-  }
-  if (existsSync7(join8(cwd, "pyproject.toml")) || existsSync7(join8(cwd, "setup.py"))) {
-    techStack = techStack || "Python";
-    commands = commands || `python -m pytest
-python main.py`;
-  }
-  if (existsSync7(join8(cwd, "Cargo.toml"))) {
-    techStack = techStack || "Rust";
-    commands = commands || `cargo build
-cargo test
-cargo run`;
-  }
-  if (existsSync7(join8(cwd, "go.mod"))) {
-    techStack = techStack || "Go";
-    commands = commands || `go build
-go test ./...
-go run .`;
-  }
-  let structure = "";
-  try {
-    const { execSync: ex } = __require("child_process");
-    structure = ex('find . -maxdepth 2 -type d ! -path "*/node_modules/*" ! -path "*/.git/*" ! -path "*/dist/*" | head -20', {
-      encoding: "utf-8",
-      cwd,
-      timeout: 3000
-    }).trim();
-  } catch {}
-  const template = `# ${name}
-
-## Overview
-${description}
-
-## Tech Stack
-${techStack || "- Add your tech stack here"}
-
-## Commands
-\`\`\`bash
-${commands || "# Add your development commands"}
-\`\`\`
-
-## Structure
-\`\`\`
-${structure || "# Project directory structure"}
-\`\`\`
-
-## Notes
-- Important things to know when working in this project
-`;
-  const path = join8(cwd, "NOLE.md");
-  writeFileSync4(path, template, "utf-8");
-  return path;
-}
-function loadProjectContext(cwd) {
-  const paths = [
-    join8(cwd, "NOLE.md"),
-    join8(cwd, ".nole.md"),
-    join8(cwd, ".nolecode"),
-    join8(cwd, "CONTEXT.md")
-  ];
-  for (const p of paths) {
-    if (existsSync7(p)) {
-      try {
-        return readFileSync7(p, "utf-8");
-      } catch {}
-    }
-  }
-  return null;
-}
-function loadSettings() {
-  if (existsSync7(SETTINGS_FILE)) {
-    try {
-      return JSON.parse(readFileSync7(SETTINGS_FILE, "utf-8"));
-    } catch {}
-  }
-  return {
-    autoSaveSession: true,
-    streamResponses: true,
-    showTimestamps: false,
-    toolPermissions: "all",
-    temperature: 0.7,
-    maxTokens: 4096,
-    editor: process.env.EDITOR || "vim",
-    shell: process.env.SHELL || "/bin/bash"
-  };
-}
-function saveSettings(settings) {
-  const current = loadSettings();
-  const updated = { ...current, ...settings };
-  writeFileSync4(SETTINGS_FILE, JSON.stringify(updated, null, 2));
-  return updated;
-}
-var CONFIG_DIR, PROJECT_CONFIG, SETTINGS_FILE;
-var init_onboarding = __esm(() => {
-  CONFIG_DIR = join8(homedir7(), ".nole-code");
-  PROJECT_CONFIG = join8(CONFIG_DIR, "projects.json");
-  SETTINGS_FILE = join8(CONFIG_DIR, "settings.json");
-});
-
 // src/session/manager.ts
 var exports_manager = {};
 __export(exports_manager, {
@@ -18886,25 +18670,25 @@ __export(exports_manager, {
   compactSession: () => compactSession
 });
 import {
-  existsSync as existsSync8,
-  mkdirSync as mkdirSync5,
-  readFileSync as readFileSync8,
-  writeFileSync as writeFileSync5,
+  existsSync as existsSync7,
+  mkdirSync as mkdirSync4,
+  readFileSync as readFileSync7,
+  writeFileSync as writeFileSync4,
   readdirSync as readdirSync2,
   unlinkSync,
   renameSync
 } from "fs";
-import { join as join9 } from "path";
-import { homedir as homedir8 } from "os";
+import { join as join8 } from "path";
+import { homedir as homedir7 } from "os";
 function ensureSessionDir() {
-  mkdirSync5(SESSION_DIR, { recursive: true });
+  mkdirSync4(SESSION_DIR, { recursive: true });
 }
 function listSessions(limit = 20) {
   ensureSessionDir();
   const files = readdirSync2(SESSION_DIR).filter((f) => f.endsWith(".json"));
   const sessions = files.map((f) => {
     try {
-      return JSON.parse(readFileSync8(join9(SESSION_DIR, f), "utf-8"));
+      return JSON.parse(readFileSync7(join8(SESSION_DIR, f), "utf-8"));
     } catch {
       return null;
     }
@@ -18912,11 +18696,11 @@ function listSessions(limit = 20) {
   return sessions.slice(0, limit);
 }
 function loadSession(id) {
-  const file = join9(SESSION_DIR, `${id}.json`);
-  if (!existsSync8(file))
+  const file = join8(SESSION_DIR, `${id}.json`);
+  if (!existsSync7(file))
     return null;
   try {
-    return JSON.parse(readFileSync8(file, "utf-8"));
+    return JSON.parse(readFileSync7(file, "utf-8"));
   } catch {
     return null;
   }
@@ -18924,14 +18708,14 @@ function loadSession(id) {
 function saveSession(session) {
   ensureSessionDir();
   session.updatedAt = new Date().toISOString();
-  const file = join9(SESSION_DIR, `${session.id}.json`);
+  const file = join8(SESSION_DIR, `${session.id}.json`);
   const tmp = file + `.tmp.${Date.now()}`;
-  writeFileSync5(tmp, JSON.stringify(session, null, 2), "utf-8");
+  writeFileSync4(tmp, JSON.stringify(session, null, 2), "utf-8");
   renameSync(tmp, file);
 }
 function deleteSession(id) {
-  const file = join9(SESSION_DIR, `${id}.json`);
-  if (existsSync8(file)) {
+  const file = join8(SESSION_DIR, `${id}.json`);
+  if (existsSync7(file)) {
     unlinkSync(file);
     return true;
   }
@@ -19040,7 +18824,232 @@ function exportSession(id) {
 }
 var SESSION_DIR;
 var init_manager = __esm(() => {
-  SESSION_DIR = join9(homedir8(), ".nole-code", "sessions");
+  SESSION_DIR = join8(homedir7(), ".nole-code", "sessions");
+});
+
+// src/project/onboarding.ts
+var exports_onboarding = {};
+__export(exports_onboarding, {
+  saveSettings: () => saveSettings,
+  markOnboardingComplete: () => markOnboardingComplete,
+  loadSettings: () => loadSettings,
+  loadProjectContext: () => loadProjectContext,
+  isOnboardingComplete: () => isOnboardingComplete,
+  isDirEmpty: () => isDirEmpty,
+  getOnboardingSteps: () => getOnboardingSteps,
+  createNoleMd: () => createNoleMd
+});
+import {
+  existsSync as existsSync8,
+  readFileSync as readFileSync8,
+  writeFileSync as writeFileSync5,
+  mkdirSync as mkdirSync5
+} from "fs";
+import { join as join9 } from "path";
+import { homedir as homedir8 } from "os";
+function loadProjectConfig() {
+  mkdirSync5(CONFIG_DIR, { recursive: true });
+  if (existsSync8(PROJECT_CONFIG)) {
+    try {
+      return JSON.parse(readFileSync8(PROJECT_CONFIG, "utf-8"));
+    } catch {}
+  }
+  return {};
+}
+function saveProjectConfig(config2) {
+  mkdirSync5(CONFIG_DIR, { recursive: true });
+  writeFileSync5(PROJECT_CONFIG, JSON.stringify(config2, null, 2));
+}
+function isDirEmpty(cwd) {
+  try {
+    const { execSync: execSync2 } = __require("child_process");
+    const output = execSync2(`ls -A "${cwd}" 2>/dev/null`, { encoding: "utf-8" });
+    return !output.trim();
+  } catch {
+    return true;
+  }
+}
+function getOnboardingSteps(cwd) {
+  const noleMdPath = join9(cwd, "NOLE.md");
+  const empty = isDirEmpty(cwd);
+  return [
+    {
+      key: "workspace",
+      text: "Create a new app or clone a repository",
+      isComplete: !empty,
+      isCompletable: true,
+      isEnabled: empty
+    },
+    {
+      key: "nolemd",
+      text: "Run /init to create a NOLE.md file",
+      isComplete: existsSync8(noleMdPath),
+      isCompletable: true,
+      isEnabled: !empty
+    },
+    {
+      key: "context",
+      text: "Add project context files",
+      isComplete: existsSync8(join9(cwd, ".nolecode")) || existsSync8(join9(cwd, "NOLE.md")),
+      isCompletable: true,
+      isEnabled: !empty
+    }
+  ];
+}
+function isOnboardingComplete(cwd) {
+  return getOnboardingSteps(cwd).filter((s) => s.isCompletable && s.isEnabled).every((s) => s.isComplete);
+}
+function markOnboardingComplete(cwd) {
+  const config2 = loadProjectConfig();
+  if (!config2[cwd])
+    config2[cwd] = {};
+  config2[cwd].hasCompletedOnboarding = true;
+  saveProjectConfig(config2);
+}
+function createNoleMd(cwd, projectName) {
+  const name = projectName || cwd.split("/").pop() || "this project";
+  let techStack = "";
+  let commands = "";
+  let description = "Brief description of what this project does.";
+  const pkgPath = join9(cwd, "package.json");
+  if (existsSync8(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync8(pkgPath, "utf-8"));
+      if (pkg.description)
+        description = pkg.description;
+      const deps = Object.keys(pkg.dependencies || {});
+      const devDeps = Object.keys(pkg.devDependencies || {});
+      const allDeps = [...deps, ...devDeps];
+      const detected = [];
+      if (allDeps.some((d) => d.includes("react")))
+        detected.push("React");
+      if (allDeps.some((d) => d.includes("vue")))
+        detected.push("Vue");
+      if (allDeps.some((d) => d.includes("next")))
+        detected.push("Next.js");
+      if (allDeps.some((d) => d.includes("express")))
+        detected.push("Express");
+      if (allDeps.some((d) => d.includes("fastify")))
+        detected.push("Fastify");
+      if (devDeps.some((d) => d.includes("typescript")))
+        detected.push("TypeScript");
+      if (allDeps.some((d) => d.includes("prisma")))
+        detected.push("Prisma");
+      if (allDeps.some((d) => d.includes("drizzle")))
+        detected.push("Drizzle");
+      if (detected.length > 0)
+        techStack = detected.join(", ");
+      else
+        techStack = deps.slice(0, 5).join(", ") || "Node.js";
+      const scripts = pkg.scripts || {};
+      const cmdLines = [];
+      if (scripts.dev)
+        cmdLines.push(`npm run dev    # ${scripts.dev.slice(0, 40)}`);
+      if (scripts.build)
+        cmdLines.push(`npm run build  # ${scripts.build.slice(0, 40)}`);
+      if (scripts.test)
+        cmdLines.push(`npm test       # ${scripts.test.slice(0, 40)}`);
+      if (scripts.start)
+        cmdLines.push(`npm start      # ${scripts.start.slice(0, 40)}`);
+      commands = cmdLines.join(`
+`) || "npm run dev";
+    } catch {}
+  }
+  if (existsSync8(join9(cwd, "pyproject.toml")) || existsSync8(join9(cwd, "setup.py"))) {
+    techStack = techStack || "Python";
+    commands = commands || `python -m pytest
+python main.py`;
+  }
+  if (existsSync8(join9(cwd, "Cargo.toml"))) {
+    techStack = techStack || "Rust";
+    commands = commands || `cargo build
+cargo test
+cargo run`;
+  }
+  if (existsSync8(join9(cwd, "go.mod"))) {
+    techStack = techStack || "Go";
+    commands = commands || `go build
+go test ./...
+go run .`;
+  }
+  let structure = "";
+  try {
+    const { execSync: ex } = __require("child_process");
+    structure = ex('find . -maxdepth 2 -type d ! -path "*/node_modules/*" ! -path "*/.git/*" ! -path "*/dist/*" | head -20', {
+      encoding: "utf-8",
+      cwd,
+      timeout: 3000
+    }).trim();
+  } catch {}
+  const template = `# ${name}
+
+## Overview
+${description}
+
+## Tech Stack
+${techStack || "- Add your tech stack here"}
+
+## Commands
+\`\`\`bash
+${commands || "# Add your development commands"}
+\`\`\`
+
+## Structure
+\`\`\`
+${structure || "# Project directory structure"}
+\`\`\`
+
+## Notes
+- Important things to know when working in this project
+`;
+  const path = join9(cwd, "NOLE.md");
+  writeFileSync5(path, template, "utf-8");
+  return path;
+}
+function loadProjectContext(cwd) {
+  const paths = [
+    join9(cwd, "NOLE.md"),
+    join9(cwd, ".nole.md"),
+    join9(cwd, ".nolecode"),
+    join9(cwd, "CONTEXT.md")
+  ];
+  for (const p of paths) {
+    if (existsSync8(p)) {
+      try {
+        return readFileSync8(p, "utf-8");
+      } catch {}
+    }
+  }
+  return null;
+}
+function loadSettings() {
+  if (existsSync8(SETTINGS_FILE)) {
+    try {
+      return JSON.parse(readFileSync8(SETTINGS_FILE, "utf-8"));
+    } catch {}
+  }
+  return {
+    autoSaveSession: true,
+    streamResponses: true,
+    showTimestamps: false,
+    toolPermissions: "all",
+    temperature: 0.7,
+    maxTokens: 4096,
+    editor: process.env.EDITOR || "vim",
+    shell: process.env.SHELL || "/bin/bash"
+  };
+}
+function saveSettings(settings) {
+  const current = loadSettings();
+  const updated = { ...current, ...settings };
+  writeFileSync5(SETTINGS_FILE, JSON.stringify(updated, null, 2));
+  return updated;
+}
+var CONFIG_DIR, PROJECT_CONFIG, SETTINGS_FILE;
+var init_onboarding = __esm(() => {
+  CONFIG_DIR = join9(homedir8(), ".nole-code");
+  PROJECT_CONFIG = join9(CONFIG_DIR, "projects.json");
+  SETTINGS_FILE = join9(CONFIG_DIR, "settings.json");
 });
 
 // src/plan/index.ts
@@ -19622,6 +19631,16 @@ import { promisify as promisify2 } from "util";
 import { existsSync as existsSync10, readFileSync as readFileSync10 } from "fs";
 import { join as join11 } from "path";
 import { homedir as homedir10 } from "os";
+function getAge(dateStr) {
+  const ms = Date.now() - new Date(dateStr).getTime();
+  if (ms < 60000)
+    return "just now";
+  if (ms < 3600000)
+    return `${Math.floor(ms / 60000)}m ago`;
+  if (ms < 86400000)
+    return `${Math.floor(ms / 3600000)}h ago`;
+  return `${Math.floor(ms / 86400000)}d ago`;
+}
 function registerCommand(cmd) {
   commands.set(cmd.name, cmd);
   cmd.aliases?.forEach((a) => commands.set(a, cmd));
@@ -19663,31 +19682,41 @@ var init_commands = __esm(() => {
   });
   registerCommand({
     name: "clear",
-    description: "Clear the terminal screen",
+    description: "Clear screen. Use /clear context to also reset conversation history.",
     aliases: ["cls"],
-    execute: async () => {
+    execute: async (args, ctx) => {
       process.stdout.write("\x1B[2J\x1B[H");
+      if (args[0] === "context" || args[0] === "all") {
+        const { loadSession: load, saveSession: save } = await Promise.resolve().then(() => (init_manager(), exports_manager));
+        const session = load(ctx.sessionId);
+        if (session) {
+          session.messages = session.messages.filter((m) => m.role === "system");
+          save(session);
+          return "Screen and context cleared.";
+        }
+      }
       return "";
     }
   });
   registerCommand({
     name: "sessions",
-    description: "List all sessions",
+    description: "List all sessions with details",
     aliases: ["session"],
     execute: async (_args, ctx) => {
-      const sessionDir = join11(homedir10(), ".nole-code", "sessions");
-      if (!existsSync10(sessionDir))
+      const { listSessions: listSessions2 } = await Promise.resolve().then(() => (init_manager(), exports_manager));
+      const sessions = listSessions2(15);
+      if (sessions.length === 0)
         return "No sessions found";
-      const files = (await execAsync2(`ls -t "${sessionDir}"/*.json 2>/dev/null`)).stdout.trim().split(`
-`).filter(Boolean);
-      if (files.length === 0)
-        return "No sessions found";
-      const lines = files.slice(0, 10).map((f) => {
-        const name = f.split("/").pop()?.replace(".json", "") || "";
-        const current = name === ctx.sessionId ? " (current)" : "";
-        return `  ${name}${current}`;
+      const lines = sessions.map((s) => {
+        const current = s.id === ctx.sessionId ? " \x1B[32m← current\x1B[0m" : "";
+        const userMsgs = s.messages.filter((m) => m.role === "user").length;
+        const dir = s.cwd ? s.cwd.split("/").pop() : "?";
+        const age = getAge(s.updatedAt);
+        return `  ${s.id.slice(0, 20).padEnd(20)} ${String(userMsgs).padStart(3)} msgs  ${dir?.padEnd(15)}  ${age}${current}`;
       });
-      return `Recent sessions:
+      return `Sessions:
+
+  ${"ID".padEnd(20)} ${"Msgs".padStart(4)}  ${"Directory".padEnd(15)}  Age
 ${lines.join(`
 `)}`;
     }
@@ -21011,7 +21040,7 @@ function detectPlanIntent(input) {
 function getBanner(cwd, verbose = false) {
   const v = verbose ? `${dim("· ")}verbose` : "";
   return `
-${bold(c2.cyan("▐▛███▜▌"))} ${bold("Nole Code v1.14")} ${dim("· MiniMax")}
+${bold(c2.cyan("▐▛███▜▌"))} ${bold("Nole Code v1.15")} ${dim("· MiniMax")}
 ${dim("▝▜█████▛▘")} ${dim(cwd)} ${v}
 
 ${divider()}
@@ -21702,7 +21731,7 @@ Sessions:`);
         process.exit(0);
         break;
       case "--version":
-        console.log("Nole Code v1.14.0");
+        console.log("Nole Code v1.15.0");
         process.exit(0);
         break;
       case "--help":

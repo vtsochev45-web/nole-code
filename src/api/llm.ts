@@ -237,7 +237,17 @@ export class LLMClient {
       throw new Error(`API error ${response.status}: ${parseApiError(errorText)}`)
     }
 
-    const data = await response.json() as any
+    let data: any
+    try {
+      data = await response.json()
+    } catch {
+      const text = await response.text().catch(() => '(empty)')
+      throw new Error(`API returned invalid JSON: ${text.slice(0, 200)}`)
+    }
+
+    if (data.error) {
+      throw new Error(`API error: ${data.error.message || JSON.stringify(data.error)}`)
+    }
 
     // Parse response
     let content = ''

@@ -10,6 +10,14 @@ import { MINIMAX_API_KEY } from '../utils/env.js'
 
 const execAsync = promisify(exec)
 
+function getAge(dateStr: string): string {
+  const ms = Date.now() - new Date(dateStr).getTime()
+  if (ms < 60000) return 'just now'
+  if (ms < 3600000) return `${Math.floor(ms / 60000)}m ago`
+  if (ms < 86400000) return `${Math.floor(ms / 3600000)}h ago`
+  return `${Math.floor(ms / 86400000)}d ago`
+}
+
 export interface Command {
   name: string
   description: string
@@ -65,34 +73,43 @@ registerCommand({
 
 registerCommand({
   name: 'clear',
-  description: 'Clear the terminal screen',
+  description: 'Clear screen. Use /clear context to also reset conversation history.',
   aliases: ['cls'],
-  execute: async () => {
+  execute: async (args, ctx) => {
     process.stdout.write('\x1b[2J\x1b[H')
+    if (args[0] === 'context' || args[0] === 'all') {
+      const { loadSession: load, saveSession: save } = await import('../session/manager.js')
+      const session = load(ctx.sessionId)
+      if (session) {
+        // Keep only system prompt
+        session.messages = session.messages.filter(m => m.role === 'system')
+        save(session)
+        return 'Screen and context cleared.'
+      }
+    }
     return ''
   },
 })
 
 registerCommand({
   name: 'sessions',
-  description: 'List all sessions',
+  description: 'List all sessions with details',
   aliases: ['session'],
   execute: async (_args, ctx) => {
-    const sessionDir = join(homedir(), '.nole-code', 'sessions')
-    if (!existsSync(sessionDir)) return 'No sessions found'
+    const { listSessions } = await import('../session/manager.js')
+    const sessions = listSessions(15)
 
-    const files = (await execAsync(`ls -t "${sessionDir}"/*.json 2>/dev/null`))
-      .stdout.trim().split('\n').filter(Boolean)
+    if (sessions.length === 0) return 'No sessions found'
 
-    if (files.length === 0) return 'No sessions found'
-
-    const lines = files.slice(0, 10).map(f => {
-      const name = f.split('/').pop()?.replace('.json', '') || ''
-      const current = name === ctx.sessionId ? ' (current)' : ''
-      return `  ${name}${current}`
+    const lines = sessions.map(s => {
+      const current = s.id === ctx.sessionId ? ' \x1b[32m← current\x1b[0m' : ''
+      const userMsgs = s.messages.filter(m => m.role === 'user').length
+      const dir = s.cwd ? s.cwd.split('/').pop() : '?'
+      const age = getAge(s.updatedAt)
+      return `  ${s.id.slice(0, 20).padEnd(20)} ${String(userMsgs).padStart(3)} msgs  ${dir?.padEnd(15)}  ${age}${current}`
     })
 
-    return `Recent sessions:\n${lines.join('\n')}`
+    return `Sessions:\n\n  ${'ID'.padEnd(20)} ${'Msgs'.padStart(4)}  ${'Directory'.padEnd(15)}  Age\n${lines.join('\n')}`
   },
 })
 

@@ -134,7 +134,7 @@ function detectPlanIntent(input: string): string | null {
 function getBanner(cwd: string, verbose = false) {
   const v = verbose ? `${dim('· ')}verbose` : ''
   return `
-${bold(c.cyan('▐▛███▜▌'))} ${bold('Nole Code v1.14')} ${dim('· MiniMax')}
+${bold(c.cyan('▐▛███▜▌'))} ${bold('Nole Code v1.15')} ${dim('· MiniMax')}
 ${dim('▝▜█████▛▘')} ${dim(cwd)} ${v}
 
 ${divider()}
@@ -909,7 +909,7 @@ function parseArgs(): CliOptions {
         process.exit(0)
         break
       case '--version':
-        console.log('Nole Code v1.14.0')
+        console.log('Nole Code v1.15.0')
         process.exit(0)
         break
       case '--help':
