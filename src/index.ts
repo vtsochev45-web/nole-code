@@ -485,6 +485,17 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
     setTimeout(() => { sigintCount = 0 }, 2000)
   })
 
+  // Handle suspend/resume (Ctrl+Z and fg)
+  process.on('SIGTSTP', () => {
+    // Save session before suspending
+    saveSession(session)
+  })
+  process.on('SIGCONT', () => {
+    // Redraw prompt after resuming from background
+    console.log('')
+    prompt()
+  })
+
   // Process line input
   const processInput = async (input: string) => {
     if (!input.trim()) {
@@ -618,14 +629,16 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
         const VERBS = ['Thinking', 'Reasoning', 'Crafting', 'Computing', 'Processing', 'Analyzing', 'Working']
         let spinFrame = 0
         spinnerInterval = setInterval(() => {
-          if (!hasOutput) {
+          if (!hasOutput && process.stdout.writable) {
             const frame = SPINNER_CHARS[spinFrame % SPINNER_CHARS.length]
             const verb = VERBS[Math.floor(spinFrame / 5) % VERBS.length]
             const elapsed = ((Date.now() - sessionStartTime) / 1000).toFixed(0)
-            process.stdout.write(`\r${c.cyan(frame)} ${dim(verb + '...')} ${dim(`(${elapsed}s)`)}  `)
+            try {
+              process.stdout.write(`\r${c.cyan(frame)} ${dim(verb + '...')} ${dim(`(${elapsed}s)`)}  `)
+            } catch {}
             spinFrame++
           }
-        }, 100)
+        }, 150)
 
         const mdStream = createStreamingMarkdown()
 

@@ -19,19 +19,41 @@ import type { ToolDefinition } from '../api/llm.js'
 
 const execAsync = promisify(exec)
 
-// Interactive permission prompt
+// Interactive permission prompt — auto-allows in non-interactive mode
 async function promptPermission(toolName: string, input: Record<string, unknown>, reason: string): Promise<boolean> {
+  // Auto-allow when not a TTY (background mode, piped, -m flag)
+  if (!process.stdin.isTTY) {
+    process.stderr.write(`\x1b[33m⚠ Auto-allowed (non-interactive): ${toolName}\x1b[0m\n`)
+    return true
+  }
+
   const preview = toolName === 'Bash' && input.command
     ? String(input.command).slice(0, 80)
     : JSON.stringify(input).slice(0, 80)
 
   return new Promise((resolve) => {
     const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout })
-    const prompt = `\n\x1b[33m⚠ Permission required:\x1b[0m ${toolName}(${preview})\n  Reason: ${reason}\n  Allow? [y/n]: `
-    rl.question(prompt, (answer: string) => {
+
+    // Timeout after 30s — auto-allow so it doesn't hang forever
+    const timeout = setTimeout(() => {
       rl.close()
-      const yes = ['y', 'yes', ''].includes(answer.trim().toLowerCase())
-      resolve(yes)
+      process.stderr.write(`\x1b[33m⚠ Permission timeout, auto-allowed: ${toolName}\x1b[0m\n`)
+      resolve(true)
+    }, 30000)
+
+    const prompt = `\n\x1b[33m⚠ Permission required:\x1b[0m ${toolName}(${preview})\n  Reason: ${reason}\n  Allow? [y/n/a(lways)] (auto-allows in 30s): `
+    rl.question(prompt, (answer: string) => {
+      clearTimeout(timeout)
+      rl.close()
+      const a = answer.trim().toLowerCase()
+      if (a === 'a' || a === 'always') {
+        // Add a permanent allow rule
+        const { addRule } = require('../permissions/rules-engine.js')
+        addRule({ pattern: `${toolName}(*)`, action: 'allow', reason: 'User chose always-allow' })
+        resolve(true)
+        return
+      }
+      resolve(['y', 'yes', ''].includes(a))
     })
   })
 }

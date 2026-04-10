@@ -17083,8 +17083,61 @@ var init_audit = __esm(() => {
 });
 
 // src/permissions/rules-engine.ts
+var exports_rules_engine = {};
+__export(exports_rules_engine, {
+  setPermissionMode: () => setPermissionMode,
+  savePermissions: () => savePermissions,
+  resetRules: () => resetRules,
+  removeRule: () => removeRule,
+  loadPermissions: () => loadPermissions,
+  getRules: () => getRules,
+  getPermissionMode: () => getPermissionMode,
+  formatPermission: () => formatPermission,
+  checkPermission: () => checkPermission,
+  addRule: () => addRule
+});
+import { existsSync as existsSync5, readFileSync as readFileSync5, writeFileSync as writeFileSync2 } from "fs";
 import { homedir as homedir5 } from "node:os";
 import { join as join6 } from "node:path";
+function loadPermissions() {
+  if (!existsSync5(PERMISSIONS_FILE)) {
+    permissionRules = [...DEFAULT_RULES];
+    savePermissions();
+    return;
+  }
+  try {
+    const data = JSON.parse(readFileSync5(PERMISSIONS_FILE, "utf-8"));
+    permissionRules = data.rules || [...DEFAULT_RULES];
+    currentMode = data.mode || "default";
+  } catch {
+    permissionRules = [...DEFAULT_RULES];
+  }
+}
+function savePermissions() {
+  const data = {
+    rules: permissionRules,
+    mode: currentMode,
+    updated: new Date().toISOString()
+  };
+  writeFileSync2(PERMISSIONS_FILE, JSON.stringify(data, null, 2), "utf-8");
+}
+function setPermissionMode(mode) {
+  currentMode = mode;
+  savePermissions();
+  console.log(`Permission mode: ${mode}`);
+}
+function getPermissionMode() {
+  return currentMode;
+}
+function addRule(rule) {
+  permissionRules = permissionRules.filter((r) => r.pattern !== rule.pattern);
+  permissionRules.push(rule);
+  savePermissions();
+}
+function removeRule(pattern) {
+  permissionRules = permissionRules.filter((r) => r.pattern !== pattern);
+  savePermissions();
+}
 function matchPattern(pattern, toolName, input) {
   const match = pattern.match(/^(\w+)\((.*)\)$/);
   if (!match) {
@@ -17141,6 +17194,18 @@ function checkPermission(context) {
   }
   return { result: "ask", reason: "No matching rule found" };
 }
+function getRules() {
+  return [...permissionRules];
+}
+function resetRules() {
+  permissionRules = [...DEFAULT_RULES];
+  savePermissions();
+}
+function formatPermission(toolName, input, result, reason) {
+  const icon = result === "allow" ? "✅" : result === "deny" ? "❌" : "⚠️";
+  const cmd = input.command ? ` ${input.command.slice(0, 50)}` : "";
+  return `${icon} ${toolName}${cmd}: ${result} (${reason})`;
+}
 var PERMISSIONS_DIR, PERMISSIONS_FILE, DEFAULT_RULES, permissionRules, currentMode = "default";
 var init_rules_engine = __esm(() => {
   init_feature_flags();
@@ -17181,21 +17246,39 @@ var init_rules_engine = __esm(() => {
 // src/tools/registry.ts
 import { exec } from "child_process";
 import { promisify } from "util";
-import { readFileSync as readFileSync5, writeFileSync as writeFileSync2, existsSync as existsSync5, mkdirSync as mkdirSync3, readdirSync, statSync } from "fs";
+import { readFileSync as readFileSync6, writeFileSync as writeFileSync3, existsSync as existsSync6, mkdirSync as mkdirSync3, readdirSync, statSync } from "fs";
 import { join as join7, relative as relative2, resolve as resolve3 } from "path";
 import { homedir as homedir6 } from "os";
 async function promptPermission(toolName, input, reason) {
+  if (!process.stdin.isTTY) {
+    process.stderr.write(`\x1B[33m⚠ Auto-allowed (non-interactive): ${toolName}\x1B[0m
+`);
+    return true;
+  }
   const preview = toolName === "Bash" && input.command ? String(input.command).slice(0, 80) : JSON.stringify(input).slice(0, 80);
   return new Promise((resolve4) => {
     const rl = __require("readline").createInterface({ input: process.stdin, output: process.stdout });
+    const timeout = setTimeout(() => {
+      rl.close();
+      process.stderr.write(`\x1B[33m⚠ Permission timeout, auto-allowed: ${toolName}\x1B[0m
+`);
+      resolve4(true);
+    }, 30000);
     const prompt = `
 \x1B[33m⚠ Permission required:\x1B[0m ${toolName}(${preview})
   Reason: ${reason}
-  Allow? [y/n]: `;
+  Allow? [y/n/a(lways)] (auto-allows in 30s): `;
     rl.question(prompt, (answer) => {
+      clearTimeout(timeout);
       rl.close();
-      const yes = ["y", "yes", ""].includes(answer.trim().toLowerCase());
-      resolve4(yes);
+      const a = answer.trim().toLowerCase();
+      if (a === "a" || a === "always") {
+        const { addRule: addRule2 } = (init_rules_engine(), __toCommonJS(exports_rules_engine));
+        addRule2({ pattern: `${toolName}(*)`, action: "allow", reason: "User chose always-allow" });
+        resolve4(true);
+        return;
+      }
+      resolve4(["y", "yes", ""].includes(a));
     });
   });
 }
@@ -17312,8 +17395,8 @@ ${stderrClean}`;
 }
 function loadTasks() {
   try {
-    if (existsSync5(TASKS_FILE)) {
-      const data = JSON.parse(readFileSync5(TASKS_FILE, "utf-8"));
+    if (existsSync6(TASKS_FILE)) {
+      const data = JSON.parse(readFileSync6(TASKS_FILE, "utf-8"));
       return new Map(Object.entries(data));
     }
   } catch {}
@@ -17321,10 +17404,10 @@ function loadTasks() {
 }
 function saveTasks(tasks) {
   const dir = join7(TASKS_FILE, "..");
-  if (!existsSync5(dir))
+  if (!existsSync6(dir))
     mkdirSync3(dir, { recursive: true });
   const obj = Object.fromEntries(tasks);
-  writeFileSync2(TASKS_FILE, JSON.stringify(obj, null, 2));
+  writeFileSync3(TASKS_FILE, JSON.stringify(obj, null, 2));
 }
 function formatSize(bytes) {
   if (bytes < 1024)
@@ -17386,13 +17469,13 @@ var init_registry = __esm(() => {
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
-      if (!existsSync5(path))
+      if (!existsSync6(path))
         return `File not found: ${path}`;
       const ext = path.split(".").pop()?.toLowerCase() || "";
       const imageExts = ["png", "jpg", "jpeg", "gif", "webp", "svg", "ico", "bmp"];
       if (imageExts.includes(ext)) {
         try {
-          const buf = readFileSync5(path);
+          const buf = readFileSync6(path);
           const size = statSync(path).size;
           const base642 = buf.toString("base64").slice(0, 1000);
           return `[Image: ${ext.toUpperCase()}, ${formatSize(size)}]
@@ -17417,7 +17500,7 @@ ${pdfText}`;
         return `[Binary file: ${ext.toUpperCase()}, ${formatSize(size)}] — cannot display contents`;
       }
       try {
-        const raw = readFileSync5(path, "utf-8");
+        const raw = readFileSync6(path, "utf-8");
         const allLines = raw.split(`
 `);
         const offset = input.offset || 1;
@@ -17465,9 +17548,9 @@ ${content}`;
         return `Access denied: ${pathCheck.reason}`;
       try {
         const dir = join7(path, "..");
-        if (!existsSync5(dir))
+        if (!existsSync6(dir))
           mkdirSync3(dir, { recursive: true });
-        writeFileSync2(path, input.content, "utf-8");
+        writeFileSync3(path, input.content, "utf-8");
         return `Written ${input.content.length} chars to ${path}`;
       } catch (err) {
         return `Error writing ${path}: ${err}`;
@@ -17491,17 +17574,17 @@ ${content}`;
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
-      if (!existsSync5(path))
+      if (!existsSync6(path))
         return `File not found: ${path}`;
       try {
-        let content = readFileSync5(path, "utf-8");
+        let content = readFileSync6(path, "utf-8");
         const oldText = input.old_text;
         const newText = input.new_text;
         if (!content.includes(oldText)) {
           return `Could not find the specified text in ${path}. Make sure you use exact text match.`;
         }
         content = content.replace(oldText, newText);
-        writeFileSync2(path, content, "utf-8");
+        writeFileSync3(path, content, "utf-8");
         const relPath = relative2(process.cwd(), path) || path;
         const oldLines = oldText.split(`
 `);
@@ -17512,7 +17595,7 @@ ${content}`;
           diffLines.push(`\x1B[31m- ${line}\x1B[0m`);
         for (const line of newLines)
           diffLines.push(`\x1B[32m+ ${line}\x1B[0m`);
-        const verify = readFileSync5(path, "utf-8");
+        const verify = readFileSync6(path, "utf-8");
         if (!verify.includes(newText)) {
           diffLines.push(`\x1B[31m⚠ VERIFICATION FAILED: new text not found after edit\x1B[0m`);
         }
@@ -17858,17 +17941,17 @@ Manage with /team list or /team send`;
     },
     execute: async (input, _ctx) => {
       const path = resolve3(process.cwd(), input.path);
-      if (!existsSync5(path))
+      if (!existsSync6(path))
         return `Notebook not found: ${path}`;
       try {
-        const nb = JSON.parse(readFileSync5(path, "utf-8"));
+        const nb = JSON.parse(readFileSync6(path, "utf-8"));
         const idx = input.cell_index;
         if (!nb.cells || !nb.cells[idx])
           return `Cell ${idx} not found`;
         nb.cells[idx].source = input.new_text;
         if (input.cell_type)
           nb.cells[idx].cell_type = input.cell_type;
-        writeFileSync2(path, JSON.stringify(nb, null, 2));
+        writeFileSync3(path, JSON.stringify(nb, null, 2));
         return `Edited cell ${idx} in ${path}`;
       } catch (err) {
         return `Error: ${err}`;
@@ -17952,7 +18035,7 @@ Manage with /team list or /team send`;
     },
     execute: async (input, _ctx) => {
       const dir = resolve3(process.cwd(), input.path || ".");
-      if (!existsSync5(dir))
+      if (!existsSync6(dir))
         return `Directory not found: ${dir}`;
       try {
         const entries = readdirSync(dir);
@@ -18072,10 +18155,10 @@ ${dirCount} directories, ${fileCount} files`);
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
-      if (!existsSync5(filePath))
+      if (!existsSync6(filePath))
         return `File not found: ${filePath}`;
       const edits = input.edits;
-      let content = readFileSync5(filePath, "utf-8");
+      let content = readFileSync6(filePath, "utf-8");
       const diffs = [];
       let applied = 0;
       for (const edit of edits) {
@@ -18095,8 +18178,8 @@ ${dirCount} directories, ${fileCount} files`);
           diffs.push(`\x1B[32m+ ${l}\x1B[0m`);
         diffs.push("");
       }
-      writeFileSync2(filePath, content, "utf-8");
-      const verify = readFileSync5(filePath, "utf-8");
+      writeFileSync3(filePath, content, "utf-8");
+      const verify = readFileSync6(filePath, "utf-8");
       let verified = 0;
       for (const edit of edits) {
         if (verify.includes(edit.new_text))
@@ -18196,7 +18279,7 @@ ${responseBody}`;
       let totalMatches = 0;
       for (const file of files) {
         try {
-          const content = readFileSync5(file, "utf-8");
+          const content = readFileSync6(file, "utf-8");
           const regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
           const matches = content.match(regex);
           if (matches && matches.length > 0) {
@@ -18204,7 +18287,7 @@ ${responseBody}`;
             const relPath = relative2(process.cwd(), file);
             if (!dryRun) {
               const newContent = content.split(pattern).join(replacement);
-              writeFileSync2(file, newContent, "utf-8");
+              writeFileSync3(file, newContent, "utf-8");
             }
             changes.push(`  ${relPath}: ${matches.length} match${matches.length > 1 ? "es" : ""}`);
           }
@@ -18347,26 +18430,26 @@ ${staged.trim()}`;
       let cmd = input.command;
       if (!cmd) {
         const cwd = process.cwd();
-        if (existsSync5(join7(cwd, "package.json"))) {
-          const pkg = JSON.parse(readFileSync5(join7(cwd, "package.json"), "utf-8"));
+        if (existsSync6(join7(cwd, "package.json"))) {
+          const pkg = JSON.parse(readFileSync6(join7(cwd, "package.json"), "utf-8"));
           const scripts = pkg.scripts || {};
           if (scripts.test) {
             cmd = "npm test";
-          } else if (existsSync5(join7(cwd, "vitest.config.ts")) || existsSync5(join7(cwd, "vitest.config.js"))) {
+          } else if (existsSync6(join7(cwd, "vitest.config.ts")) || existsSync6(join7(cwd, "vitest.config.js"))) {
             cmd = "npx vitest run";
-          } else if (existsSync5(join7(cwd, "jest.config.ts")) || existsSync5(join7(cwd, "jest.config.js"))) {
+          } else if (existsSync6(join7(cwd, "jest.config.ts")) || existsSync6(join7(cwd, "jest.config.js"))) {
             cmd = "npx jest";
-          } else if (existsSync5(join7(cwd, "bun.lock")) || existsSync5(join7(cwd, "bunfig.toml"))) {
+          } else if (existsSync6(join7(cwd, "bun.lock")) || existsSync6(join7(cwd, "bunfig.toml"))) {
             cmd = "bun test";
           }
         }
-        if (existsSync5(join7(process.cwd(), "pytest.ini")) || existsSync5(join7(process.cwd(), "pyproject.toml"))) {
+        if (existsSync6(join7(process.cwd(), "pytest.ini")) || existsSync6(join7(process.cwd(), "pyproject.toml"))) {
           cmd = cmd || "python -m pytest -v";
         }
-        if (existsSync5(join7(process.cwd(), "Cargo.toml"))) {
+        if (existsSync6(join7(process.cwd(), "Cargo.toml"))) {
           cmd = cmd || "cargo test";
         }
-        if (existsSync5(join7(process.cwd(), "go.mod"))) {
+        if (existsSync6(join7(process.cwd(), "go.mod"))) {
           cmd = cmd || "go test ./...";
         }
         cmd = cmd || 'echo "No test framework detected. Use command parameter to specify."';
@@ -18434,9 +18517,9 @@ ${output.slice(0, 500) || "(no output yet)"}`;
     execute: async (input, _ctx) => {
       const f1 = resolve3(process.cwd(), input.file1);
       const f2 = resolve3(process.cwd(), input.file2);
-      if (!existsSync5(f1))
+      if (!existsSync6(f1))
         return `File not found: ${f1}`;
-      if (!existsSync5(f2))
+      if (!existsSync6(f2))
         return `File not found: ${f2}`;
       const result = await runBash(`diff --color=never -u "${f1}" "${f2}" 2>/dev/null`);
       if (!result.trim())
@@ -18469,9 +18552,9 @@ ${output.slice(0, 500) || "(no output yet)"}`;
     execute: async (input, _ctx) => {
       const from = resolve3(process.cwd(), input.from);
       const to = resolve3(process.cwd(), input.to);
-      if (!existsSync5(from))
+      if (!existsSync6(from))
         return `Not found: ${from}`;
-      if (existsSync5(to))
+      if (existsSync6(to))
         return `Target already exists: ${to}`;
       const { renameSync } = __require("fs");
       try {
@@ -18498,7 +18581,7 @@ ${output.slice(0, 500) || "(no output yet)"}`;
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
-      if (!existsSync5(targetPath))
+      if (!existsSync6(targetPath))
         return `Not found: ${targetPath}`;
       try {
         const stat = statSync(targetPath);
@@ -18532,25 +18615,25 @@ __export(exports_onboarding, {
   createNoleMd: () => createNoleMd
 });
 import {
-  existsSync as existsSync6,
-  readFileSync as readFileSync6,
-  writeFileSync as writeFileSync3,
+  existsSync as existsSync7,
+  readFileSync as readFileSync7,
+  writeFileSync as writeFileSync4,
   mkdirSync as mkdirSync4
 } from "fs";
 import { join as join8 } from "path";
 import { homedir as homedir7 } from "os";
 function loadProjectConfig() {
   mkdirSync4(CONFIG_DIR, { recursive: true });
-  if (existsSync6(PROJECT_CONFIG)) {
+  if (existsSync7(PROJECT_CONFIG)) {
     try {
-      return JSON.parse(readFileSync6(PROJECT_CONFIG, "utf-8"));
+      return JSON.parse(readFileSync7(PROJECT_CONFIG, "utf-8"));
     } catch {}
   }
   return {};
 }
 function saveProjectConfig(config2) {
   mkdirSync4(CONFIG_DIR, { recursive: true });
-  writeFileSync3(PROJECT_CONFIG, JSON.stringify(config2, null, 2));
+  writeFileSync4(PROJECT_CONFIG, JSON.stringify(config2, null, 2));
 }
 function isDirEmpty(cwd) {
   try {
@@ -18575,14 +18658,14 @@ function getOnboardingSteps(cwd) {
     {
       key: "nolemd",
       text: "Run /init to create a NOLE.md file",
-      isComplete: existsSync6(noleMdPath),
+      isComplete: existsSync7(noleMdPath),
       isCompletable: true,
       isEnabled: !empty
     },
     {
       key: "context",
       text: "Add project context files",
-      isComplete: existsSync6(join8(cwd, ".nolecode")) || existsSync6(join8(cwd, "NOLE.md")),
+      isComplete: existsSync7(join8(cwd, ".nolecode")) || existsSync7(join8(cwd, "NOLE.md")),
       isCompletable: true,
       isEnabled: !empty
     }
@@ -18604,9 +18687,9 @@ function createNoleMd(cwd, projectName) {
   let commands = "";
   let description = "Brief description of what this project does.";
   const pkgPath = join8(cwd, "package.json");
-  if (existsSync6(pkgPath)) {
+  if (existsSync7(pkgPath)) {
     try {
-      const pkg = JSON.parse(readFileSync6(pkgPath, "utf-8"));
+      const pkg = JSON.parse(readFileSync7(pkgPath, "utf-8"));
       if (pkg.description)
         description = pkg.description;
       const deps = Object.keys(pkg.dependencies || {});
@@ -18647,18 +18730,18 @@ function createNoleMd(cwd, projectName) {
 `) || "npm run dev";
     } catch {}
   }
-  if (existsSync6(join8(cwd, "pyproject.toml")) || existsSync6(join8(cwd, "setup.py"))) {
+  if (existsSync7(join8(cwd, "pyproject.toml")) || existsSync7(join8(cwd, "setup.py"))) {
     techStack = techStack || "Python";
     commands = commands || `python -m pytest
 python main.py`;
   }
-  if (existsSync6(join8(cwd, "Cargo.toml"))) {
+  if (existsSync7(join8(cwd, "Cargo.toml"))) {
     techStack = techStack || "Rust";
     commands = commands || `cargo build
 cargo test
 cargo run`;
   }
-  if (existsSync6(join8(cwd, "go.mod"))) {
+  if (existsSync7(join8(cwd, "go.mod"))) {
     techStack = techStack || "Go";
     commands = commands || `go build
 go test ./...
@@ -18695,7 +18778,7 @@ ${structure || "# Project directory structure"}
 - Important things to know when working in this project
 `;
   const path = join8(cwd, "NOLE.md");
-  writeFileSync3(path, template, "utf-8");
+  writeFileSync4(path, template, "utf-8");
   return path;
 }
 function loadProjectContext(cwd) {
@@ -18706,18 +18789,18 @@ function loadProjectContext(cwd) {
     join8(cwd, "CONTEXT.md")
   ];
   for (const p of paths) {
-    if (existsSync6(p)) {
+    if (existsSync7(p)) {
       try {
-        return readFileSync6(p, "utf-8");
+        return readFileSync7(p, "utf-8");
       } catch {}
     }
   }
   return null;
 }
 function loadSettings() {
-  if (existsSync6(SETTINGS_FILE)) {
+  if (existsSync7(SETTINGS_FILE)) {
     try {
-      return JSON.parse(readFileSync6(SETTINGS_FILE, "utf-8"));
+      return JSON.parse(readFileSync7(SETTINGS_FILE, "utf-8"));
     } catch {}
   }
   return {
@@ -18734,7 +18817,7 @@ function loadSettings() {
 function saveSettings(settings) {
   const current = loadSettings();
   const updated = { ...current, ...settings };
-  writeFileSync3(SETTINGS_FILE, JSON.stringify(updated, null, 2));
+  writeFileSync4(SETTINGS_FILE, JSON.stringify(updated, null, 2));
   return updated;
 }
 var CONFIG_DIR, PROJECT_CONFIG, SETTINGS_FILE;
@@ -18758,10 +18841,10 @@ __export(exports_manager, {
   compactSession: () => compactSession
 });
 import {
-  existsSync as existsSync7,
+  existsSync as existsSync8,
   mkdirSync as mkdirSync5,
-  readFileSync as readFileSync7,
-  writeFileSync as writeFileSync4,
+  readFileSync as readFileSync8,
+  writeFileSync as writeFileSync5,
   readdirSync as readdirSync2,
   unlinkSync,
   renameSync
@@ -18776,7 +18859,7 @@ function listSessions(limit = 20) {
   const files = readdirSync2(SESSION_DIR).filter((f) => f.endsWith(".json"));
   const sessions = files.map((f) => {
     try {
-      return JSON.parse(readFileSync7(join9(SESSION_DIR, f), "utf-8"));
+      return JSON.parse(readFileSync8(join9(SESSION_DIR, f), "utf-8"));
     } catch {
       return null;
     }
@@ -18785,10 +18868,10 @@ function listSessions(limit = 20) {
 }
 function loadSession(id) {
   const file = join9(SESSION_DIR, `${id}.json`);
-  if (!existsSync7(file))
+  if (!existsSync8(file))
     return null;
   try {
-    return JSON.parse(readFileSync7(file, "utf-8"));
+    return JSON.parse(readFileSync8(file, "utf-8"));
   } catch {
     return null;
   }
@@ -18798,12 +18881,12 @@ function saveSession(session) {
   session.updatedAt = new Date().toISOString();
   const file = join9(SESSION_DIR, `${session.id}.json`);
   const tmp = file + `.tmp.${Date.now()}`;
-  writeFileSync4(tmp, JSON.stringify(session, null, 2), "utf-8");
+  writeFileSync5(tmp, JSON.stringify(session, null, 2), "utf-8");
   renameSync(tmp, file);
 }
 function deleteSession(id) {
   const file = join9(SESSION_DIR, `${id}.json`);
-  if (existsSync7(file)) {
+  if (existsSync8(file)) {
     unlinkSync(file);
     return true;
   }
@@ -19264,7 +19347,7 @@ __export(exports_cost, {
   box: () => box,
   applyStyle: () => applyStyle
 });
-import { existsSync as existsSync8, readFileSync as readFileSync8, mkdirSync as mkdirSync6, appendFileSync as appendFileSync2 } from "fs";
+import { existsSync as existsSync9, readFileSync as readFileSync9, mkdirSync as mkdirSync6, appendFileSync as appendFileSync2 } from "fs";
 import { homedir as homedir9 } from "node:os";
 import { join as join10, dirname as dirname4 } from "node:path";
 
@@ -19317,9 +19400,9 @@ class CostTracker {
       totalOutputTokens: 0,
       byModel: {}
     };
-    if (!existsSync8(COST_FILE))
+    if (!existsSync9(COST_FILE))
       return summary;
-    const lines = readFileSync8(COST_FILE, "utf-8").trim().split(`
+    const lines = readFileSync9(COST_FILE, "utf-8").trim().split(`
 `);
     for (const line of lines) {
       try {
@@ -19359,7 +19442,7 @@ class CostTracker {
   clearHistory() {
     const { unlinkSync: unlinkSync2 } = __require("fs");
     try {
-      if (existsSync8(COST_FILE)) {
+      if (existsSync9(COST_FILE)) {
         unlinkSync2(COST_FILE);
       }
     } catch {}
@@ -19491,7 +19574,7 @@ __export(exports_commands, {
 });
 import { exec as exec2 } from "child_process";
 import { promisify as promisify2 } from "util";
-import { existsSync as existsSync9, readFileSync as readFileSync9 } from "fs";
+import { existsSync as existsSync10, readFileSync as readFileSync10 } from "fs";
 import { join as join11 } from "path";
 import { homedir as homedir10 } from "os";
 function registerCommand(cmd) {
@@ -19548,7 +19631,7 @@ var init_commands = __esm(() => {
     aliases: ["session"],
     execute: async (_args, ctx) => {
       const sessionDir = join11(homedir10(), ".nole-code", "sessions");
-      if (!existsSync9(sessionDir))
+      if (!existsSync10(sessionDir))
         return "No sessions found";
       const files = (await execAsync2(`ls -t "${sessionDir}"/*.json 2>/dev/null`)).stdout.trim().split(`
 `).filter(Boolean);
@@ -19687,10 +19770,10 @@ ${lines.join(`
     description: "Show estimated API usage for this session",
     execute: async (_args, ctx) => {
       const sessionFile = join11(homedir10(), ".nole-code", "sessions", `${ctx.sessionId}.json`);
-      if (!existsSync9(sessionFile))
+      if (!existsSync10(sessionFile))
         return "Session not found";
       try {
-        const session = JSON.parse(readFileSync9(sessionFile, "utf-8"));
+        const session = JSON.parse(readFileSync10(sessionFile, "utf-8"));
         const msgs = session.messages?.length || 0;
         return `Session: ${ctx.sessionId}
 Messages: ${msgs}
@@ -19708,7 +19791,7 @@ Note: Actual token usage available in provider dashboard.`;
       const checks4 = [
         ["Node.js", process.version],
         ["API Key", MINIMAX_API_KEY ? "✅ set" : "❌ missing"],
-        ["Session Dir", existsSync9(join11(homedir10(), ".nole-code")) ? "✅ exists" : "❌ missing"]
+        ["Session Dir", existsSync10(join11(homedir10(), ".nole-code")) ? "✅ exists" : "❌ missing"]
       ];
       return `\uD83E\uDD9E NOLE CODE — Health Check:
 
@@ -19856,14 +19939,14 @@ Use /plan approve to proceed step by step.`;
     aliases: ["save-chat"],
     execute: async (_args, ctx) => {
       const { loadSession: load, exportSession: exportSession2 } = await Promise.resolve().then(() => (init_manager(), exports_manager));
-      const { writeFileSync: writeFileSync6 } = __require("fs");
+      const { writeFileSync: writeFileSync7 } = __require("fs");
       const { join: join12 } = __require("path");
       const transcript = exportSession2(ctx.sessionId);
       if (!transcript)
         return "Session not found";
       const filename = `nole-session-${ctx.sessionId.slice(5, 15)}.md`;
       const outPath = join12(ctx.cwd, filename);
-      writeFileSync6(outPath, transcript, "utf-8");
+      writeFileSync7(outPath, transcript, "utf-8");
       return `Exported to ${filename} (${transcript.split(`
 `).length} lines)`;
     }
@@ -20085,11 +20168,11 @@ ${lines.join(`
     name: "plugins",
     description: "List installed plugins",
     execute: async () => {
-      const { existsSync: existsSync10, readdirSync: readdirSync3 } = __require("fs");
+      const { existsSync: existsSync11, readdirSync: readdirSync3 } = __require("fs");
       const { join: join12 } = __require("path");
       const { homedir: homedir11 } = __require("os");
       const dir = join12(homedir11(), ".nole-code", "plugins");
-      if (!existsSync10(dir)) {
+      if (!existsSync11(dir)) {
         return `No plugins directory.
 Create ~/.nole-code/plugins/ and add .js files.
 
@@ -20230,7 +20313,7 @@ __export(exports_session_memory, {
   extractMemoryFromConversation: () => extractMemoryFromConversation,
   addToWorklog: () => addToWorklog
 });
-import { existsSync as existsSync10, readFileSync as readFileSync10, writeFileSync as writeFileSync6, mkdirSync as mkdirSync7 } from "fs";
+import { existsSync as existsSync11, readFileSync as readFileSync11, writeFileSync as writeFileSync7, mkdirSync as mkdirSync7 } from "fs";
 import { join as join12 } from "path";
 import { homedir as homedir11 } from "os";
 function getMemoryPath(sessionId) {
@@ -20239,7 +20322,7 @@ function getMemoryPath(sessionId) {
 }
 function loadMemory(sessionId) {
   const path = getMemoryPath(sessionId);
-  if (!existsSync10(path)) {
+  if (!existsSync11(path)) {
     return {
       title: "",
       currentState: "",
@@ -20252,7 +20335,7 @@ function loadMemory(sessionId) {
       lastUpdated: new Date().toISOString()
     };
   }
-  const content = readFileSync10(path, "utf-8");
+  const content = readFileSync11(path, "utf-8");
   return parseMemoryContent(content);
 }
 function parseMemoryContent(content) {
@@ -20297,7 +20380,7 @@ function saveMemory(sessionId, memory) {
   const merged = { ...existing, ...memory, lastUpdated: new Date().toISOString() };
   const path = getMemoryPath(sessionId);
   const content = formatMemory(merged);
-  writeFileSync6(path, content, "utf-8");
+  writeFileSync7(path, content, "utf-8");
 }
 function formatMemory(memory) {
   return `# Session Title
@@ -20783,11 +20866,11 @@ var exports_loader = {};
 __export(exports_loader, {
   loadPlugins: () => loadPlugins
 });
-import { existsSync as existsSync11, readdirSync as readdirSync3 } from "fs";
+import { existsSync as existsSync12, readdirSync as readdirSync3 } from "fs";
 import { join as join13 } from "path";
 import { homedir as homedir12 } from "os";
 async function loadPlugins() {
-  if (!existsSync11(PLUGINS_DIR))
+  if (!existsSync12(PLUGINS_DIR))
     return [];
   const files = readdirSync3(PLUGINS_DIR).filter((f) => f.endsWith(".js"));
   const loaded = [];
@@ -20829,7 +20912,7 @@ var exports_src = {};
 __export(exports_src, {
   activeClient: () => activeClient
 });
-import { existsSync as existsSync12, readFileSync as readFileSync11, mkdirSync as mkdirSync8 } from "fs";
+import { existsSync as existsSync13, readFileSync as readFileSync12, mkdirSync as mkdirSync8 } from "fs";
 import { homedir as homedir13 } from "node:os";
 import { join as join14 } from "node:path";
 import * as readline2 from "readline";
@@ -20860,8 +20943,8 @@ async function streamOutput(lines, maxLines, delayMs = 10) {
 function getMiniMaxToken() {
   try {
     const authPath = join14(homedir13(), ".openclaw", "agents", "main", "agent", "auth-profiles.json");
-    if (existsSync12(authPath)) {
-      const auth2 = JSON.parse(readFileSync11(authPath, "utf-8"));
+    if (existsSync13(authPath)) {
+      const auth2 = JSON.parse(readFileSync12(authPath, "utf-8"));
       return auth2.profiles?.["minimax-portal:default"]?.access || "";
     }
   } catch {}
@@ -20928,7 +21011,7 @@ ${dim("Or add keys to ~/.nole-code/.env:")}
 Then run ${bold("nole")} again.
 `);
     const configDir = join14(homedir13(), ".nole-code");
-    if (!existsSync12(configDir)) {
+    if (!existsSync13(configDir)) {
       mkdirSync8(configDir, { recursive: true });
       console.log(dim(`  Created ${configDir}/`));
     }
@@ -21188,6 +21271,13 @@ ${dim("Press Ctrl+C again to exit, or type a message.")}`);
       sigintCount = 0;
     }, 2000);
   });
+  process.on("SIGTSTP", () => {
+    saveSession(session);
+  });
+  process.on("SIGCONT", () => {
+    console.log("");
+    prompt();
+  });
   const processInput = async (input) => {
     if (!input.trim()) {
       prompt();
@@ -21268,9 +21358,9 @@ ${c2.yellow("❓ Unknown command:")} /${parsed.cmd}`);
       for (const ref of fileRefs) {
         const filePath = ref.slice(1);
         const fullPath = resolve(opts.cwd || process.cwd(), filePath);
-        if (existsSync12(fullPath)) {
+        if (existsSync13(fullPath)) {
           try {
-            const content = readFileSync11(fullPath, "utf-8");
+            const content = readFileSync12(fullPath, "utf-8");
             const truncated = content.length > 5000 ? content.slice(0, 5000) + `
 ... (truncated)` : content;
             expandedInput = expandedInput.replace(ref, `
@@ -21312,14 +21402,16 @@ ${divider()}
         const VERBS = ["Thinking", "Reasoning", "Crafting", "Computing", "Processing", "Analyzing", "Working"];
         let spinFrame = 0;
         spinnerInterval = setInterval(() => {
-          if (!hasOutput) {
+          if (!hasOutput && process.stdout.writable) {
             const frame = SPINNER_CHARS[spinFrame % SPINNER_CHARS.length];
             const verb = VERBS[Math.floor(spinFrame / 5) % VERBS.length];
             const elapsed2 = ((Date.now() - sessionStartTime) / 1000).toFixed(0);
-            process.stdout.write(`\r${c2.cyan(frame)} ${dim(verb + "...")} ${dim(`(${elapsed2}s)`)}  `);
+            try {
+              process.stdout.write(`\r${c2.cyan(frame)} ${dim(verb + "...")} ${dim(`(${elapsed2}s)`)}  `);
+            } catch {}
             spinFrame++;
           }
-        }, 100);
+        }, 150);
         const mdStream = createStreamingMarkdown();
         const usage = await client.chatStream(session.messages.map((m) => {
           const msg = { role: m.role, content: m.content };
