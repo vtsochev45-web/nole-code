@@ -23041,22 +23041,22 @@ async function planSteps(goal, client, cwd) {
   const systemPrompt = `You are a task planner for an autonomous coding agent.
 
 CRITICAL RULES:
-1. Each step must be ONE atomic action (create OR modify OR verify, never combined)
-2. NEVER create a file THEN modify it in separate steps - do it in ONE step
-3. NEVER add headers/content separately - include content in creation step
-4. Combine verification into the action step when possible
-5. Maximum 8 steps, minimum 3 steps
-6. Order: setup → action → verify (not setup → action → tweak → tweak → verify)
+1. Each step must be ONE atomic action
+2. When user says "use curl", "run command", "execute", "bash" → plan ONLY Bash tool steps
+3. NEVER plan Glob, Read, or LS steps unless user explicitly asks for file discovery
+4. Do NOT plan a "check environment" or "find files" step before executing the actual task
+5. Maximum 8 steps, minimum 1 step
+6. Combine the entire task into one step if it can be done with a single Bash/Write command
 
 BAD examples:
-- "Step 1: Create file.txt" + "Step 2: Add content to file.txt" (combine into one)
-- "Step 1: Create directory" + "Step 2: Create file in directory" (combine into one)
-- "Step 1: Write code" + "Step 2: Add error handling" + "Step 3: Add comments" (all one step)
+- User: "create a file" → Plan: "Glob to find location" + "Write file" (WRONG)
+- User: "run curl to create post" → Plan: "Check environment" + "Execute curl" (WRONG)
+- User: "create WordPress post" → Plan: "Read existing files" + "Execute curl" (WRONG)
 
 GOOD examples:
-- "Create src/api/users.ts with Express router and CRUD endpoints"
-- "Add JWT authentication middleware to the Express app"
-- "Write unit tests for the users API endpoints"
+- "Run curl to create WordPress post and save response to ~/output.txt" (one step)
+- "Create /tmp/test.txt with hello world content" (Write tool)
+- "Run git status and echo result" (Bash tool)
 
 Return a JSON array of step descriptions:
 ["Action description 1", "Action description 2", ...]`;
