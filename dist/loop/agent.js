@@ -22968,6 +22968,9 @@ __export(exports_executor, {
   planSteps: () => planSteps,
   pauseLoop: () => pauseLoop2
 });
+function isActualFailure(result) {
+  return FAILURE_SIGNATURES.some((r) => r.test(result));
+}
 function clearLine3() {
   process.stdout.write("\r" + "\x1B[K");
 }
@@ -23118,14 +23121,14 @@ What tools should I use to complete this step? Respond with specific tool calls.
         }
         try {
           const execResult = await executeTool(tc.name, tc.input, { cwd, sessionId: "loop" });
-          const isErrorResult = execResult.isError || /^(ENOENT|EPERM|EACCES|EEXIST|ECONNREFUSED|ETIMEDOUT|No such file|Permission denied|Command failed|non-zero|exit code [1-9])/m.test(execResult.content);
+          const isToolFailure = execResult.isError || isActualFailure(execResult.content);
           toolCalls.push({
             name: tc.name,
             input: tc.input,
             result: execResult.content,
-            success: !isErrorResult
+            success: !isToolFailure
           });
-          if (isErrorResult) {
+          if (isToolFailure) {
             context.errorsEncountered.push({
               step: step.id,
               error: execResult.content,
@@ -23262,12 +23265,24 @@ async function resumeLoop2(checkpointId) {
   resumeCheckpoint(checkpoint);
   return runLoop({ goal: checkpoint.goal, checkpointId, cwd: checkpoint.context.cwd });
 }
+var FAILURE_SIGNATURES;
 var init_executor = __esm(() => {
   init_checkpoint();
   init_llm();
   init_registry();
   init_onboarding();
   init_styles();
+  FAILURE_SIGNATURES = [
+    /No such file or directory/,
+    /Permission denied/,
+    /command not found/,
+    /cannot access/,
+    /ENOENT/,
+    /EPERM/,
+    /EACCES/,
+    /exit code [1-9]/,
+    /No such file/
+  ];
 });
 
 // src/loop/agent.ts

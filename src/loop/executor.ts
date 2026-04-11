@@ -32,6 +32,24 @@ import { getToolDefinitions, executeTool } from '../tools/registry.js'
 import { loadSettings } from '../project/onboarding.js'
 import { c, bold, dim } from '../ui/output/styles.js'
 
+// ============ Failure Detection ============
+
+const FAILURE_SIGNATURES = [
+  /No such file or directory/,
+  /Permission denied/,
+  /command not found/,
+  /cannot access/,
+  /ENOENT/,
+  /EPERM/,
+  /EACCES/,
+  /exit code [1-9]/,
+  /No such file/,
+]
+
+function isActualFailure(result: string): boolean {
+  return FAILURE_SIGNATURES.some(r => r.test(result))
+}
+
 // ============ Types ============
 
 export interface ExecutorOptions {
@@ -242,19 +260,18 @@ ${step.retryCount > 0 ? buildRetryContext({ steps: [step], context } as Checkpoi
         try {
           const execResult = await executeTool(tc.name, tc.input, { cwd, sessionId: 'loop' })
           
-          // Detect errors from exit codes and error patterns
-          const isErrorResult = execResult.isError || 
-            /^(ENOENT|EPERM|EACCES|EEXIST|ECONNREFUSED|ETIMEDOUT|No such file|Permission denied|Command failed|non-zero|exit code [1-9])/m
-              .test(execResult.content)
+          // Detect failures from result content (not just isError flag)
+          // This catches bash exit code failures that appear as "success" execution
+          const isToolFailure = execResult.isError || isActualFailure(execResult.content)
           
           toolCalls.push({
             name: tc.name,
             input: tc.input,
             result: execResult.content,
-            success: !isErrorResult,
+            success: !isToolFailure,
           })
           
-          if (isErrorResult) {
+          if (isToolFailure) {
             context.errorsEncountered.push({
               step: step.id,
               error: execResult.content,
