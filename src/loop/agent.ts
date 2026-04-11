@@ -11,6 +11,7 @@ import { Checkpoint } from './checkpoint.js'
 // ============ IPC Protocol ============
 
 type IPCEvent =
+  | { type: 'plan_ready'; total: number; goal: string }
   | { type: 'step_start'; step: number; total: number; description: string }
   | { type: 'step_complete'; step: number; duration: number; description: string }
   | { type: 'step_failed'; step: number; error: string; retry: number; maxRetries: number }
@@ -223,6 +224,9 @@ async function main(): Promise<void> {
       const { planSteps } = await import('./executor.js')
       const steps = await planSteps(goal, client, cwd)
       setSteps(cp, steps)
+      
+      // Emit plan_ready with total steps before any step_start
+      emit({ type: 'plan_ready', total: steps.length, goal })
       
       setupSignalHandlers(cp.id)
       startStepWatcher(cp.id)

@@ -138,16 +138,28 @@ function printSummary(checkpoint: Checkpoint, totalMs: number): void {
  * Break goal into steps using LLM
  */
 export async function planSteps(goal: string, client: LLMClient, cwd: string): Promise<string[]> {
-  const systemPrompt = `You are a task planner. Break down the goal into 5-10 concrete steps.
-  
-Rules:
-- Each step should be a single actionable task
-- Steps should be ordered (do X before Y)
-- Include verification steps (test, check, verify)
-- Be specific, not vague
+  const systemPrompt = `You are a task planner for an autonomous coding agent.
+
+CRITICAL RULES:
+1. Each step must be ONE atomic action (create OR modify OR verify, never combined)
+2. NEVER create a file THEN modify it in separate steps - do it in ONE step
+3. NEVER add headers/content separately - include content in creation step
+4. Combine verification into the action step when possible
+5. Maximum 8 steps, minimum 3 steps
+6. Order: setup → action → verify (not setup → action → tweak → tweak → verify)
+
+BAD examples:
+- "Step 1: Create file.txt" + "Step 2: Add content to file.txt" (combine into one)
+- "Step 1: Create directory" + "Step 2: Create file in directory" (combine into one)
+- "Step 1: Write code" + "Step 2: Add error handling" + "Step 3: Add comments" (all one step)
+
+GOOD examples:
+- "Create src/api/users.ts with Express router and CRUD endpoints"
+- "Add JWT authentication middleware to the Express app"
+- "Write unit tests for the users API endpoints"
 
 Return a JSON array of step descriptions:
-["Step 1: ...", "Step 2: ...", ...]`
+["Action description 1", "Action description 2", ...]`
 
   try {
     const result = await client.chat([

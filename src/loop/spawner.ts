@@ -25,6 +25,7 @@ export interface LoopProcess {
 }
 
 type IPCEvent =
+  | { type: 'plan_ready'; total: number; goal: string }
   | { type: 'step_start'; step: number; total: number; description: string }
   | { type: 'step_complete'; step: number; duration: number; description: string }
   | { type: 'step_failed'; step: number; error: string; retry: number; maxRetries: number }
@@ -38,6 +39,7 @@ type IPCEvent =
 // ============ Active Loops ============
 
 let activeLoop: LoopProcess | null = null
+let currentTotal: number = 0
 
 export function getActiveLoop(): LoopProcess | null {
   return activeLoop
@@ -57,10 +59,18 @@ function displayProgress(event: IPCEvent): void {
   clearLine()
   
   switch (event.type) {
+    case 'plan_ready':
+      currentTotal = event.total
+      process.stdout.write(
+        `${c.cyan('◉')} ${bold('Planning')} ` +
+        dim(`${event.total} steps`))
+      break
+      
     case 'step_start':
+      const total = event.total || currentTotal || 0
       process.stdout.write(
         `${c.cyan('◉')} ${bold(event.description.slice(0, 50))} ` +
-        `[${event.step}/${event.total}] ` +
+        `[${event.step}/${total}] ` +
         dim('running...')
       )
       break
