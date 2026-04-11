@@ -62,7 +62,7 @@ export class SkillLoader {
 
         try {
           const content = readFileSync(skillMd, 'utf-8')
-          const skill = this.parseSkillMd(entry, content)
+          const skill = this.parseSkillMd(entry, content, source)
           if (skill) {
             skill.path = skillPath
             skill.source = source
@@ -80,7 +80,7 @@ export class SkillLoader {
   /**
    * Parse skill.md content into a Skill object.
    */
-  private parseSkillMd(dirName: string, content: string): LoadedSkill | null {
+  private parseSkillMd(dirName: string, content: string, source: string): LoadedSkill | null {
     const lines = content.split('\n')
     let name = dirName
     let description = ''

@@ -931,10 +931,10 @@ function cached(getter) {
 function nullish(input) {
   return input === null || input === undefined;
 }
-function cleanRegex(source2) {
-  const start = source2.startsWith("^") ? 1 : 0;
-  const end = source2.endsWith("$") ? source2.length - 1 : source2.length;
-  return source2.slice(start, end);
+function cleanRegex(source) {
+  const start = source.startsWith("^") ? 1 : 0;
+  const end = source.endsWith("$") ? source.length - 1 : source.length;
+  return source.slice(start, end);
 }
 function floatSafeRemainder(val, step) {
   const valDecCount = (val.toString().split(".")[1] || "").length;
@@ -11173,12 +11173,12 @@ var require_ref = __commonJS((exports) => {
     function callSyncRef() {
       cxt.result((0, code_1.callValidateCode)(cxt, v, passCxt), () => addEvaluatedFrom(v), () => addErrorsFrom(v));
     }
-    function addErrorsFrom(source2) {
-      const errs = (0, codegen_1._)`${source2}.errors`;
+    function addErrorsFrom(source) {
+      const errs = (0, codegen_1._)`${source}.errors`;
       gen.assign(names_1.default.vErrors, (0, codegen_1._)`${names_1.default.vErrors} === null ? ${errs} : ${names_1.default.vErrors}.concat(${errs})`);
       gen.assign(names_1.default.errors, (0, codegen_1._)`${names_1.default.vErrors}.length`);
     }
-    function addEvaluatedFrom(source2) {
+    function addEvaluatedFrom(source) {
       var _a;
       if (!it.opts.unevaluated)
         return;
@@ -11189,7 +11189,7 @@ var require_ref = __commonJS((exports) => {
             it.props = util_1.mergeEvaluated.props(gen, schEvaluated.props, it.props);
           }
         } else {
-          const props = gen.var("props", (0, codegen_1._)`${source2}.evaluated.props`);
+          const props = gen.var("props", (0, codegen_1._)`${source}.evaluated.props`);
           it.props = util_1.mergeEvaluated.props(gen, props, it.props, codegen_1.Name);
         }
       }
@@ -11199,7 +11199,7 @@ var require_ref = __commonJS((exports) => {
             it.items = util_1.mergeEvaluated.items(gen, schEvaluated.items, it.items);
           }
         } else {
-          const items = gen.var("items", (0, codegen_1._)`${source2}.evaluated.items`);
+          const items = gen.var("items", (0, codegen_1._)`${source}.evaluated.items`);
           it.items = util_1.mergeEvaluated.items(gen, items, it.items, codegen_1.Name);
         }
       }
@@ -18914,839 +18914,6 @@ ${output.slice(0, 500) || "(no output yet)"}`;
   });
 });
 
-// src/commands/server.ts
-import { spawn as spawn3 } from "child_process";
-import { join as join9 } from "path";
-import { homedir as homedir8 } from "os";
-import { existsSync as existsSync8, readFileSync as readFileSync8, unlinkSync } from "fs";
-function getPidFile() {
-  return join9(homedir8(), ".nole-code", "server.pid");
-}
-function readPidFile() {
-  try {
-    if (existsSync8(getPidFile())) {
-      const pid = parseInt(readFileSync8(getPidFile(), "utf-8").trim(), 10);
-      return isNaN(pid) ? null : pid;
-    }
-  } catch {}
-  return null;
-}
-function checkServerStatus() {
-  const pid = readPidFile();
-  if (!pid) {
-    return { running: false, pid: null };
-  }
-  try {
-    process.kill(pid, 0);
-    return { running: true, pid };
-  } catch {
-    return { running: false, pid: null };
-  }
-}
-function registerServerCommand(register) {
-  register({
-    name: "server",
-    description: "Server management: /server start|stop|status",
-    aliases: ["srv"],
-    execute: async (args, ctx) => {
-      const action = args[0] || "status";
-      const noleCodeDir = join9(homedir8(), "nole-code");
-      switch (action) {
-        case "start": {
-          const { running } = checkServerStatus();
-          if (running) {
-            return "Server already running";
-          }
-          const child = spawn3("bun", ["run", "src/server/index.ts", "start"], {
-            cwd: noleCodeDir,
-            detached: true,
-            stdio: "ignore"
-          });
-          child.unref();
-          await new Promise((resolve4) => setTimeout(resolve4, 500));
-          const status = checkServerStatus();
-          if (status.running) {
-            return `Server started (PID: ${status.pid})`;
-          } else {
-            return "Server started (checking status...)";
-          }
-        }
-        case "stop": {
-          const status = checkServerStatus();
-          if (!status.running || !status.pid) {
-            return "Server not running";
-          }
-          try {
-            process.kill(status.pid, "SIGTERM");
-            try {
-              unlinkSync(getPidFile());
-            } catch {}
-            return `Server stopped (PID: ${status.pid})`;
-          } catch (e) {
-            return `Failed to stop server: ${String(e)}`;
-          }
-        }
-        case "status": {
-          const status = checkServerStatus();
-          if (status.running && status.pid) {
-            const port = process.env.SERVER_PORT || "18792";
-            return `Server running (PID: ${status.pid}, port: ${port})`;
-          } else {
-            return "Server not running";
-          }
-        }
-        default:
-          return `Unknown action: ${action}. Use start, stop, or status`;
-      }
-    }
-  });
-}
-var init_server = () => {};
-
-// src/buddy/sprites.ts
-var sprites;
-var init_sprites = __esm(() => {
-  sprites = {
-    cat: `  /\\___/\\
- (  o o  )
- (  =^=  )
-  (--m-m--)`,
-    owl: `  ___0___
- /       \\
-|  @   @  |
- \\  ---  /
-  ~~~~~~~`,
-    ghost: `  .-.
- (o o)
- | O |
- |   |
-  ===
- ~~~~~`,
-    frog: `  (_/)
- ( o.o )
-  > ^ <`,
-    crab: `  ~~/~~\\
- (_/)
- /|  |\\
-  |  |`,
-    astronaut: `  .--.
- (    )
- |    |
-  \\__/
- /____\\`
-  };
-});
-
-// src/buddy/companion.ts
-class Companion {
-  config;
-  currentMood;
-  constructor(config2) {
-    this.config = {
-      name: config2?.name || "Buddy",
-      sprite: config2?.sprite || "cat",
-      mood: config2?.mood || "happy",
-      messages: config2?.messages || []
-    };
-    this.currentMood = this.config.mood;
-  }
-  get name() {
-    return this.config.name;
-  }
-  get sprite() {
-    return this.config.sprite;
-  }
-  get mood() {
-    return this.currentMood;
-  }
-  get spriteArt() {
-    return sprites[this.config.sprite];
-  }
-  get isEnabled() {
-    return this.config.name !== "" && this.config.name.toLowerCase() !== "off";
-  }
-  react(event) {
-    if (!this.isEnabled)
-      return "";
-    const reaction = reactions[event];
-    const message = reaction.messages[Math.floor(Math.random() * reaction.messages.length)];
-    return `${moodEmojis[this.currentMood]} ${this.config.name}: ${message}`;
-  }
-  celebrate() {
-    if (!this.isEnabled)
-      return "";
-    const message = celebrateMessages[Math.floor(Math.random() * celebrateMessages.length)];
-    return `${message} ${this.spriteArt}`;
-  }
-  introduce() {
-    if (!this.isEnabled)
-      return "";
-    return `${moodEmojis[this.currentMood]} ${this.config.name} here! ${this.spriteArt}`;
-  }
-  setMood(mood) {
-    this.currentMood = mood;
-  }
-  setName(name) {
-    this.config.name = name;
-  }
-  setSprite(sprite) {
-    this.config.sprite = sprite;
-  }
-  getConfig() {
-    return { ...this.config };
-  }
-}
-var moodEmojis, reactions, celebrateMessages;
-var init_companion = __esm(() => {
-  init_sprites();
-  moodEmojis = {
-    happy: "✨",
-    thinking: "\uD83E\uDD14",
-    sleeping: "\uD83D\uDCA4",
-    excited: "\uD83C\uDF89",
-    sad: "\uD83D\uDE22"
-  };
-  reactions = {
-    thinking: {
-      emoji: "\uD83E\uDD14",
-      messages: [
-        "Hmm, let me think about this...",
-        "Working on it...",
-        "Pondering the options...",
-        "Computing..."
-      ]
-    },
-    done: {
-      emoji: "✅",
-      messages: [
-        "All done!",
-        "Finished!",
-        "Completed!",
-        "There we go!"
-      ]
-    },
-    error: {
-      emoji: "❌",
-      messages: [
-        "Oops! Something went wrong.",
-        "That didn't work...",
-        "Let me try again!",
-        "We'll get it next time."
-      ]
-    },
-    waiting: {
-      emoji: "⏳",
-      messages: [
-        "Waiting...",
-        "Patience...",
-        "Almost there...",
-        "Hold on..."
-      ]
-    }
-  };
-  celebrateMessages = [
-    "\uD83C\uDF89 Woohoo! We did it!",
-    "\uD83C\uDF1F Amazing work!",
-    "\uD83D\uDE80 Mission accomplished!",
-    "\uD83D\uDCAF Perfect!",
-    "\uD83C\uDFC6 Champion!"
-  ];
-});
-
-// src/buddy/config.ts
-import { existsSync as existsSync9, readFileSync as readFileSync9 } from "fs";
-import { join as join10 } from "path";
-function loadEnv() {
-  const envPath = join10(process.cwd(), ".env");
-  if (!existsSync9(envPath)) {
-    return {};
-  }
-  try {
-    const content = readFileSync9(envPath, "utf-8");
-    const config2 = {};
-    content.split(`
-`).forEach((line) => {
-      const match = line.match(/^(BUDDY|BUDDY_SPRITE)=(.*)$/);
-      if (match) {
-        const [, key, value] = match;
-        if (key === "BUDDY") {
-          config2.BUDDY = value.trim();
-        } else if (key === "BUDDY_SPRITE") {
-          config2.BUDDY_SPRITE = value.trim();
-        }
-      }
-    });
-    return config2;
-  } catch {
-    return {};
-  }
-}
-function getSpriteFromEnv(sprite) {
-  const validSprites = ["cat", "owl", "ghost", "frog", "crab", "astronaut"];
-  if (sprite && validSprites.includes(sprite)) {
-    return sprite;
-  }
-  return "cat";
-}
-function getMoodFromEnv(mood) {
-  const validMoods = ["happy", "thinking", "sleeping", "excited", "sad"];
-  if (mood && validMoods.includes(mood)) {
-    return mood;
-  }
-  return "happy";
-}
-function getCompanion() {
-  if (!companionInstance) {
-    const env = loadEnv();
-    if (env.BUDDY && env.BUDDY.trim() !== "" && env.BUDDY.toLowerCase() !== "off") {
-      companionInstance = new Companion({
-        name: env.BUDDY.trim(),
-        sprite: getSpriteFromEnv(env.BUDDY_SPRITE),
-        mood: getMoodFromEnv()
-      });
-    } else {
-      companionInstance = new Companion({ name: "" });
-    }
-  }
-  return companionInstance;
-}
-function reloadCompanion() {
-  companionInstance = null;
-  return getCompanion();
-}
-var companionInstance = null, validSprites, validMoods;
-var init_config = __esm(() => {
-  init_companion();
-  validSprites = ["cat", "owl", "ghost", "frog", "crab", "astronaut"];
-  validMoods = ["happy", "thinking", "sleeping", "excited", "sad"];
-});
-
-// src/buddy/index.ts
-var init_buddy = __esm(() => {
-  init_sprites();
-  init_companion();
-  init_config();
-});
-
-// src/buddy/commands.ts
-function registerBuddyCommands(registerCmd) {
-  const companion = getCompanion();
-  registerCmd({
-    name: "buddy",
-    description: "Show or control your buddy companion",
-    aliases: ["buddy"],
-    execute: async (args, _ctx) => {
-      const subcommand = args[0];
-      if (!subcommand || subcommand === "show") {
-        const comp = getCompanion();
-        if (!comp.isEnabled) {
-          return `\uD83D\uDC3E Buddy is disabled. Set BUDDY=name in .env to enable.`;
-        }
-        return `\uD83D\uDC3E ${comp.name} (${comp.mood})
-${comp.spriteArt}`;
-      }
-      if (subcommand === "set") {
-        const newName = args.slice(1).join(" ");
-        if (!newName) {
-          return "Usage: /buddy set <name>";
-        }
-        const comp = getCompanion();
-        comp.setName(newName);
-        return `✨ Buddy renamed to "${newName}"`;
-      }
-      if (subcommand === "sprite") {
-        const newSprite = args[1];
-        if (!newSprite) {
-          return `Available sprites: ${validSprites.join(", ")}`;
-        }
-        if (!validSprites.includes(newSprite)) {
-          return `Invalid sprite. Choose from: ${validSprites.join(", ")}`;
-        }
-        const comp = getCompanion();
-        comp.setSprite(newSprite);
-        return `\uD83C\uDFA8 Sprite changed to ${newSprite}
-${comp.spriteArt}`;
-      }
-      if (subcommand === "mood") {
-        const newMood = args[1];
-        if (!newMood) {
-          return `Available moods: ${validMoods.join(", ")}`;
-        }
-        if (!validMoods.includes(newMood)) {
-          return `Invalid mood. Choose from: ${validMoods.join(", ")}`;
-        }
-        const comp = getCompanion();
-        comp.setMood(newMood);
-        return `\uD83C\uDFAD Mood set to ${newMood}`;
-      }
-      if (subcommand === "off") {
-        const comp = getCompanion();
-        comp.setName("");
-        return "\uD83D\uDC4B Buddy disabled.";
-      }
-      if (subcommand === "reload") {
-        reloadCompanion();
-        const comp = getCompanion();
-        if (!comp.isEnabled) {
-          return "\uD83D\uDD04 Reloaded. Buddy is disabled (no BUDDY=name in .env)";
-        }
-        return `\uD83D\uDD04 Reloaded! ${comp.name} is back!`;
-      }
-      return `Usage:
-  /buddy           - Show buddy
-  /buddy set <name> - Rename buddy
-  /buddy sprite <type> - Change sprite (${validSprites.join(", ")})
-  /buddy mood <mood> - Change mood (${validMoods.join(", ")})
-  /buddy off       - Disable buddy
-  /buddy reload    - Reload from .env`;
-    }
-  });
-}
-var init_commands = __esm(() => {
-  init_buddy();
-});
-
-// src/skills/registry.ts
-async function callLlm(prompt) {
-  const { default: { llm: llm2 } } = await Promise.resolve().then(() => (init_llm(), exports_llm));
-  const result = await llm2([{ role: "user", content: prompt }], {
-    model: "default"
-  });
-  return result.content;
-}
-var builtinSkills;
-var init_registry2 = __esm(() => {
-  builtinSkills = [
-    {
-      name: "code-review",
-      description: "Analyze code for issues, bugs, and improvements",
-      read_when: ["review", "analyze", "check code", "find issues", "code review"],
-      allowed_tools: ["Read", "Grep", "Glob"],
-      execute: async (input, ctx) => {
-        const files = input.split(/\s+/).filter((f) => f && !f.startsWith("-"));
-        if (!files.length)
-          return "Usage: /skill run code-review <file> [file...]";
-        const prompts = [];
-        for (const file of files) {
-          const { existsSync: existsSync10, readFileSync: readFileSync10 } = __require("fs");
-          if (!existsSync10(file)) {
-            prompts.push("File not found: " + file);
-            continue;
-          }
-          const content = readFileSync10(file, "utf-8").slice(0, 5000);
-          prompts.push("## " + file + `
-
-` + content);
-        }
-        if (!prompts.length)
-          return "No valid files found";
-        const prompt = `You are a code reviewer. Analyze the following code for issues, bugs, and improvements. Return: Issues Found (numbered), Suggestions (numbered), Overall (brief).
-
-Code to Review:
-` + prompts.join(`
-
-`);
-        return callLlm(prompt);
-      }
-    },
-    {
-      name: "refactor",
-      description: "Refactor code with LLM suggestions",
-      read_when: ["refactor", "improve", "clean up", "restructure"],
-      allowed_tools: ["Read", "Edit", "Write"],
-      execute: async (input, ctx) => {
-        const parts = input.split(/\s+/);
-        let file = "";
-        for (const p of parts) {
-          if (!p.startsWith("-")) {
-            const { existsSync: existsSync10 } = __require("fs");
-            if (existsSync10(p)) {
-              file = p;
-              break;
-            }
-          }
-        }
-        if (!file)
-          return "Usage: /skill run refactor <file>";
-        const { readFileSync: readFileSync10 } = __require("fs");
-        const content = readFileSync10(file, "utf-8");
-        const prompt = `You are a code refactorer. Improve this code for readability and maintainability. Return: 1) Summary of changes, 2) Refactored code.
-
-Original Code (` + file + `):
-` + content.slice(0, 6000);
-        const result = await callLlm(prompt);
-        const codeMatch = result.match(/```(?:typescript|javascript|ts|js)?\n([\s\S]*?)```/)?.[1];
-        if (codeMatch) {
-          return "## Refactoring " + file + `
-
-` + result.split("```")[0] + `
-
-Apply? (yes/no)`;
-        }
-        return result;
-      }
-    },
-    {
-      name: "explain",
-      description: "Explain code in plain English",
-      read_when: ["explain", "what does", "how does", "describe", "understand"],
-      allowed_tools: ["Read"],
-      execute: async (input, ctx) => {
-        const parts = input.split(/\s+/);
-        let file = "";
-        for (const p of parts) {
-          if (!p.startsWith("-")) {
-            const { existsSync: existsSync10 } = __require("fs");
-            if (existsSync10(p)) {
-              file = p;
-              break;
-            }
-          }
-        }
-        if (!file)
-          return "Usage: /skill run explain <file>";
-        const { readFileSync: readFileSync10 } = __require("fs");
-        const content = readFileSync10(file, "utf-8").slice(0, 4000);
-        const prompt = `Explain this code in simple terms. Cover: What it does, How it works, Key concepts.
-
-Code to Explain:
-` + content;
-        return callLlm(prompt);
-      }
-    },
-    {
-      name: "test-gen",
-      description: "Generate tests for code",
-      read_when: ["test", "generate tests", "write tests", "add tests", "spec"],
-      allowed_tools: ["Read", "Glob", "Write"],
-      execute: async (input, ctx) => {
-        const parts = input.split(/\s+/);
-        let file = "";
-        let framework = "vitest";
-        for (const p of parts) {
-          if (!p.startsWith("-")) {
-            const { existsSync: existsSync10 } = __require("fs");
-            if (existsSync10(p)) {
-              file = p;
-            }
-          } else if (p === "--jest") {
-            framework = "jest";
-          } else if (p.startsWith("--framework=")) {
-            framework = p.replace("--framework=", "");
-          }
-        }
-        if (!file)
-          return "Usage: /skill run test-gen <file> [--framework=vitest]";
-        const { readFileSync: readFileSync10 } = __require("fs");
-        const content = readFileSync10(file, "utf-8").slice(0, 5000);
-        const testFile = file.replace(/(\.[jt]s)x?$/, ".test.$1");
-        const prompt = "Generate " + framework + ` tests for this code. Return only the test code.
-
-Source Code:
-` + content;
-        const result = await callLlm(prompt);
-        const codeMatch = result.match(/```(?:typescript|javascript|ts|js)?\n([\s\S]*?)```/)?.[1] || result;
-        return "// Test file: " + testFile + `
-// Framework: ` + framework + `
-
-` + codeMatch;
-      }
-    }
-  ];
-});
-
-// src/skills/loader.ts
-import { existsSync as existsSync10, readdirSync as readdirSync2, readFileSync as readFileSync10 } from "fs";
-import { join as join11 } from "path";
-import { homedir as homedir9 } from "os";
-
-class SkillLoader {
-  skills = [];
-  loaded = false;
-  loadSkills() {
-    if (this.loaded)
-      return this.skills;
-    for (const skill of builtinSkills) {
-      this.skills.push({ ...skill, source: "builtin" });
-    }
-    if (existsSync10(SKILLS_DIR)) {
-      this.loadFromDirectory(SKILLS_DIR, "user");
-    }
-    if (existsSync10(PLUGINS_DIR)) {
-      this.loadFromDirectory(PLUGINS_DIR, "plugin");
-    }
-    this.loaded = true;
-    return this.skills;
-  }
-  loadFromDirectory(dir, source2) {
-    try {
-      const entries = readdirSync2(dir);
-      for (const entry of entries) {
-        const skillPath = join11(dir, entry);
-        try {
-          const { statSync: statSync2 } = __require("fs");
-          if (!statSync2(skillPath).isDirectory())
-            continue;
-        } catch {
-          continue;
-        }
-        const skillMd = join11(skillPath, "skill.md");
-        if (!existsSync10(skillMd))
-          continue;
-        try {
-          const content = readFileSync10(skillMd, "utf-8");
-          const skill = this.parseSkillMd(entry, content);
-          if (skill) {
-            skill.path = skillPath;
-            skill.source = source2;
-            this.skills.push(skill);
-          }
-        } catch (err) {
-          console.error(`Failed to load skill from ${skillPath}:`, err);
-        }
-      }
-    } catch (err) {
-      console.error(`Failed to read skills directory ${dir}:`, err);
-    }
-  }
-  parseSkillMd(dirName, content) {
-    const lines = content.split(`
-`);
-    let name = dirName;
-    let description = "";
-    const readWhen = [];
-    let allowedTools = [];
-    let execute;
-    let section = "header";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed === "---") {
-        continue;
-      }
-      if (trimmed.startsWith("## ")) {
-        const header = trimmed.slice(3).toLowerCase();
-        if (header.includes("description"))
-          section = "description";
-        else if (header.includes("trigger") || header.includes("keyword"))
-          section = "trigger";
-        else if (header.includes("allowed"))
-          section = "allowed";
-        else if (header.includes("action") || header.includes("code"))
-          section = "code";
-        else
-          section = "header";
-        continue;
-      }
-      if (trimmed.startsWith("# ")) {
-        name = trimmed.slice(2).trim();
-        continue;
-      }
-      if (section === "description" && trimmed) {
-        description = trimmed;
-      } else if (section === "trigger" && trimmed) {
-        readWhen.push(trimmed.toLowerCase().replace(/^[-*]\s*/, ""));
-      } else if (section === "allowed" && trimmed) {
-        allowedTools.push(trimmed.replace(/^[-*]\s*/, ""));
-      }
-    }
-    if (!name || !description)
-      return null;
-    return {
-      name,
-      description,
-      read_when: readWhen.length ? readWhen : ["*"],
-      allowed_tools: allowedTools.length ? allowedTools : ["*"],
-      execute: execute || this.defaultExecute,
-      source
-    };
-  }
-  async defaultExecute(input, ctx) {
-    const skill = this.findSkill(input);
-    if (!skill)
-      return `Skill not found`;
-    return skill.description;
-  }
-  findSkill(input) {
-    if (!this.loaded)
-      this.loadSkills();
-    if (!this.skills.length)
-      return;
-    const lower = input.toLowerCase();
-    for (const skill of this.skills) {
-      for (const keyword of skill.read_when) {
-        if (keyword === "*")
-          return skill;
-        if (lower.includes(keyword.toLowerCase()))
-          return skill;
-      }
-    }
-    return;
-  }
-  async runSkill(name, input, context) {
-    if (!this.loaded)
-      this.loadSkills();
-    const skill = this.skills.find((s) => s.name === name || s.name.toLowerCase() === name.toLowerCase());
-    if (!skill)
-      return `Skill not found: ${name}`;
-    try {
-      return await skill.execute(input, context);
-    } catch (err) {
-      return `Skill error: ${err}`;
-    }
-  }
-  getAllSkills() {
-    if (!this.loaded)
-      return this.loadSkills();
-    return this.skills;
-  }
-  reload() {
-    this.loaded = false;
-    this.skills = [];
-    return this.loadSkills();
-  }
-}
-var SKILLS_DIR, PLUGINS_DIR, skillLoader;
-var init_loader = __esm(() => {
-  init_registry2();
-  SKILLS_DIR = join11(homedir9(), ".nole-code", "skills");
-  PLUGINS_DIR = join11(homedir9(), ".nole-code", "plugins");
-  skillLoader = new SkillLoader;
-});
-
-// src/skills/index.ts
-var init_skills = __esm(() => {
-  init_loader();
-  init_registry2();
-});
-
-// src/commands/skills.ts
-import { join as join12 } from "path";
-import { homedir as homedir10 } from "os";
-function registerSkillCommands(registerCmd) {
-  registerCmd({
-    name: "skills",
-    description: "Manage skills. Usage: /skills [list|run|install] [args]",
-    aliases: ["skill"],
-    execute: async (args, ctx) => {
-      const subcommand = args[0] || "list";
-      if (subcommand === "list") {
-        skillLoader.loadSkills();
-        const skills = skillLoader.getAllSkills();
-        if (!skills.length) {
-          return "No skills found. Use /skill install to add skills.";
-        }
-        const lines = [`\uD83D\uDEE0 Available Skills:
-`];
-        for (const skill of skills) {
-          const src = skill.source === "builtin" ? "built-in" : skill.source;
-          lines.push("  " + skill.name + " — " + skill.description + " [" + src + "]");
-          if (skill.read_when.length && skill.read_when[0] !== "*") {
-            lines.push("    triggers: " + skill.read_when.join(", "));
-          }
-        }
-        return lines.join(`
-`);
-      }
-      if (subcommand === "run") {
-        const skillName = args[1];
-        const input = args.slice(2).join(" ");
-        if (!skillName) {
-          return "Usage: /skill run <name> <input>";
-        }
-        const result = await skillLoader.runSkill(skillName, input, {
-          cwd: ctx.cwd,
-          model: "default",
-          tools: {}
-        });
-        return result;
-      }
-      if (subcommand === "install") {
-        const url2 = args[1];
-        if (!url2) {
-          return "Usage: /skill install <url>  (not implemented)";
-        }
-        return "Skill install from URL not yet implemented";
-      }
-      return "Unknown /skills command: " + subcommand + ". Use: list, run, install";
-    }
-  });
-  registerCmd({
-    name: "skill",
-    description: "Run or list skills. Use /skill run <name> <input>",
-    aliases: [],
-    execute: async (args, ctx) => {
-      const cmd = getCommand("skills");
-      if (!cmd)
-        return "Skills command not found";
-      return cmd.execute(args, ctx);
-    }
-  });
-}
-var SKILLS_DIR2;
-var init_skills2 = __esm(() => {
-  init_commands2();
-  init_skills();
-  SKILLS_DIR2 = join12(homedir10(), ".nole-code", "skills");
-  registerCommand({
-    name: "skills",
-    description: "Manage skills. Usage: /skills [list|run|install] [args]",
-    aliases: ["skill"],
-    execute: async (args, ctx) => {
-      const subcommand = args[0] || "list";
-      if (subcommand === "list") {
-        skillLoader.loadSkills();
-        const skills = skillLoader.getAllSkills();
-        if (!skills.length) {
-          return "No skills found. Use /skill install to add skills.";
-        }
-        const lines = [`\uD83D\uDEE0 Available Skills:
-`];
-        for (const skill of skills) {
-          const src = skill.source === "builtin" ? "built-in" : skill.source;
-          lines.push(`  ${skill.name} — ${skill.description} [${src}]`);
-          if (skill.read_when.length && skill.read_when[0] !== "*") {
-            lines.push(`    triggers: ${skill.read_when.join(", ")}`);
-          }
-        }
-        return lines.join(`
-`);
-      }
-      if (subcommand === "run") {
-        const skillName = args[1];
-        const input = args.slice(2).join(" ");
-        if (!skillName) {
-          return "Usage: /skill run <name> <input>";
-        }
-        const result = await skillLoader.runSkill(skillName, input, {
-          cwd: ctx.cwd,
-          model: "default",
-          tools: {}
-        });
-        return result;
-      }
-      if (subcommand === "install") {
-        const url2 = args[1];
-        if (!url2) {
-          return "Usage: /skill install <url>  (not implemented - create ~/.nole-code/skills/<name>/skill.md manually)";
-        }
-        return "Skill install from URL not yet implemented";
-      }
-      return `Unknown /skill command: ${subcommand}. Use: list, run, install`;
-    }
-  });
-  registerCommand({
-    name: "skill",
-    description: "Run or list skills. Use /skill run <name> <input>",
-    aliases: [],
-    execute: async (args, ctx) => {
-      const cmd = getCommand("skills");
-      if (!cmd)
-        return "Skills command not found";
-      return cmd.execute(args, ctx);
-    }
-  });
-});
-
 // src/session/manager.ts
 var exports_manager = {};
 __export(exports_manager, {
@@ -19761,25 +18928,25 @@ __export(exports_manager, {
   compactSession: () => compactSession
 });
 import {
-  existsSync as existsSync11,
+  existsSync as existsSync8,
   mkdirSync as mkdirSync4,
-  readFileSync as readFileSync11,
+  readFileSync as readFileSync8,
   writeFileSync as writeFileSync4,
-  readdirSync as readdirSync3,
-  unlinkSync as unlinkSync2,
+  readdirSync as readdirSync2,
+  unlinkSync,
   renameSync
 } from "fs";
-import { join as join13 } from "path";
-import { homedir as homedir11 } from "os";
+import { join as join9 } from "path";
+import { homedir as homedir8 } from "os";
 function ensureSessionDir() {
   mkdirSync4(SESSION_DIR, { recursive: true });
 }
 function listSessions(limit = 20) {
   ensureSessionDir();
-  const files = readdirSync3(SESSION_DIR).filter((f) => f.endsWith(".json"));
+  const files = readdirSync2(SESSION_DIR).filter((f) => f.endsWith(".json"));
   const sessions = files.map((f) => {
     try {
-      return JSON.parse(readFileSync11(join13(SESSION_DIR, f), "utf-8"));
+      return JSON.parse(readFileSync8(join9(SESSION_DIR, f), "utf-8"));
     } catch {
       return null;
     }
@@ -19787,11 +18954,11 @@ function listSessions(limit = 20) {
   return sessions.slice(0, limit);
 }
 function loadSession(id) {
-  const file = join13(SESSION_DIR, `${id}.json`);
-  if (!existsSync11(file))
+  const file = join9(SESSION_DIR, `${id}.json`);
+  if (!existsSync8(file))
     return null;
   try {
-    return JSON.parse(readFileSync11(file, "utf-8"));
+    return JSON.parse(readFileSync8(file, "utf-8"));
   } catch {
     return null;
   }
@@ -19799,15 +18966,15 @@ function loadSession(id) {
 function saveSession(session) {
   ensureSessionDir();
   session.updatedAt = new Date().toISOString();
-  const file = join13(SESSION_DIR, `${session.id}.json`);
+  const file = join9(SESSION_DIR, `${session.id}.json`);
   const tmp = file + `.tmp.${Date.now()}`;
   writeFileSync4(tmp, JSON.stringify(session, null, 2), "utf-8");
   renameSync(tmp, file);
 }
 function deleteSession(id) {
-  const file = join13(SESSION_DIR, `${id}.json`);
-  if (existsSync11(file)) {
-    unlinkSync2(file);
+  const file = join9(SESSION_DIR, `${id}.json`);
+  if (existsSync8(file)) {
+    unlinkSync(file);
     return true;
   }
   return false;
@@ -19915,7 +19082,7 @@ function exportSession(id) {
 }
 var SESSION_DIR;
 var init_manager = __esm(() => {
-  SESSION_DIR = join13(homedir11(), ".nole-code", "sessions");
+  SESSION_DIR = join9(homedir8(), ".nole-code", "sessions");
 });
 
 // src/project/onboarding.ts
@@ -19931,18 +19098,18 @@ __export(exports_onboarding, {
   createNoleMd: () => createNoleMd
 });
 import {
-  existsSync as existsSync12,
-  readFileSync as readFileSync12,
+  existsSync as existsSync9,
+  readFileSync as readFileSync9,
   writeFileSync as writeFileSync5,
   mkdirSync as mkdirSync5
 } from "fs";
-import { join as join14 } from "path";
-import { homedir as homedir12 } from "os";
+import { join as join10 } from "path";
+import { homedir as homedir9 } from "os";
 function loadProjectConfig() {
   mkdirSync5(CONFIG_DIR, { recursive: true });
-  if (existsSync12(PROJECT_CONFIG)) {
+  if (existsSync9(PROJECT_CONFIG)) {
     try {
-      return JSON.parse(readFileSync12(PROJECT_CONFIG, "utf-8"));
+      return JSON.parse(readFileSync9(PROJECT_CONFIG, "utf-8"));
     } catch {}
   }
   return {};
@@ -19961,7 +19128,7 @@ function isDirEmpty(cwd) {
   }
 }
 function getOnboardingSteps(cwd) {
-  const noleMdPath = join14(cwd, "NOLE.md");
+  const noleMdPath = join10(cwd, "NOLE.md");
   const empty = isDirEmpty(cwd);
   return [
     {
@@ -19974,14 +19141,14 @@ function getOnboardingSteps(cwd) {
     {
       key: "nolemd",
       text: "Run /init to create a NOLE.md file",
-      isComplete: existsSync12(noleMdPath),
+      isComplete: existsSync9(noleMdPath),
       isCompletable: true,
       isEnabled: !empty
     },
     {
       key: "context",
       text: "Add project context files",
-      isComplete: existsSync12(join14(cwd, ".nolecode")) || existsSync12(join14(cwd, "NOLE.md")),
+      isComplete: existsSync9(join10(cwd, ".nolecode")) || existsSync9(join10(cwd, "NOLE.md")),
       isCompletable: true,
       isEnabled: !empty
     }
@@ -20000,12 +19167,12 @@ function markOnboardingComplete(cwd) {
 function createNoleMd(cwd, projectName) {
   const name = projectName || cwd.split("/").pop() || "this project";
   let techStack = "";
-  let commands = "";
+  let shellCmds = "";
   let description = "Brief description of what this project does.";
-  const pkgPath = join14(cwd, "package.json");
-  if (existsSync12(pkgPath)) {
+  const pkgPath = join10(cwd, "package.json");
+  if (existsSync9(pkgPath)) {
     try {
-      const pkg = JSON.parse(readFileSync12(pkgPath, "utf-8"));
+      const pkg = JSON.parse(readFileSync9(pkgPath, "utf-8"));
       if (pkg.description)
         description = pkg.description;
       const deps = Object.keys(pkg.dependencies || {});
@@ -20042,24 +19209,24 @@ function createNoleMd(cwd, projectName) {
         cmdLines.push(`npm test       # ${scripts.test.slice(0, 40)}`);
       if (scripts.start)
         cmdLines.push(`npm start      # ${scripts.start.slice(0, 40)}`);
-      commands = cmdLines.join(`
+      shellCmds = cmdLines.join(`
 `) || "npm run dev";
     } catch {}
   }
-  if (existsSync12(join14(cwd, "pyproject.toml")) || existsSync12(join14(cwd, "setup.py"))) {
+  if (existsSync9(join10(cwd, "pyproject.toml")) || existsSync9(join10(cwd, "setup.py"))) {
     techStack = techStack || "Python";
-    commands = commands || `python -m pytest
+    shellCmds = shellCmds || `python -m pytest
 python main.py`;
   }
-  if (existsSync12(join14(cwd, "Cargo.toml"))) {
+  if (existsSync9(join10(cwd, "Cargo.toml"))) {
     techStack = techStack || "Rust";
-    commands = commands || `cargo build
+    shellCmds = shellCmds || `cargo build
 cargo test
 cargo run`;
   }
-  if (existsSync12(join14(cwd, "go.mod"))) {
+  if (existsSync9(join10(cwd, "go.mod"))) {
     techStack = techStack || "Go";
-    commands = commands || `go build
+    shellCmds = shellCmds || `go build
 go test ./...
 go run .`;
   }
@@ -20082,7 +19249,7 @@ ${techStack || "- Add your tech stack here"}
 
 ## Commands
 \`\`\`bash
-${commands || "# Add your development commands"}
+${shellCmds || "# Add your development commands"}
 \`\`\`
 
 ## Structure
@@ -20093,30 +19260,30 @@ ${structure || "# Project directory structure"}
 ## Notes
 - Important things to know when working in this project
 `;
-  const path = join14(cwd, "NOLE.md");
+  const path = join10(cwd, "NOLE.md");
   writeFileSync5(path, template, "utf-8");
   return path;
 }
 function loadProjectContext(cwd) {
   const paths = [
-    join14(cwd, "NOLE.md"),
-    join14(cwd, ".nole.md"),
-    join14(cwd, ".nolecode"),
-    join14(cwd, "CONTEXT.md")
+    join10(cwd, "NOLE.md"),
+    join10(cwd, ".nole.md"),
+    join10(cwd, ".nolecode"),
+    join10(cwd, "CONTEXT.md")
   ];
   for (const p of paths) {
-    if (existsSync12(p)) {
+    if (existsSync9(p)) {
       try {
-        return readFileSync12(p, "utf-8");
+        return readFileSync9(p, "utf-8");
       } catch {}
     }
   }
   return null;
 }
 function loadSettings() {
-  if (existsSync12(SETTINGS_FILE)) {
+  if (existsSync9(SETTINGS_FILE)) {
     try {
-      return JSON.parse(readFileSync12(SETTINGS_FILE, "utf-8"));
+      return JSON.parse(readFileSync9(SETTINGS_FILE, "utf-8"));
     } catch {}
   }
   return {
@@ -20138,9 +19305,9 @@ function saveSettings(settings) {
 }
 var CONFIG_DIR, PROJECT_CONFIG, SETTINGS_FILE;
 var init_onboarding = __esm(() => {
-  CONFIG_DIR = join14(homedir12(), ".nole-code");
-  PROJECT_CONFIG = join14(CONFIG_DIR, "projects.json");
-  SETTINGS_FILE = join14(CONFIG_DIR, "settings.json");
+  CONFIG_DIR = join10(homedir9(), ".nole-code");
+  PROJECT_CONFIG = join10(CONFIG_DIR, "projects.json");
+  SETTINGS_FILE = join10(CONFIG_DIR, "settings.json");
 });
 
 // src/plan/index.ts
@@ -20492,9 +19659,9 @@ __export(exports_cost, {
   box: () => box,
   applyStyle: () => applyStyle
 });
-import { existsSync as existsSync13, readFileSync as readFileSync13, mkdirSync as mkdirSync6, appendFileSync as appendFileSync2 } from "fs";
-import { homedir as homedir13 } from "node:os";
-import { join as join15, dirname as dirname4 } from "node:path";
+import { existsSync as existsSync10, readFileSync as readFileSync10, mkdirSync as mkdirSync6, appendFileSync as appendFileSync2 } from "fs";
+import { homedir as homedir10 } from "node:os";
+import { join as join11, dirname as dirname4 } from "node:path";
 
 class CostTracker {
   sessionCosts = new Map;
@@ -20545,9 +19712,9 @@ class CostTracker {
       totalOutputTokens: 0,
       byModel: {}
     };
-    if (!existsSync13(COST_FILE))
+    if (!existsSync10(COST_FILE))
       return summary;
-    const lines = readFileSync13(COST_FILE, "utf-8").trim().split(`
+    const lines = readFileSync10(COST_FILE, "utf-8").trim().split(`
 `);
     for (const line of lines) {
       try {
@@ -20585,10 +19752,10 @@ class CostTracker {
     return this.currentSession;
   }
   clearHistory() {
-    const { unlinkSync: unlinkSync3 } = __require("fs");
+    const { unlinkSync: unlinkSync2 } = __require("fs");
     try {
-      if (existsSync13(COST_FILE)) {
-        unlinkSync3(COST_FILE);
+      if (existsSync10(COST_FILE)) {
+        unlinkSync2(COST_FILE);
       }
     } catch {}
   }
@@ -20672,7 +19839,7 @@ var init_cost = __esm(() => {
     "MiniMax-M2.5": { input: 0.005, output: 0.005 },
     default: { input: 0.01, output: 0.01 }
   };
-  COST_FILE = join15(homedir13(), ".nole-code", "costs.jsonl");
+  COST_FILE = join11(homedir10(), ".nole-code", "costs.jsonl");
   costTracker = new CostTracker;
   STYLES = {
     user: { color: "#60A5FA" },
@@ -20734,16 +19901,16 @@ __export(exports_checkpoint, {
   abortCheckpoint: () => abortCheckpoint
 });
 import {
-  existsSync as existsSync14,
+  existsSync as existsSync11,
   mkdirSync as mkdirSync7,
-  readFileSync as readFileSync14,
+  readFileSync as readFileSync11,
   writeFileSync as writeFileSync7,
-  readdirSync as readdirSync4,
-  unlinkSync as unlinkSync3,
+  readdirSync as readdirSync3,
+  unlinkSync as unlinkSync2,
   renameSync as renameSync2
 } from "fs";
-import { join as join16 } from "path";
-import { homedir as homedir14 } from "os";
+import { join as join12 } from "path";
+import { homedir as homedir11 } from "os";
 function ensureCheckpointDir() {
   mkdirSync7(CHECKPOINT_DIR, { recursive: true });
 }
@@ -20775,18 +19942,18 @@ function createCheckpoint(goal, cwd, settings) {
   return checkpoint;
 }
 function loadCheckpoint(id) {
-  const file = join16(CHECKPOINT_DIR, `${id}.json`);
-  if (!existsSync14(file))
+  const file = join12(CHECKPOINT_DIR, `${id}.json`);
+  if (!existsSync11(file))
     return null;
   try {
-    return JSON.parse(readFileSync14(file, "utf-8"));
+    return JSON.parse(readFileSync11(file, "utf-8"));
   } catch {
     return null;
   }
 }
 function loadLatestCheckpoint() {
   ensureCheckpointDir();
-  const files = readdirSync4(CHECKPOINT_DIR).filter((f) => f.startsWith("loop-") && f.endsWith(".json"));
+  const files = readdirSync3(CHECKPOINT_DIR).filter((f) => f.startsWith("loop-") && f.endsWith(".json"));
   if (files.length === 0)
     return null;
   files.sort((a, b) => b.localeCompare(a));
@@ -20795,22 +19962,22 @@ function loadLatestCheckpoint() {
 function saveCheckpoint(checkpoint) {
   ensureCheckpointDir();
   checkpoint.updatedAt = new Date().toISOString();
-  const file = join16(CHECKPOINT_DIR, `${checkpoint.id}.json`);
+  const file = join12(CHECKPOINT_DIR, `${checkpoint.id}.json`);
   const tmp = file + `.tmp.${Date.now()}`;
   writeFileSync7(tmp, JSON.stringify(checkpoint, null, 2), "utf-8");
   renameSync2(tmp, file);
 }
 function deleteCheckpoint(id) {
-  const file = join16(CHECKPOINT_DIR, `${id}.json`);
-  if (existsSync14(file)) {
-    unlinkSync3(file);
+  const file = join12(CHECKPOINT_DIR, `${id}.json`);
+  if (existsSync11(file)) {
+    unlinkSync2(file);
     return true;
   }
   return false;
 }
 function listCheckpoints(limit = 10) {
   ensureCheckpointDir();
-  const files = readdirSync4(CHECKPOINT_DIR).filter((f) => f.startsWith("loop-") && f.endsWith(".json"));
+  const files = readdirSync3(CHECKPOINT_DIR).filter((f) => f.startsWith("loop-") && f.endsWith(".json"));
   const checkpoints = files.map((f) => loadCheckpoint(f.replace(".json", ""))).filter(Boolean);
   checkpoints.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   return checkpoints.slice(0, limit);
@@ -21005,7 +20172,7 @@ function inferErrorHint(error2) {
 }
 var CHECKPOINT_DIR;
 var init_checkpoint = __esm(() => {
-  CHECKPOINT_DIR = join16(homedir14(), ".nole-code", "checkpoints");
+  CHECKPOINT_DIR = join12(homedir11(), ".nole-code", "checkpoints");
 });
 
 // src/ui/output/styles.ts
@@ -21079,7 +20246,7 @@ __export(exports_spawner2, {
   getActiveLoop: () => getActiveLoop,
   abortLoop: () => abortLoop
 });
-import { spawn as spawn4 } from "child_process";
+import { spawn as spawn3 } from "child_process";
 function getActiveLoop() {
   return activeLoop;
 }
@@ -21142,7 +20309,7 @@ function spawnLoop(goal, cwd) {
     killLoop("new loop started");
   }
   const agentPath = "/home/tim/nole-code/dist/loop/agent.js";
-  const child = spawn4("node", [agentPath, "--goal", goal], {
+  const child = spawn3("node", [agentPath, "--goal", goal], {
     cwd: cwd || process.cwd(),
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
@@ -21205,7 +20372,7 @@ function resumeLoop(checkpointId) {
     killLoop("resume new loop");
   }
   const agentPath = "/home/tim/nole-code/dist/loop/agent.js";
-  const child = spawn4("node", [agentPath, "--resume", checkpointId], {
+  const child = spawn3("node", [agentPath, "--resume", checkpointId], {
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,
@@ -21676,7 +20843,7 @@ var init_loop = __esm(() => {
 });
 
 // src/tasks/LocalShellTask/index.ts
-import { spawn as spawn5 } from "child_process";
+import { spawn as spawn4 } from "child_process";
 import { EventEmitter as EventEmitter3 } from "events";
 function createShellTask(options) {
   return new LocalShellTask(options);
@@ -21717,7 +20884,7 @@ var init_LocalShellTask = __esm(() => {
       const { command, cwd, env } = this.task;
       const shell = process.platform === "win32" ? "cmd.exe" : "/bin/sh";
       const shellArgs = process.platform === "win32" ? ["/c", command] : ["-c", command];
-      this.proc = spawn5(shell, shellArgs, {
+      this.proc = spawn4(shell, shellArgs, {
         cwd: cwd || process.cwd(),
         env: { ...process.env, ...env },
         stdio: ["ignore", "pipe", "pipe"]
@@ -21759,7 +20926,7 @@ var init_LocalShellTask = __esm(() => {
         return false;
       }
       if (process.platform === "win32") {
-        spawn5("taskkill", ["/pid", String(this.proc.pid), "/f", "/t"]);
+        spawn4("taskkill", ["/pid", String(this.proc.pid), "/f", "/t"]);
       } else {
         this.proc.kill("SIGTERM");
         setTimeout(() => {
@@ -21779,8 +20946,8 @@ var init_LocalShellTask = __esm(() => {
 });
 
 // src/tasks/LocalAgentTask/index.ts
-import { spawn as spawn6 } from "child_process";
-import { join as join17 } from "path";
+import { spawn as spawn5 } from "child_process";
+import { join as join13 } from "path";
 import { EventEmitter as EventEmitter4 } from "events";
 function createAgentTask(options) {
   return new LocalAgentTask(options);
@@ -21818,7 +20985,7 @@ var init_LocalAgentTask = __esm(() => {
       this.task.status = "running";
       this.task.startedAt = Date.now();
       const execPath = process.execPath;
-      const scriptPath = join17(process.cwd(), "dist/index.js");
+      const scriptPath = join13(process.cwd(), "dist/index.js");
       const args = [scriptPath, "--loop"];
       if (this.task.sessionId) {
         args.push("--session", this.task.sessionId);
@@ -21826,7 +20993,7 @@ var init_LocalAgentTask = __esm(() => {
       if (this.task.prompt) {
         args.push("--prompt", this.task.prompt);
       }
-      this.proc = spawn6(execPath, args, {
+      this.proc = spawn5(execPath, args, {
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env },
         cwd: process.cwd()
@@ -21869,7 +21036,7 @@ var init_LocalAgentTask = __esm(() => {
         return false;
       }
       if (process.platform === "win32") {
-        spawn6("taskkill", ["/pid", String(this.proc.pid), "/f", "/t"]);
+        spawn5("taskkill", ["/pid", String(this.proc.pid), "/f", "/t"]);
       } else {
         this.proc.kill("SIGTERM");
         setTimeout(() => {
@@ -21971,23 +21138,23 @@ var init_DreamTask = __esm(() => {
 });
 
 // src/tasks/manager.ts
-import { existsSync as existsSync15, readFileSync as readFileSync15, writeFileSync as writeFileSync8, mkdirSync as mkdirSync8 } from "fs";
-import { dirname as dirname5, join as join18 } from "path";
-import { homedir as homedir15 } from "os";
+import { existsSync as existsSync12, readFileSync as readFileSync12, writeFileSync as writeFileSync8, mkdirSync as mkdirSync8 } from "fs";
+import { dirname as dirname5, join as join14 } from "path";
+import { homedir as homedir12 } from "os";
 import { EventEmitter as EventEmitter6 } from "events";
 function ensureTasksFile() {
   const dir = dirname5(TASKS_FILE2);
-  if (!existsSync15(dir)) {
+  if (!existsSync12(dir)) {
     mkdirSync8(dir, { recursive: true });
   }
-  if (!existsSync15(TASKS_FILE2)) {
+  if (!existsSync12(TASKS_FILE2)) {
     writeFileSync8(TASKS_FILE2, JSON.stringify({}, null, 2));
   }
 }
 function loadTasksFile() {
   try {
     ensureTasksFile();
-    const data = readFileSync15(TASKS_FILE2, "utf-8");
+    const data = readFileSync12(TASKS_FILE2, "utf-8");
     return JSON.parse(data);
   } catch {
     return {};
@@ -22002,7 +21169,7 @@ var init_manager2 = __esm(() => {
   init_LocalShellTask();
   init_LocalAgentTask();
   init_DreamTask();
-  TASKS_FILE2 = join18(homedir15(), ".nole-code", "tasks.json");
+  TASKS_FILE2 = join14(homedir12(), ".nole-code", "tasks.json");
   TaskManager = class TaskManager extends EventEmitter6 {
     tasks = new Map;
     runners = new Map;
@@ -22165,9 +21332,855 @@ var init_tasks = __esm(() => {
   init_DreamTask();
 });
 
-// src/commands/index.ts
+// src/commands/server.ts
+var exports_server = {};
+__export(exports_server, {
+  registerServerCommand: () => registerServerCommand
+});
+import { spawn as spawn6 } from "child_process";
+import { join as join15 } from "path";
+import { homedir as homedir13 } from "os";
+import { existsSync as existsSync13, readFileSync as readFileSync13, unlinkSync as unlinkSync3 } from "fs";
+function getPidFile() {
+  return join15(homedir13(), ".nole-code", "server.pid");
+}
+function readPidFile() {
+  try {
+    if (existsSync13(getPidFile())) {
+      const pid = parseInt(readFileSync13(getPidFile(), "utf-8").trim(), 10);
+      return isNaN(pid) ? null : pid;
+    }
+  } catch {}
+  return null;
+}
+function checkServerStatus() {
+  const pid = readPidFile();
+  if (!pid) {
+    return { running: false, pid: null };
+  }
+  try {
+    process.kill(pid, 0);
+    return { running: true, pid };
+  } catch {
+    return { running: false, pid: null };
+  }
+}
+function registerServerCommand(register) {
+  register({
+    name: "server",
+    description: "Server management: /server start|stop|status",
+    aliases: ["srv"],
+    execute: async (args, ctx) => {
+      const action = args[0] || "status";
+      const noleCodeDir = join15(homedir13(), "nole-code");
+      switch (action) {
+        case "start": {
+          const { running } = checkServerStatus();
+          if (running) {
+            return "Server already running";
+          }
+          const child = spawn6("bun", ["run", "src/server/index.ts", "start"], {
+            cwd: noleCodeDir,
+            detached: true,
+            stdio: "ignore"
+          });
+          child.unref();
+          await new Promise((resolve5) => setTimeout(resolve5, 500));
+          const status = checkServerStatus();
+          if (status.running) {
+            return `Server started (PID: ${status.pid})`;
+          } else {
+            return "Server started (checking status...)";
+          }
+        }
+        case "stop": {
+          const status = checkServerStatus();
+          if (!status.running || !status.pid) {
+            return "Server not running";
+          }
+          try {
+            process.kill(status.pid, "SIGTERM");
+            try {
+              unlinkSync3(getPidFile());
+            } catch {}
+            return `Server stopped (PID: ${status.pid})`;
+          } catch (e) {
+            return `Failed to stop server: ${String(e)}`;
+          }
+        }
+        case "status": {
+          const status = checkServerStatus();
+          if (status.running && status.pid) {
+            const port = process.env.SERVER_PORT || "18792";
+            return `Server running (PID: ${status.pid}, port: ${port})`;
+          } else {
+            return "Server not running";
+          }
+        }
+        default:
+          return `Unknown action: ${action}. Use start, stop, or status`;
+      }
+    }
+  });
+}
+var init_server = () => {};
+
+// src/buddy/sprites.ts
+var sprites;
+var init_sprites = __esm(() => {
+  sprites = {
+    cat: `  /\\___/\\
+ (  o o  )
+ (  =^=  )
+  (--m-m--)`,
+    owl: `  ___0___
+ /       \\
+|  @   @  |
+ \\  ---  /
+  ~~~~~~~`,
+    ghost: `  .-.
+ (o o)
+ | O |
+ |   |
+  ===
+ ~~~~~`,
+    frog: `  (_/)
+ ( o.o )
+  > ^ <`,
+    crab: `  ~~/~~\\
+ (_/)
+ /|  |\\
+  |  |`,
+    astronaut: `  .--.
+ (    )
+ |    |
+  \\__/
+ /____\\`
+  };
+});
+
+// src/buddy/companion.ts
+class Companion {
+  config;
+  currentMood;
+  constructor(config2) {
+    this.config = {
+      name: config2?.name || "Buddy",
+      sprite: config2?.sprite || "cat",
+      mood: config2?.mood || "happy",
+      messages: config2?.messages || []
+    };
+    this.currentMood = this.config.mood;
+  }
+  get name() {
+    return this.config.name;
+  }
+  get sprite() {
+    return this.config.sprite;
+  }
+  get mood() {
+    return this.currentMood;
+  }
+  get spriteArt() {
+    return sprites[this.config.sprite];
+  }
+  get isEnabled() {
+    return this.config.name !== "" && this.config.name.toLowerCase() !== "off";
+  }
+  react(event) {
+    if (!this.isEnabled)
+      return "";
+    const reaction = reactions[event];
+    const message = reaction.messages[Math.floor(Math.random() * reaction.messages.length)];
+    return `${moodEmojis[this.currentMood]} ${this.config.name}: ${message}`;
+  }
+  celebrate() {
+    if (!this.isEnabled)
+      return "";
+    const message = celebrateMessages[Math.floor(Math.random() * celebrateMessages.length)];
+    return `${message} ${this.spriteArt}`;
+  }
+  introduce() {
+    if (!this.isEnabled)
+      return "";
+    return `${moodEmojis[this.currentMood]} ${this.config.name} here! ${this.spriteArt}`;
+  }
+  setMood(mood) {
+    this.currentMood = mood;
+  }
+  setName(name) {
+    this.config.name = name;
+  }
+  setSprite(sprite) {
+    this.config.sprite = sprite;
+  }
+  getConfig() {
+    return { ...this.config };
+  }
+}
+var moodEmojis, reactions, celebrateMessages;
+var init_companion = __esm(() => {
+  init_sprites();
+  moodEmojis = {
+    happy: "✨",
+    thinking: "\uD83E\uDD14",
+    sleeping: "\uD83D\uDCA4",
+    excited: "\uD83C\uDF89",
+    sad: "\uD83D\uDE22"
+  };
+  reactions = {
+    thinking: {
+      emoji: "\uD83E\uDD14",
+      messages: [
+        "Hmm, let me think about this...",
+        "Working on it...",
+        "Pondering the options...",
+        "Computing..."
+      ]
+    },
+    done: {
+      emoji: "✅",
+      messages: [
+        "All done!",
+        "Finished!",
+        "Completed!",
+        "There we go!"
+      ]
+    },
+    error: {
+      emoji: "❌",
+      messages: [
+        "Oops! Something went wrong.",
+        "That didn't work...",
+        "Let me try again!",
+        "We'll get it next time."
+      ]
+    },
+    waiting: {
+      emoji: "⏳",
+      messages: [
+        "Waiting...",
+        "Patience...",
+        "Almost there...",
+        "Hold on..."
+      ]
+    }
+  };
+  celebrateMessages = [
+    "\uD83C\uDF89 Woohoo! We did it!",
+    "\uD83C\uDF1F Amazing work!",
+    "\uD83D\uDE80 Mission accomplished!",
+    "\uD83D\uDCAF Perfect!",
+    "\uD83C\uDFC6 Champion!"
+  ];
+});
+
+// src/buddy/config.ts
+import { existsSync as existsSync14, readFileSync as readFileSync14 } from "fs";
+import { join as join16 } from "path";
+function loadEnv() {
+  const envPath = join16(process.cwd(), ".env");
+  if (!existsSync14(envPath)) {
+    return {};
+  }
+  try {
+    const content = readFileSync14(envPath, "utf-8");
+    const config2 = {};
+    content.split(`
+`).forEach((line) => {
+      const match = line.match(/^(BUDDY|BUDDY_SPRITE)=(.*)$/);
+      if (match) {
+        const [, key, value] = match;
+        if (key === "BUDDY") {
+          config2.BUDDY = value.trim();
+        } else if (key === "BUDDY_SPRITE") {
+          config2.BUDDY_SPRITE = value.trim();
+        }
+      }
+    });
+    return config2;
+  } catch {
+    return {};
+  }
+}
+function getSpriteFromEnv(sprite) {
+  const validSprites = ["cat", "owl", "ghost", "frog", "crab", "astronaut"];
+  if (sprite && validSprites.includes(sprite)) {
+    return sprite;
+  }
+  return "cat";
+}
+function getMoodFromEnv(mood) {
+  const validMoods = ["happy", "thinking", "sleeping", "excited", "sad"];
+  if (mood && validMoods.includes(mood)) {
+    return mood;
+  }
+  return "happy";
+}
+function getCompanion() {
+  if (!companionInstance) {
+    const env = loadEnv();
+    if (env.BUDDY && env.BUDDY.trim() !== "" && env.BUDDY.toLowerCase() !== "off") {
+      companionInstance = new Companion({
+        name: env.BUDDY.trim(),
+        sprite: getSpriteFromEnv(env.BUDDY_SPRITE),
+        mood: getMoodFromEnv()
+      });
+    } else {
+      companionInstance = new Companion({ name: "" });
+    }
+  }
+  return companionInstance;
+}
+function reloadCompanion() {
+  companionInstance = null;
+  return getCompanion();
+}
+var companionInstance = null, validSprites, validMoods;
+var init_config = __esm(() => {
+  init_companion();
+  validSprites = ["cat", "owl", "ghost", "frog", "crab", "astronaut"];
+  validMoods = ["happy", "thinking", "sleeping", "excited", "sad"];
+});
+
+// src/buddy/index.ts
+var init_buddy = __esm(() => {
+  init_sprites();
+  init_companion();
+  init_config();
+});
+
+// src/buddy/commands.ts
 var exports_commands = {};
 __export(exports_commands, {
+  registerBuddyCommands: () => registerBuddyCommands
+});
+function registerBuddyCommands(registerCmd) {
+  const companion = getCompanion();
+  registerCmd({
+    name: "buddy",
+    description: "Show or control your buddy companion",
+    aliases: ["buddy"],
+    execute: async (args, _ctx) => {
+      const subcommand = args[0];
+      if (!subcommand || subcommand === "show") {
+        const comp = getCompanion();
+        if (!comp.isEnabled) {
+          return `\uD83D\uDC3E Buddy is disabled. Set BUDDY=name in .env to enable.`;
+        }
+        return `\uD83D\uDC3E ${comp.name} (${comp.mood})
+${comp.spriteArt}`;
+      }
+      if (subcommand === "set") {
+        const newName = args.slice(1).join(" ");
+        if (!newName) {
+          return "Usage: /buddy set <name>";
+        }
+        const comp = getCompanion();
+        comp.setName(newName);
+        return `✨ Buddy renamed to "${newName}"`;
+      }
+      if (subcommand === "sprite") {
+        const newSprite = args[1];
+        if (!newSprite) {
+          return `Available sprites: ${validSprites.join(", ")}`;
+        }
+        if (!validSprites.includes(newSprite)) {
+          return `Invalid sprite. Choose from: ${validSprites.join(", ")}`;
+        }
+        const comp = getCompanion();
+        comp.setSprite(newSprite);
+        return `\uD83C\uDFA8 Sprite changed to ${newSprite}
+${comp.spriteArt}`;
+      }
+      if (subcommand === "mood") {
+        const newMood = args[1];
+        if (!newMood) {
+          return `Available moods: ${validMoods.join(", ")}`;
+        }
+        if (!validMoods.includes(newMood)) {
+          return `Invalid mood. Choose from: ${validMoods.join(", ")}`;
+        }
+        const comp = getCompanion();
+        comp.setMood(newMood);
+        return `\uD83C\uDFAD Mood set to ${newMood}`;
+      }
+      if (subcommand === "off") {
+        const comp = getCompanion();
+        comp.setName("");
+        return "\uD83D\uDC4B Buddy disabled.";
+      }
+      if (subcommand === "reload") {
+        reloadCompanion();
+        const comp = getCompanion();
+        if (!comp.isEnabled) {
+          return "\uD83D\uDD04 Reloaded. Buddy is disabled (no BUDDY=name in .env)";
+        }
+        return `\uD83D\uDD04 Reloaded! ${comp.name} is back!`;
+      }
+      return `Usage:
+  /buddy           - Show buddy
+  /buddy set <name> - Rename buddy
+  /buddy sprite <type> - Change sprite (${validSprites.join(", ")})
+  /buddy mood <mood> - Change mood (${validMoods.join(", ")})
+  /buddy off       - Disable buddy
+  /buddy reload    - Reload from .env`;
+    }
+  });
+}
+var init_commands = __esm(() => {
+  init_buddy();
+});
+
+// src/skills/registry.ts
+async function callLlm(prompt) {
+  const { default: { llm: llm2 } } = await Promise.resolve().then(() => (init_llm(), exports_llm));
+  const result = await llm2([{ role: "user", content: prompt }], {
+    model: "default"
+  });
+  return result.content;
+}
+var builtinSkills;
+var init_registry2 = __esm(() => {
+  builtinSkills = [
+    {
+      name: "code-review",
+      description: "Analyze code for issues, bugs, and improvements",
+      read_when: ["review", "analyze", "check code", "find issues", "code review"],
+      allowed_tools: ["Read", "Grep", "Glob"],
+      execute: async (input, ctx) => {
+        const files = input.split(/\s+/).filter((f) => f && !f.startsWith("-"));
+        if (!files.length)
+          return "Usage: /skill run code-review <file> [file...]";
+        const prompts = [];
+        for (const file of files) {
+          const { existsSync: existsSync15, readFileSync: readFileSync15 } = __require("fs");
+          if (!existsSync15(file)) {
+            prompts.push("File not found: " + file);
+            continue;
+          }
+          const content = readFileSync15(file, "utf-8").slice(0, 5000);
+          prompts.push("## " + file + `
+
+` + content);
+        }
+        if (!prompts.length)
+          return "No valid files found";
+        const prompt = `You are a code reviewer. Analyze the following code for issues, bugs, and improvements. Return: Issues Found (numbered), Suggestions (numbered), Overall (brief).
+
+Code to Review:
+` + prompts.join(`
+
+`);
+        return callLlm(prompt);
+      }
+    },
+    {
+      name: "refactor",
+      description: "Refactor code with LLM suggestions",
+      read_when: ["refactor", "improve", "clean up", "restructure"],
+      allowed_tools: ["Read", "Edit", "Write"],
+      execute: async (input, ctx) => {
+        const parts = input.split(/\s+/);
+        let file = "";
+        for (const p of parts) {
+          if (!p.startsWith("-")) {
+            const { existsSync: existsSync15 } = __require("fs");
+            if (existsSync15(p)) {
+              file = p;
+              break;
+            }
+          }
+        }
+        if (!file)
+          return "Usage: /skill run refactor <file>";
+        const { readFileSync: readFileSync15 } = __require("fs");
+        const content = readFileSync15(file, "utf-8");
+        const prompt = `You are a code refactorer. Improve this code for readability and maintainability. Return: 1) Summary of changes, 2) Refactored code.
+
+Original Code (` + file + `):
+` + content.slice(0, 6000);
+        const result = await callLlm(prompt);
+        const codeMatch = result.match(/```(?:typescript|javascript|ts|js)?\n([\s\S]*?)```/)?.[1];
+        if (codeMatch) {
+          return "## Refactoring " + file + `
+
+` + result.split("```")[0] + `
+
+Apply? (yes/no)`;
+        }
+        return result;
+      }
+    },
+    {
+      name: "explain",
+      description: "Explain code in plain English",
+      read_when: ["explain", "what does", "how does", "describe", "understand"],
+      allowed_tools: ["Read"],
+      execute: async (input, ctx) => {
+        const parts = input.split(/\s+/);
+        let file = "";
+        for (const p of parts) {
+          if (!p.startsWith("-")) {
+            const { existsSync: existsSync15 } = __require("fs");
+            if (existsSync15(p)) {
+              file = p;
+              break;
+            }
+          }
+        }
+        if (!file)
+          return "Usage: /skill run explain <file>";
+        const { readFileSync: readFileSync15 } = __require("fs");
+        const content = readFileSync15(file, "utf-8").slice(0, 4000);
+        const prompt = `Explain this code in simple terms. Cover: What it does, How it works, Key concepts.
+
+Code to Explain:
+` + content;
+        return callLlm(prompt);
+      }
+    },
+    {
+      name: "test-gen",
+      description: "Generate tests for code",
+      read_when: ["test", "generate tests", "write tests", "add tests", "spec"],
+      allowed_tools: ["Read", "Glob", "Write"],
+      execute: async (input, ctx) => {
+        const parts = input.split(/\s+/);
+        let file = "";
+        let framework = "vitest";
+        for (const p of parts) {
+          if (!p.startsWith("-")) {
+            const { existsSync: existsSync15 } = __require("fs");
+            if (existsSync15(p)) {
+              file = p;
+            }
+          } else if (p === "--jest") {
+            framework = "jest";
+          } else if (p.startsWith("--framework=")) {
+            framework = p.replace("--framework=", "");
+          }
+        }
+        if (!file)
+          return "Usage: /skill run test-gen <file> [--framework=vitest]";
+        const { readFileSync: readFileSync15 } = __require("fs");
+        const content = readFileSync15(file, "utf-8").slice(0, 5000);
+        const testFile = file.replace(/(\.[jt]s)x?$/, ".test.$1");
+        const prompt = "Generate " + framework + ` tests for this code. Return only the test code.
+
+Source Code:
+` + content;
+        const result = await callLlm(prompt);
+        const codeMatch = result.match(/```(?:typescript|javascript|ts|js)?\n([\s\S]*?)```/)?.[1] || result;
+        return "// Test file: " + testFile + `
+// Framework: ` + framework + `
+
+` + codeMatch;
+      }
+    }
+  ];
+});
+
+// src/skills/loader.ts
+import { existsSync as existsSync15, readdirSync as readdirSync4, readFileSync as readFileSync15 } from "fs";
+import { join as join17 } from "path";
+import { homedir as homedir14 } from "os";
+
+class SkillLoader {
+  skills = [];
+  loaded = false;
+  loadSkills() {
+    if (this.loaded)
+      return this.skills;
+    for (const skill of builtinSkills) {
+      this.skills.push({ ...skill, source: "builtin" });
+    }
+    if (existsSync15(SKILLS_DIR)) {
+      this.loadFromDirectory(SKILLS_DIR, "user");
+    }
+    if (existsSync15(PLUGINS_DIR)) {
+      this.loadFromDirectory(PLUGINS_DIR, "plugin");
+    }
+    this.loaded = true;
+    return this.skills;
+  }
+  loadFromDirectory(dir, source) {
+    try {
+      const entries = readdirSync4(dir);
+      for (const entry of entries) {
+        const skillPath = join17(dir, entry);
+        try {
+          const { statSync: statSync2 } = __require("fs");
+          if (!statSync2(skillPath).isDirectory())
+            continue;
+        } catch {
+          continue;
+        }
+        const skillMd = join17(skillPath, "skill.md");
+        if (!existsSync15(skillMd))
+          continue;
+        try {
+          const content = readFileSync15(skillMd, "utf-8");
+          const skill = this.parseSkillMd(entry, content, source);
+          if (skill) {
+            skill.path = skillPath;
+            skill.source = source;
+            this.skills.push(skill);
+          }
+        } catch (err) {
+          console.error(`Failed to load skill from ${skillPath}:`, err);
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to read skills directory ${dir}:`, err);
+    }
+  }
+  parseSkillMd(dirName, content, source) {
+    const lines = content.split(`
+`);
+    let name = dirName;
+    let description = "";
+    const readWhen = [];
+    let allowedTools = [];
+    let execute;
+    let section = "header";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed === "---") {
+        continue;
+      }
+      if (trimmed.startsWith("## ")) {
+        const header = trimmed.slice(3).toLowerCase();
+        if (header.includes("description"))
+          section = "description";
+        else if (header.includes("trigger") || header.includes("keyword"))
+          section = "trigger";
+        else if (header.includes("allowed"))
+          section = "allowed";
+        else if (header.includes("action") || header.includes("code"))
+          section = "code";
+        else
+          section = "header";
+        continue;
+      }
+      if (trimmed.startsWith("# ")) {
+        name = trimmed.slice(2).trim();
+        continue;
+      }
+      if (section === "description" && trimmed) {
+        description = trimmed;
+      } else if (section === "trigger" && trimmed) {
+        readWhen.push(trimmed.toLowerCase().replace(/^[-*]\s*/, ""));
+      } else if (section === "allowed" && trimmed) {
+        allowedTools.push(trimmed.replace(/^[-*]\s*/, ""));
+      }
+    }
+    if (!name || !description)
+      return null;
+    return {
+      name,
+      description,
+      read_when: readWhen.length ? readWhen : ["*"],
+      allowed_tools: allowedTools.length ? allowedTools : ["*"],
+      execute: execute || this.defaultExecute,
+      source
+    };
+  }
+  async defaultExecute(input, ctx) {
+    const skill = this.findSkill(input);
+    if (!skill)
+      return `Skill not found`;
+    return skill.description;
+  }
+  findSkill(input) {
+    if (!this.loaded)
+      this.loadSkills();
+    if (!this.skills.length)
+      return;
+    const lower = input.toLowerCase();
+    for (const skill of this.skills) {
+      for (const keyword of skill.read_when) {
+        if (keyword === "*")
+          return skill;
+        if (lower.includes(keyword.toLowerCase()))
+          return skill;
+      }
+    }
+    return;
+  }
+  async runSkill(name, input, context) {
+    if (!this.loaded)
+      this.loadSkills();
+    const skill = this.skills.find((s) => s.name === name || s.name.toLowerCase() === name.toLowerCase());
+    if (!skill)
+      return `Skill not found: ${name}`;
+    try {
+      return await skill.execute(input, context);
+    } catch (err) {
+      return `Skill error: ${err}`;
+    }
+  }
+  getAllSkills() {
+    if (!this.loaded)
+      return this.loadSkills();
+    return this.skills;
+  }
+  reload() {
+    this.loaded = false;
+    this.skills = [];
+    return this.loadSkills();
+  }
+}
+var SKILLS_DIR, PLUGINS_DIR, skillLoader;
+var init_loader = __esm(() => {
+  init_registry2();
+  SKILLS_DIR = join17(homedir14(), ".nole-code", "skills");
+  PLUGINS_DIR = join17(homedir14(), ".nole-code", "plugins");
+  skillLoader = new SkillLoader;
+});
+
+// src/skills/index.ts
+var init_skills = __esm(() => {
+  init_loader();
+  init_registry2();
+});
+
+// src/commands/skills.ts
+var exports_skills = {};
+__export(exports_skills, {
+  skillLoader: () => skillLoader,
+  registerSkillCommands: () => registerSkillCommands
+});
+import { join as join18 } from "path";
+import { homedir as homedir15 } from "os";
+function registerSkillCommands(registerCmd) {
+  registerCmd({
+    name: "skills",
+    description: "Manage skills. Usage: /skills [list|run|install] [args]",
+    aliases: ["skill"],
+    execute: async (args, ctx) => {
+      const subcommand = args[0] || "list";
+      if (subcommand === "list") {
+        skillLoader.loadSkills();
+        const skills = skillLoader.getAllSkills();
+        if (!skills.length) {
+          return "No skills found. Use /skill install to add skills.";
+        }
+        const lines = [`\uD83D\uDEE0 Available Skills:
+`];
+        for (const skill of skills) {
+          const src = skill.source === "builtin" ? "built-in" : skill.source;
+          lines.push("  " + skill.name + " — " + skill.description + " [" + src + "]");
+          if (skill.read_when.length && skill.read_when[0] !== "*") {
+            lines.push("    triggers: " + skill.read_when.join(", "));
+          }
+        }
+        return lines.join(`
+`);
+      }
+      if (subcommand === "run") {
+        const skillName = args[1];
+        const input = args.slice(2).join(" ");
+        if (!skillName) {
+          return "Usage: /skill run <name> <input>";
+        }
+        const result = await skillLoader.runSkill(skillName, input, {
+          cwd: ctx.cwd,
+          model: "default",
+          tools: {}
+        });
+        return result;
+      }
+      if (subcommand === "install") {
+        const url2 = args[1];
+        if (!url2) {
+          return "Usage: /skill install <url>  (not implemented)";
+        }
+        return "Skill install from URL not yet implemented";
+      }
+      return "Unknown /skills command: " + subcommand + ". Use: list, run, install";
+    }
+  });
+  registerCmd({
+    name: "skill",
+    description: "Run or list skills. Use /skill run <name> <input>",
+    aliases: [],
+    execute: async (args, ctx) => {
+      const cmd = getCommand("skills");
+      if (!cmd)
+        return "Skills command not found";
+      return cmd.execute(args, ctx);
+    }
+  });
+}
+var SKILLS_DIR2;
+var init_skills2 = __esm(() => {
+  init_commands2();
+  init_skills();
+  SKILLS_DIR2 = join18(homedir15(), ".nole-code", "skills");
+  registerCommand({
+    name: "skills",
+    description: "Manage skills. Usage: /skills [list|run|install] [args]",
+    aliases: ["skill"],
+    execute: async (args, ctx) => {
+      const subcommand = args[0] || "list";
+      if (subcommand === "list") {
+        skillLoader.loadSkills();
+        const skills = skillLoader.getAllSkills();
+        if (!skills.length) {
+          return "No skills found. Use /skill install to add skills.";
+        }
+        const lines = [`\uD83D\uDEE0 Available Skills:
+`];
+        for (const skill of skills) {
+          const src = skill.source === "builtin" ? "built-in" : skill.source;
+          lines.push(`  ${skill.name} — ${skill.description} [${src}]`);
+          if (skill.read_when.length && skill.read_when[0] !== "*") {
+            lines.push(`    triggers: ${skill.read_when.join(", ")}`);
+          }
+        }
+        return lines.join(`
+`);
+      }
+      if (subcommand === "run") {
+        const skillName = args[1];
+        const input = args.slice(2).join(" ");
+        if (!skillName) {
+          return "Usage: /skill run <name> <input>";
+        }
+        const result = await skillLoader.runSkill(skillName, input, {
+          cwd: ctx.cwd,
+          model: "default",
+          tools: {}
+        });
+        return result;
+      }
+      if (subcommand === "install") {
+        const url2 = args[1];
+        if (!url2) {
+          return "Usage: /skill install <url>  (not implemented - create ~/.nole-code/skills/<name>/skill.md manually)";
+        }
+        return "Skill install from URL not yet implemented";
+      }
+      return `Unknown /skill command: ${subcommand}. Use: list, run, install`;
+    }
+  });
+  registerCommand({
+    name: "skill",
+    description: "Run or list skills. Use /skill run <name> <input>",
+    aliases: [],
+    execute: async (args, ctx) => {
+      const cmd = getCommand("skills");
+      if (!cmd)
+        return "Skills command not found";
+      return cmd.execute(args, ctx);
+    }
+  });
+});
+
+// src/commands/index.ts
+var exports_commands2 = {};
+__export(exports_commands2, {
   registerCommand: () => registerCommand,
   parseCommand: () => parseCommand,
   getCommand: () => getCommand,
@@ -22207,9 +22220,6 @@ function parseCommand(input) {
 var execAsync2, commands;
 var init_commands2 = __esm(() => {
   init_env();
-  init_server();
-  init_commands();
-  init_skills2();
   execAsync2 = promisify2(exec2);
   commands = new Map;
   registerCommand({
@@ -23067,9 +23077,11 @@ Start one with /loop <goal>`;
       return `Unknown action: ${action}. Use 'stop' or 'log'.`;
     }
   });
-  registerServerCommand(registerCommand);
-  registerBuddyCommands(registerCommand);
-  registerSkillCommands(registerCommand);
+  setTimeout(() => {
+    Promise.resolve().then(() => (init_server(), exports_server)).then((m) => m.registerServerCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_commands(), exports_commands)).then((m) => m.registerBuddyCommands(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_skills2(), exports_skills)).then((m) => m.registerSkillCommands(registerCommand)).catch(() => {});
+  }, 0);
 });
 
 // src/session-memory/index.ts
@@ -24191,7 +24203,7 @@ ${memorySummary}` : ""}${resumeContext}`;
   }
   const completer = (line) => {
     if (line.startsWith("/")) {
-      const { getAllCommands: getAllCommands2 } = (init_commands2(), __toCommonJS(exports_commands));
+      const { getAllCommands: getAllCommands2 } = (init_commands2(), __toCommonJS(exports_commands2));
       const cmds = getAllCommands2().map((c3) => "/" + c3.name);
       const hits = cmds.filter((c3) => c3.startsWith(line));
       return [hits.length ? hits : cmds, line];

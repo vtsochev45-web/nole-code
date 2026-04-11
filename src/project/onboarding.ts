@@ -103,7 +103,7 @@ export function createNoleMd(cwd: string, projectName?: string): string {
 
   // Auto-detect project info
   let techStack = ''
-  let commands = ''
+  let shellCmds = ''
   let description = 'Brief description of what this project does.'
 
   // Check package.json
@@ -134,26 +134,26 @@ export function createNoleMd(cwd: string, projectName?: string): string {
       if (scripts.build) cmdLines.push(`npm run build  # ${scripts.build.slice(0, 40)}`)
       if (scripts.test) cmdLines.push(`npm test       # ${scripts.test.slice(0, 40)}`)
       if (scripts.start) cmdLines.push(`npm start      # ${scripts.start.slice(0, 40)}`)
-      commands = cmdLines.join('\n') || 'npm run dev'
+      shellCmds = cmdLines.join('\n') || 'npm run dev'
     } catch {}
   }
 
   // Python
   if (existsSync(join(cwd, 'pyproject.toml')) || existsSync(join(cwd, 'setup.py'))) {
     techStack = techStack || 'Python'
-    commands = commands || 'python -m pytest\npython main.py'
+    shellCmds = shellCmds || 'python -m pytest\npython main.py'
   }
 
   // Rust
   if (existsSync(join(cwd, 'Cargo.toml'))) {
     techStack = techStack || 'Rust'
-    commands = commands || 'cargo build\ncargo test\ncargo run'
+    shellCmds = shellCmds || 'cargo build\ncargo test\ncargo run'
   }
 
   // Go
   if (existsSync(join(cwd, 'go.mod'))) {
     techStack = techStack || 'Go'
-    commands = commands || 'go build\ngo test ./...\ngo run .'
+    shellCmds = shellCmds || 'go build\ngo test ./...\ngo run .'
   }
 
   // Scan directory structure
@@ -175,7 +175,7 @@ ${techStack || '- Add your tech stack here'}
 
 ## Commands
 \`\`\`bash
-${commands || '# Add your development commands'}
+${shellCmds || '# Add your development commands'}
 \`\`\`
 
 ## Structure

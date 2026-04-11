@@ -909,14 +909,13 @@ registerCommand({
   },
 })
 
-// Server commands
-import { registerServerCommand } from './server.js'
-registerServerCommand(registerCommand)
-
-// Buddy commands
-import { registerBuddyCommands } from '../buddy/commands.js'
-registerBuddyCommands(registerCommand)
-
-// Skills commands
-import { registerSkillCommands } from './skills.js'
-registerSkillCommands(registerCommand)
+// Server, buddy, and skills commands — loaded lazily to avoid circular imports
+// These are called after all synchronous setup is done
+setTimeout(() => {
+  // Server commands
+  import('./server.js').then(m => m.registerServerCommand(registerCommand)).catch(() => {})
+  // Buddy commands
+  import('../buddy/commands.js').then(m => m.registerBuddyCommands(registerCommand)).catch(() => {})
+  // Skills commands
+  import('./skills.js').then(m => m.registerSkillCommands(registerCommand)).catch(() => {})
+}, 0)
