@@ -926,4 +926,17 @@ setTimeout(() => {
   import('./debug.js').then(m => m.registerDebugCommand(registerCommand)).catch(() => {})
   import('./multi.js').then(m => m.registerMultiCommand(registerCommand)).catch(() => {})
   import('./mcp.js').then(m => m.registerMCPCommand(registerCommand)).catch(() => {})
+  // New features: /web, /context, /git, /send, /exec
+  import('./web.js').then(m => m.registerWebCommand(registerCommand)).catch(() => {})
+  import('./context.js').then(m => m.registerContextCommand(registerCommand)).catch(() => {})
+  import('./git.js').then(m => m.registerGitCommand(registerCommand)).catch(() => {})
+  import('./send.js').then(m => m.registerSendCommand(registerCommand)).catch(() => {})
+  import('./exec.js').then(m => m.registerExecCommand(registerCommand)).catch(() => {})
+  // New features: /alias, /port
+  import('./alias.js').then(m => m.registerAliasCommand(registerCommand)).catch(() => {})
+  import('./port.js').then(m => m.registerPortCommand(registerCommand)).catch(() => {})
+  // New commands: /pipe, /retry, /recent
+  import('./pipe.js').then(m => m.registerPipeCommand(registerCommand)).catch(() => {})
+  import('./retry.js').then(m => m.registerRetryCommand(registerCommand)).catch(() => {})
+  import('./recent.js').then(m => m.registerRecentCommand(registerCommand)).catch(() => {})
 }, 0)

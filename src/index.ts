@@ -67,6 +67,9 @@ let cancelRequested = false
 let isProcessing = false
 let lastUserMessage = ''
 
+// Last LLM output for /pipe command
+export let lastOutput = ''
+
 // Global client reference for live model switching
 export let activeClient: InstanceType<typeof LLMClient> | null = null
 
@@ -163,6 +166,70 @@ ${dim('▝▜█████▛▘')} ${dim(cwd)} ${v}
 ${divider()}
 ${formatShortcuts()}
 `
+}
+
+// ============ History Management ============
+const HISTORY_FILE = join(homedir(), '.nole-code', 'history')
+const MAX_HISTORY = 1000
+
+function ensureHistoryDir() {
+  const dir = join(homedir(), '.nole-code')
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+}
+
+function loadHistory(): string[] {
+  ensureHistoryDir()
+  if (!existsSync(HISTORY_FILE)) return []
+  try {
+    const content = readFileSync(HISTORY_FILE, 'utf-8')
+    const lines = content.split('\n').filter(l => l.trim())
+    return lines.slice(-MAX_HISTORY)
+  } catch {
+    return []
+  }
+}
+
+function saveHistory(history: string[]) {
+  ensureHistoryDir()
+  const trimmed = history.slice(-MAX_HISTORY)
+  writeFileSync(HISTORY_FILE, trimmed.join('\n') + '\n', 'utf-8')
+}
+
+// Dedupe: remove if already exists and re-add at end
+function addToHistory(history: string[], cmd: string): string[] {
+  const filtered = history.filter(h => h !== cmd)
+  filtered.push(cmd)
+  return filtered.slice(-MAX_HISTORY)
+}
+
+// ============ Aliases ============
+const ALIAS_FILE = join(homedir(), '.nole-code', 'aliases.json')
+
+function loadAliases(): Record<string, string> {
+  if (!existsSync(ALIAS_FILE)) return {}
+  try {
+    return JSON.parse(readFileSync(ALIAS_FILE, 'utf-8'))
+  } catch {
+    return {}
+  }
+}
+
+function saveAliases(aliases: Record<string, string>) {
+  ensureHistoryDir()
+  writeFileSync(ALIAS_FILE, JSON.stringify(aliases, null, 2), 'utf-8')
+}
+
+export function expandAlias(input: string): string {
+  if (!input.startsWith('/')) return input
+  const aliases = loadAliases()
+  const parts = input.slice(1).split(/\s+/)
+  const name = parts[0]
+  if (aliases[name]) {
+    return '/' + aliases[name] + (parts.length > 1 ? ' ' + parts.slice(1).join(' ') : '')
+  }
+  return input
 }
 
 // ============ Main REPL ============
@@ -437,13 +504,30 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
     })
   }
 
-  // Tab completion for /commands and file paths
+  // Tab completion for /commands, aliases, shell commands, and file paths
   const completer = (line: string): [string[], string] => {
+    // Command completion (/ or alias expansion)
     if (line.startsWith('/')) {
       const { getAllCommands } = require('./commands/index.js')
       const cmds = getAllCommands().map((c: any) => '/' + c.name)
-      const hits = cmds.filter((c: string) => c.startsWith(line))
-      return [hits.length ? hits : cmds, line]
+      const aliases = loadAliases()
+      const aliasNames = Object.keys(aliases).map(a => '/' + a)
+      const all = [...cmds, ...aliasNames]
+      const hits = all.filter((c: string) => c.startsWith(line))
+      return [hits.length ? hits : all, line]
+    }
+    // Shell command completion (!)
+    if (line.startsWith('!')) {
+      const cmd = line.slice(1).trim()
+      if (cmd) {
+        try {
+          const { execSync } = require('child_process')
+          const completions = execSync(`compgen -c ${cmd}`, { encoding: 'utf-8' })
+            .split('\n').filter(Boolean).slice(0, 20)
+          return [completions, line]
+        } catch {}
+      }
+      return [[], line]
     }
     // File path completion
     const parts = line.split(/\s+/)
@@ -470,11 +554,15 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
     return [[], line]
   }
 
+  // Load history
+  const history = loadHistory()
+
   // Create readline interface with tab completion
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     completer,
+    historySize: 0, // We handle history ourselves
   })
 
   const prompt = () => process.stdout.write(`${dim('❯')} `)
@@ -502,7 +590,8 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
     }
     sigintCount++
     if (sigintCount >= 2) {
-      // Double Ctrl+C to exit
+      // Double Ctrl+C to exit — save history first
+      saveHistory(history)
       unsubAgent()
       const { getAllAgents, killAgent: ka } = require('./agents/spawner.js')
       for (const agent of getAllAgents()) {
@@ -532,33 +621,42 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
 
   // Process line input
   const processInput = async (input: string) => {
-    if (!input.trim()) {
+    // Expand aliases before parsing
+    let expandedInput = expandAlias(input)
+
+    if (!expandedInput.trim()) {
       prompt()
       return
     }
 
     // Reject oversized messages before they corrupt the session
-    if (input.length > 50000) {
-      console.log(`\n${c.yellow('⚠')} Message too large (${(input.length / 1024).toFixed(0)}KB). Max ~50KB.`)
+    if (expandedInput.length > 50000) {
+      console.log(`\n${c.yellow('⚠')} Message too large (${(expandedInput.length / 1024).toFixed(0)}KB). Max ~50KB.`)
       console.log(dim('Use @filename to reference files instead of pasting contents.'))
       prompt()
       return
     }
 
-  // Check for plan intent in natural language
-    const planIntent = detectPlanIntent(input)
+    // Save to history
+    if (expandedInput.trim()) {
+      history.push(expandedInput.trim())
+      saveHistory(history)
+    }
+
+    // Check for plan intent in natural language
+    const planIntent = detectPlanIntent(expandedInput)
     if (planIntent) {
       const { generatePlanSteps, enterPlanMode } = await import('./plan/index.js')
       const steps = generatePlanSteps(planIntent)
       const plan = enterPlanMode(planIntent, steps)
-      console.log(`\n${c.cyan('📋 PLAN MODE')} — triggered by "${input.slice(0, 50)}..."`)
+      console.log(`\n${c.cyan('📋 PLAN MODE')} — triggered by "${expandedInput.slice(0, 50)}..."`)
       console.log(`${plan.steps.length} steps identified. Use /plan approve to proceed.`)
       prompt()
       return
     }
 
     // Shell escape: ! command runs directly
-    if (input.startsWith('!')) {
+    if (expandedInput.startsWith('!')) {
       const shellCmd = input.slice(1).trim()
       if (!shellCmd) {
         console.log(`\n${dim('Usage: ! <command>')}`)
@@ -583,8 +681,8 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
       return
     }
 
-    // Check for commands
-    const parsed = parseCommand(input)
+      // Check for commands
+    const parsed = parseCommand(expandedInput)
     if (parsed) {
       const cmd = getCommand(parsed.cmd)
       if (cmd) {
@@ -616,8 +714,8 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
     lastUserMessage = input
 
     // @file syntax: inline file contents into the message
-    let expandedInput = input
-    const fileRefs = input.match(/@([\w.\/\-]+)/g)
+    // (expandedInput already has aliases expanded from above)
+    const fileRefs = expandedInput.match(/@([\w.\/\-]+)/g)
     if (fileRefs) {
       for (const ref of fileRefs) {
         const filePath = ref.slice(1)
@@ -633,7 +731,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
       }
     }
 
-    console.log(`${c.blue('➜ you')} │ ${input}`)
+    console.log(`${c.blue('➜ you')} │ ${expandedInput}`)
 
     session!.messages.push({
       role: 'user',
@@ -773,6 +871,9 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
           }))
         }
         session!.messages.push(assistantMsg)
+
+        // Store last LLM output for /pipe command
+        lastOutput = responseText
 
         // Track API usage
         if (usage) {

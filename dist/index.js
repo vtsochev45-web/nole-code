@@ -467,11 +467,11 @@ class LLMClient {
         if (RETRY_STATUS.has(response.status)) {
           throw new Error(`Stream API error ${response.status}: ${response.statusText || "retryable"}`);
         }
-        const result = await this.chat(messages, options);
-        onChunk(result.content);
-        for (const tc of result.toolCalls)
+        const result2 = await this.chat(messages, options);
+        onChunk(result2.content);
+        for (const tc of result2.toolCalls)
           onToolCall?.(tc);
-        return result.usage;
+        return result2.usage;
       }
       const contentType = response.headers.get("content-type") || "";
       if (!contentType.includes("text/event-stream")) {
@@ -490,11 +490,11 @@ class LLMClient {
       }
       const reader = response.body?.getReader();
       if (!reader) {
-        const result = await this.chat(messages, options);
-        onChunk(result.content);
-        for (const tc of result.toolCalls)
+        const result2 = await this.chat(messages, options);
+        onChunk(result2.content);
+        for (const tc of result2.toolCalls)
           onToolCall?.(tc);
-        return result.usage;
+        return result2.usage;
       }
       const decoder = new TextDecoder;
       let buffer = "";
@@ -555,11 +555,11 @@ class LLMClient {
       }
       return usage;
     } catch {
-      const result = await this.chat(messages, options);
-      onChunk(result.content);
-      for (const tc of result.toolCalls)
+      const result2 = await this.chat(messages, options);
+      onChunk(result2.content);
+      for (const tc of result2.toolCalls)
         onToolCall?.(tc);
-      return result.usage;
+      return result2.usage;
     }
   }
   async chatViaOpenAI(messages, options, provider) {
@@ -1269,8 +1269,8 @@ function getLengthableOrigin(input) {
     return "string";
   return "unknown";
 }
-function issue(...args) {
-  const [iss, input, inst] = args;
+function issue(...args2) {
+  const [iss, input, inst] = args2;
   if (typeof iss === "string") {
     return {
       message: iss,
@@ -1444,46 +1444,46 @@ var init_errors = __esm(() => {
 // node_modules/zod/v4/core/parse.js
 var _parse = (_Err) => (schema, value, _ctx, _params) => {
   const ctx = _ctx ? Object.assign(_ctx, { async: false }) : { async: false };
-  const result = schema._zod.run({ value, issues: [] }, ctx);
-  if (result instanceof Promise) {
+  const result2 = schema._zod.run({ value, issues: [] }, ctx);
+  if (result2 instanceof Promise) {
     throw new $ZodAsyncError;
   }
-  if (result.issues.length) {
-    const e = new (_params?.Err ?? _Err)(result.issues.map((iss) => finalizeIssue(iss, ctx, config())));
+  if (result2.issues.length) {
+    const e = new (_params?.Err ?? _Err)(result2.issues.map((iss) => finalizeIssue(iss, ctx, config())));
     captureStackTrace(e, _params?.callee);
     throw e;
   }
-  return result.value;
+  return result2.value;
 }, _parseAsync = (_Err) => async (schema, value, _ctx, params) => {
   const ctx = _ctx ? Object.assign(_ctx, { async: true }) : { async: true };
-  let result = schema._zod.run({ value, issues: [] }, ctx);
-  if (result instanceof Promise)
-    result = await result;
-  if (result.issues.length) {
-    const e = new (params?.Err ?? _Err)(result.issues.map((iss) => finalizeIssue(iss, ctx, config())));
+  let result2 = schema._zod.run({ value, issues: [] }, ctx);
+  if (result2 instanceof Promise)
+    result2 = await result2;
+  if (result2.issues.length) {
+    const e = new (params?.Err ?? _Err)(result2.issues.map((iss) => finalizeIssue(iss, ctx, config())));
     captureStackTrace(e, params?.callee);
     throw e;
   }
-  return result.value;
+  return result2.value;
 }, _safeParse = (_Err) => (schema, value, _ctx) => {
   const ctx = _ctx ? { ..._ctx, async: false } : { async: false };
-  const result = schema._zod.run({ value, issues: [] }, ctx);
-  if (result instanceof Promise) {
+  const result2 = schema._zod.run({ value, issues: [] }, ctx);
+  if (result2 instanceof Promise) {
     throw new $ZodAsyncError;
   }
-  return result.issues.length ? {
+  return result2.issues.length ? {
     success: false,
-    error: new (_Err ?? $ZodError)(result.issues.map((iss) => finalizeIssue(iss, ctx, config())))
-  } : { success: true, data: result.value };
+    error: new (_Err ?? $ZodError)(result2.issues.map((iss) => finalizeIssue(iss, ctx, config())))
+  } : { success: true, data: result2.value };
 }, safeParse, _safeParseAsync = (_Err) => async (schema, value, _ctx) => {
   const ctx = _ctx ? Object.assign(_ctx, { async: true }) : { async: true };
-  let result = schema._zod.run({ value, issues: [] }, ctx);
-  if (result instanceof Promise)
-    result = await result;
-  return result.issues.length ? {
+  let result2 = schema._zod.run({ value, issues: [] }, ctx);
+  if (result2 instanceof Promise)
+    result2 = await result2;
+  return result2.issues.length ? {
     success: false,
-    error: new _Err(result.issues.map((iss) => finalizeIssue(iss, ctx, config())))
-  } : { success: true, data: result.value };
+    error: new _Err(result2.issues.map((iss) => finalizeIssue(iss, ctx, config())))
+  } : { success: true, data: result2.value };
 }, safeParseAsync;
 var init_parse = __esm(() => {
   init_core();
@@ -1497,20 +1497,20 @@ var init_parse = __esm(() => {
 function emoji() {
   return new RegExp(_emoji, "u");
 }
-function timeSource(args) {
+function timeSource(args2) {
   const hhmm = `(?:[01]\\d|2[0-3]):[0-5]\\d`;
-  const regex = typeof args.precision === "number" ? args.precision === -1 ? `${hhmm}` : args.precision === 0 ? `${hhmm}:[0-5]\\d` : `${hhmm}:[0-5]\\d\\.\\d{${args.precision}}` : `${hhmm}(?::[0-5]\\d(?:\\.\\d+)?)?`;
+  const regex = typeof args2.precision === "number" ? args2.precision === -1 ? `${hhmm}` : args2.precision === 0 ? `${hhmm}:[0-5]\\d` : `${hhmm}:[0-5]\\d\\.\\d{${args2.precision}}` : `${hhmm}(?::[0-5]\\d(?:\\.\\d+)?)?`;
   return regex;
 }
-function time(args) {
-  return new RegExp(`^${timeSource(args)}$`);
+function time(args2) {
+  return new RegExp(`^${timeSource(args2)}$`);
 }
-function datetime(args) {
-  const time2 = timeSource({ precision: args.precision });
+function datetime(args2) {
+  const time2 = timeSource({ precision: args2.precision });
   const opts = ["Z"];
-  if (args.local)
+  if (args2.local)
     opts.push("");
-  if (args.offset)
+  if (args2.offset)
     opts.push(`([+-]\\d{2}:\\d{2})`);
   const timeRegex = `${time2}(?:${opts.join("|")})`;
   return new RegExp(`^${dateSource}T(?:${timeRegex})$`);
@@ -1943,11 +1943,11 @@ var init_checks = __esm(() => {
 
 // node_modules/zod/v4/core/doc.js
 class Doc {
-  constructor(args = []) {
+  constructor(args2 = []) {
     this.content = [];
     this.indent = 0;
     if (this)
-      this.args = args;
+      this.args = args2;
   }
   indented(fn) {
     this.indent += 1;
@@ -1971,10 +1971,10 @@ class Doc {
   }
   compile() {
     const F = Function;
-    const args = this?.args;
+    const args2 = this?.args;
     const content = this?.content ?? [``];
     const lines = [...content.map((x) => `  ${x}`)];
-    return new F(...args, lines.join(`
+    return new F(...args2, lines.join(`
 `));
   }
 }
@@ -2029,40 +2029,40 @@ function isValidJWT(token, algorithm = null) {
     return false;
   }
 }
-function handleArrayResult(result, final, index) {
-  if (result.issues.length) {
-    final.issues.push(...prefixIssues(index, result.issues));
+function handleArrayResult(result2, final, index) {
+  if (result2.issues.length) {
+    final.issues.push(...prefixIssues(index, result2.issues));
   }
-  final.value[index] = result.value;
+  final.value[index] = result2.value;
 }
-function handleObjectResult(result, final, key) {
-  if (result.issues.length) {
-    final.issues.push(...prefixIssues(key, result.issues));
+function handleObjectResult(result2, final, key) {
+  if (result2.issues.length) {
+    final.issues.push(...prefixIssues(key, result2.issues));
   }
-  final.value[key] = result.value;
+  final.value[key] = result2.value;
 }
-function handleOptionalObjectResult(result, final, key, input) {
-  if (result.issues.length) {
+function handleOptionalObjectResult(result2, final, key, input) {
+  if (result2.issues.length) {
     if (input[key] === undefined) {
       if (key in input) {
         final.value[key] = undefined;
       } else {
-        final.value[key] = result.value;
+        final.value[key] = result2.value;
       }
     } else {
-      final.issues.push(...prefixIssues(key, result.issues));
+      final.issues.push(...prefixIssues(key, result2.issues));
     }
-  } else if (result.value === undefined) {
+  } else if (result2.value === undefined) {
     if (key in input)
       final.value[key] = undefined;
   } else {
-    final.value[key] = result.value;
+    final.value[key] = result2.value;
   }
 }
 function handleUnionResults(results, final, inst, ctx) {
-  for (const result of results) {
-    if (result.issues.length === 0) {
-      final.value = result.value;
+  for (const result2 of results) {
+    if (result2.issues.length === 0) {
+      final.value = result2.value;
       return final;
     }
   }
@@ -2070,7 +2070,7 @@ function handleUnionResults(results, final, inst, ctx) {
     code: "invalid_union",
     input: final.value,
     inst,
-    errors: results.map((result) => result.issues.map((iss) => finalizeIssue(iss, ctx, config())))
+    errors: results.map((result2) => result2.issues.map((iss) => finalizeIssue(iss, ctx, config())))
   });
   return final;
 }
@@ -2118,21 +2118,21 @@ function mergeValues(a, b) {
   }
   return { valid: false, mergeErrorPath: [] };
 }
-function handleIntersectionResults(result, left, right) {
+function handleIntersectionResults(result2, left, right) {
   if (left.issues.length) {
-    result.issues.push(...left.issues);
+    result2.issues.push(...left.issues);
   }
   if (right.issues.length) {
-    result.issues.push(...right.issues);
+    result2.issues.push(...right.issues);
   }
-  if (aborted(result))
-    return result;
+  if (aborted(result2))
+    return result2;
   const merged = mergeValues(left.value, right.value);
   if (!merged.valid) {
     throw new Error(`Unmergable intersection. Error path: ` + `${JSON.stringify(merged.mergeErrorPath)}`);
   }
-  result.value = merged.data;
-  return result;
+  result2.value = merged.data;
+  return result2;
 }
 function handleDefaultResult(payload, def) {
   if (payload.value === undefined) {
@@ -2161,8 +2161,8 @@ function handleReadonlyResult(payload) {
   payload.value = Object.freeze(payload.value);
   return payload;
 }
-function handleRefineResult(result, payload, input, inst) {
-  if (!result) {
+function handleRefineResult(result2, payload, input, inst) {
+  if (!result2) {
     const _iss = {
       code: "custom",
       input,
@@ -2246,13 +2246,13 @@ var init_schemas = __esm(() => {
         return payload;
       };
       inst._zod.run = (payload, ctx) => {
-        const result = inst._zod.parse(payload, ctx);
-        if (result instanceof Promise) {
+        const result2 = inst._zod.parse(payload, ctx);
+        if (result2 instanceof Promise) {
           if (ctx.async === false)
             throw new $ZodAsyncError;
-          return result.then((result2) => runChecks(result2, checks, ctx));
+          return result2.then((result3) => runChecks(result3, checks, ctx));
         }
-        return runChecks(result, checks, ctx);
+        return runChecks(result2, checks, ctx);
       };
     }
     inst["~standard"] = {
@@ -2670,14 +2670,14 @@ var init_schemas = __esm(() => {
       const proms = [];
       for (let i = 0;i < input.length; i++) {
         const item = input[i];
-        const result = def.element._zod.run({
+        const result2 = def.element._zod.run({
           value: item,
           issues: []
         }, ctx);
-        if (result instanceof Promise) {
-          proms.push(result.then((result2) => handleArrayResult(result2, payload, i)));
+        if (result2 instanceof Promise) {
+          proms.push(result2.then((result3) => handleArrayResult(result3, payload, i)));
         } else {
-          handleArrayResult(result, payload, i);
+          handleArrayResult(result2, payload, i);
         }
       }
       if (proms.length) {
@@ -2869,17 +2869,17 @@ var init_schemas = __esm(() => {
       let async = false;
       const results = [];
       for (const option of def.options) {
-        const result = option._zod.run({
+        const result2 = option._zod.run({
           value: payload.value,
           issues: []
         }, ctx);
-        if (result instanceof Promise) {
-          results.push(result);
+        if (result2 instanceof Promise) {
+          results.push(result2);
           async = true;
         } else {
-          if (result.issues.length === 0)
-            return result;
-          results.push(result);
+          if (result2.issues.length === 0)
+            return result2;
+          results.push(result2);
         }
       }
       if (!async)
@@ -2987,19 +2987,19 @@ var init_schemas = __esm(() => {
         payload.value = {};
         for (const key of values) {
           if (typeof key === "string" || typeof key === "number" || typeof key === "symbol") {
-            const result = def.valueType._zod.run({ value: input[key], issues: [] }, ctx);
-            if (result instanceof Promise) {
-              proms.push(result.then((result2) => {
-                if (result2.issues.length) {
-                  payload.issues.push(...prefixIssues(key, result2.issues));
+            const result2 = def.valueType._zod.run({ value: input[key], issues: [] }, ctx);
+            if (result2 instanceof Promise) {
+              proms.push(result2.then((result3) => {
+                if (result3.issues.length) {
+                  payload.issues.push(...prefixIssues(key, result3.issues));
                 }
-                payload.value[key] = result2.value;
+                payload.value[key] = result3.value;
               }));
             } else {
-              if (result.issues.length) {
-                payload.issues.push(...prefixIssues(key, result.issues));
+              if (result2.issues.length) {
+                payload.issues.push(...prefixIssues(key, result2.issues));
               }
-              payload.value[key] = result.value;
+              payload.value[key] = result2.value;
             }
           }
         }
@@ -3039,19 +3039,19 @@ var init_schemas = __esm(() => {
             payload.value[keyResult.value] = keyResult.value;
             continue;
           }
-          const result = def.valueType._zod.run({ value: input[key], issues: [] }, ctx);
-          if (result instanceof Promise) {
-            proms.push(result.then((result2) => {
-              if (result2.issues.length) {
-                payload.issues.push(...prefixIssues(key, result2.issues));
+          const result2 = def.valueType._zod.run({ value: input[key], issues: [] }, ctx);
+          if (result2 instanceof Promise) {
+            proms.push(result2.then((result3) => {
+              if (result3.issues.length) {
+                payload.issues.push(...prefixIssues(key, result3.issues));
               }
-              payload.value[keyResult.value] = result2.value;
+              payload.value[keyResult.value] = result3.value;
             }));
           } else {
-            if (result.issues.length) {
-              payload.issues.push(...prefixIssues(key, result.issues));
+            if (result2.issues.length) {
+              payload.issues.push(...prefixIssues(key, result2.issues));
             }
-            payload.value[keyResult.value] = result.value;
+            payload.value[keyResult.value] = result2.value;
           }
         }
       }
@@ -3163,11 +3163,11 @@ var init_schemas = __esm(() => {
         payload.value = def.defaultValue;
         return payload;
       }
-      const result = def.innerType._zod.run(payload, ctx);
-      if (result instanceof Promise) {
-        return result.then((result2) => handleDefaultResult(result2, def));
+      const result2 = def.innerType._zod.run(payload, ctx);
+      if (result2 instanceof Promise) {
+        return result2.then((result3) => handleDefaultResult(result3, def));
       }
-      return handleDefaultResult(result, def);
+      return handleDefaultResult(result2, def);
     };
   });
   $ZodPrefault = /* @__PURE__ */ $constructor("$ZodPrefault", (inst, def) => {
@@ -3188,11 +3188,11 @@ var init_schemas = __esm(() => {
       return v ? new Set([...v].filter((x) => x !== undefined)) : undefined;
     });
     inst._zod.parse = (payload, ctx) => {
-      const result = def.innerType._zod.run(payload, ctx);
-      if (result instanceof Promise) {
-        return result.then((result2) => handleNonOptionalResult(result2, inst));
+      const result2 = def.innerType._zod.run(payload, ctx);
+      if (result2 instanceof Promise) {
+        return result2.then((result3) => handleNonOptionalResult(result3, inst));
       }
-      return handleNonOptionalResult(result, inst);
+      return handleNonOptionalResult(result2, inst);
     };
   });
   $ZodCatch = /* @__PURE__ */ $constructor("$ZodCatch", (inst, def) => {
@@ -3201,15 +3201,15 @@ var init_schemas = __esm(() => {
     defineLazy(inst._zod, "optout", () => def.innerType._zod.optout);
     defineLazy(inst._zod, "values", () => def.innerType._zod.values);
     inst._zod.parse = (payload, ctx) => {
-      const result = def.innerType._zod.run(payload, ctx);
-      if (result instanceof Promise) {
-        return result.then((result2) => {
-          payload.value = result2.value;
-          if (result2.issues.length) {
+      const result2 = def.innerType._zod.run(payload, ctx);
+      if (result2 instanceof Promise) {
+        return result2.then((result3) => {
+          payload.value = result3.value;
+          if (result3.issues.length) {
             payload.value = def.catchValue({
               ...payload,
               error: {
-                issues: result2.issues.map((iss) => finalizeIssue(iss, ctx, config()))
+                issues: result3.issues.map((iss) => finalizeIssue(iss, ctx, config()))
               },
               input: payload.value
             });
@@ -3218,12 +3218,12 @@ var init_schemas = __esm(() => {
           return payload;
         });
       }
-      payload.value = result.value;
-      if (result.issues.length) {
+      payload.value = result2.value;
+      if (result2.issues.length) {
         payload.value = def.catchValue({
           ...payload,
           error: {
-            issues: result.issues.map((iss) => finalizeIssue(iss, ctx, config()))
+            issues: result2.issues.map((iss) => finalizeIssue(iss, ctx, config()))
           },
           input: payload.value
         });
@@ -3252,11 +3252,11 @@ var init_schemas = __esm(() => {
     defineLazy(inst._zod, "optin", () => def.innerType._zod.optin);
     defineLazy(inst._zod, "optout", () => def.innerType._zod.optout);
     inst._zod.parse = (payload, ctx) => {
-      const result = def.innerType._zod.run(payload, ctx);
-      if (result instanceof Promise) {
-        return result.then(handleReadonlyResult);
+      const result2 = def.innerType._zod.run(payload, ctx);
+      if (result2 instanceof Promise) {
+        return result2.then(handleReadonlyResult);
       }
-      return handleReadonlyResult(result);
+      return handleReadonlyResult(result2);
     };
   });
   $ZodCustom = /* @__PURE__ */ $constructor("$ZodCustom", (inst, def) => {
@@ -4006,12 +4006,12 @@ function isZ4Schema(s) {
 }
 function safeParse2(schema, data) {
   if (isZ4Schema(schema)) {
-    const result2 = safeParse(schema, data);
-    return result2;
+    const result3 = safeParse(schema, data);
+    return result3;
   }
   const v3Schema = schema;
-  const result = v3Schema.safeParse(data);
-  return result;
+  const result2 = v3Schema.safeParse(data);
+  return result2;
 }
 function getObjectShape(schema) {
   if (!schema)
@@ -4415,12 +4415,12 @@ var init_schemas3 = __esm(() => {
       },
       configurable: true
     });
-    inst.meta = (...args) => {
-      if (args.length === 0) {
+    inst.meta = (...args2) => {
+      if (args2.length === 0) {
         return globalRegistry.get(inst);
       }
       const cl = inst.clone();
-      globalRegistry.add(cl, args[0]);
+      globalRegistry.add(cl, args2[0]);
       return cl;
     };
     inst.isOptional = () => inst.safeParse(undefined).success;
@@ -4434,18 +4434,18 @@ var init_schemas3 = __esm(() => {
     inst.format = bag.format ?? null;
     inst.minLength = bag.minimum ?? null;
     inst.maxLength = bag.maximum ?? null;
-    inst.regex = (...args) => inst.check(_regex(...args));
-    inst.includes = (...args) => inst.check(_includes(...args));
-    inst.startsWith = (...args) => inst.check(_startsWith(...args));
-    inst.endsWith = (...args) => inst.check(_endsWith(...args));
-    inst.min = (...args) => inst.check(_minLength(...args));
-    inst.max = (...args) => inst.check(_maxLength(...args));
-    inst.length = (...args) => inst.check(_length(...args));
-    inst.nonempty = (...args) => inst.check(_minLength(1, ...args));
+    inst.regex = (...args2) => inst.check(_regex(...args2));
+    inst.includes = (...args2) => inst.check(_includes(...args2));
+    inst.startsWith = (...args2) => inst.check(_startsWith(...args2));
+    inst.endsWith = (...args2) => inst.check(_endsWith(...args2));
+    inst.min = (...args2) => inst.check(_minLength(...args2));
+    inst.max = (...args2) => inst.check(_maxLength(...args2));
+    inst.length = (...args2) => inst.check(_length(...args2));
+    inst.nonempty = (...args2) => inst.check(_minLength(1, ...args2));
     inst.lowercase = (params) => inst.check(_lowercase(params));
     inst.uppercase = (params) => inst.check(_uppercase(params));
     inst.trim = () => inst.check(_trim());
-    inst.normalize = (...args) => inst.check(_normalize(...args));
+    inst.normalize = (...args2) => inst.check(_normalize(...args2));
     inst.toLowerCase = () => inst.check(_toLowerCase());
     inst.toUpperCase = () => inst.check(_toUpperCase());
   });
@@ -4665,8 +4665,8 @@ var init_schemas3 = __esm(() => {
     inst.merge = (other) => exports_util.merge(inst, other);
     inst.pick = (mask) => exports_util.pick(inst, mask);
     inst.omit = (mask) => exports_util.omit(inst, mask);
-    inst.partial = (...args) => exports_util.partial(ZodOptional, inst, args[0]);
-    inst.required = (...args) => exports_util.required(ZodNonOptional, inst, args[0]);
+    inst.partial = (...args2) => exports_util.partial(ZodOptional, inst, args2[0]);
+    inst.required = (...args2) => exports_util.required(ZodNonOptional, inst, args2[0]);
   });
   ZodUnion = /* @__PURE__ */ $constructor("ZodUnion", (inst, def) => {
     $ZodUnion.init(inst, def);
@@ -5948,11 +5948,11 @@ function getMethodLiteral(schema) {
   return value;
 }
 function parseWithCompat(schema, data) {
-  const result = safeParse2(schema, data);
-  if (!result.success) {
-    throw result.error;
+  const result2 = safeParse2(schema, data);
+  if (!result2.success) {
+    throw result2.error;
   }
-  return result.data;
+  return result2.data;
 }
 var init_zod_json_schema_compat = __esm(() => {
   init_zod_compat();
@@ -6029,12 +6029,12 @@ class Protocol {
             return await handleTaskResult();
           }
           if (isTerminal(task.status)) {
-            const result = await this._taskStore.getTaskResult(taskId, extra.sessionId);
+            const result2 = await this._taskStore.getTaskResult(taskId, extra.sessionId);
             this._clearTaskQueue(taskId);
             return {
-              ...result,
+              ...result2,
               _meta: {
-                ...result._meta,
+                ...result2._meta,
                 [RELATED_TASK_META_KEY]: {
                   taskId
                 }
@@ -6254,12 +6254,12 @@ class Protocol {
       if (taskCreationParams) {
         this.assertTaskHandlerCapability(request.method);
       }
-    }).then(() => handler(request, fullExtra)).then(async (result) => {
+    }).then(() => handler(request, fullExtra)).then(async (result2) => {
       if (abortController.signal.aborted) {
         return;
       }
       const response = {
-        result,
+        result: result2,
         jsonrpc: "2.0",
         id: request.id
       };
@@ -6345,9 +6345,9 @@ class Protocol {
     this._cleanupTimeout(messageId);
     let isTaskResponse = false;
     if (isJSONRPCResultResponse(response) && response.result && typeof response.result === "object") {
-      const result = response.result;
-      if (result.task && typeof result.task === "object") {
-        const task = result.task;
+      const result2 = response.result;
+      if (result2.task && typeof result2.task === "object") {
+        const task = result2.task;
         if (typeof task.taskId === "string") {
           isTaskResponse = true;
           this._taskProgressTokens.set(task.taskId, messageId);
@@ -6374,8 +6374,8 @@ class Protocol {
     const { task } = options ?? {};
     if (!task) {
       try {
-        const result = await this.request(request, resultSchema, options);
-        yield { type: "result", result };
+        const result2 = await this.request(request, resultSchema, options);
+        yield { type: "result", result: result2 };
       } catch (error2) {
         yield {
           type: "error",
@@ -6398,8 +6398,8 @@ class Protocol {
         yield { type: "taskStatus", task: task2 };
         if (isTerminal(task2.status)) {
           if (task2.status === "completed") {
-            const result = await this.getTaskResult({ taskId }, resultSchema, options);
-            yield { type: "result", result };
+            const result2 = await this.getTaskResult({ taskId }, resultSchema, options);
+            yield { type: "result", result: result2 };
           } else if (task2.status === "failed") {
             yield {
               type: "error",
@@ -6414,8 +6414,8 @@ class Protocol {
           return;
         }
         if (task2.status === "input_required") {
-          const result = await this.getTaskResult({ taskId }, resultSchema, options);
-          yield { type: "result", result };
+          const result2 = await this.getTaskResult({ taskId }, resultSchema, options);
+          yield { type: "result", result: result2 };
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1000;
@@ -6734,8 +6734,8 @@ class Protocol {
         }
         return task;
       },
-      storeTaskResult: async (taskId, status, result) => {
-        await taskStore.storeTaskResult(taskId, status, result, sessionId);
+      storeTaskResult: async (taskId, status, result2) => {
+        await taskStore.storeTaskResult(taskId, status, result2, sessionId);
         const task = await taskStore.getTask(taskId, sessionId);
         if (task) {
           const notification = TaskStatusNotificationSchema.parse({
@@ -6782,20 +6782,20 @@ function isPlainObject2(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function mergeCapabilities(base, additional) {
-  const result = { ...base };
+  const result2 = { ...base };
   for (const key in additional) {
     const k = key;
     const addValue = additional[k];
     if (addValue === undefined)
       continue;
-    const baseValue = result[k];
+    const baseValue = result2[k];
     if (isPlainObject2(baseValue) && isPlainObject2(addValue)) {
-      result[k] = { ...baseValue, ...addValue };
+      result2[k] = { ...baseValue, ...addValue };
     } else {
-      result[k] = addValue;
+      result2[k] = addValue;
     }
   }
-  return result;
+  return result2;
 }
 var DEFAULT_REQUEST_TIMEOUT_MSEC = 60000;
 var init_protocol = __esm(() => {
@@ -6862,27 +6862,27 @@ var require_code = __commonJS((exports) => {
   }
   exports._Code = _Code;
   exports.nil = new _Code("");
-  function _(strs, ...args) {
+  function _(strs, ...args2) {
     const code = [strs[0]];
     let i = 0;
-    while (i < args.length) {
-      addCodeArg(code, args[i]);
+    while (i < args2.length) {
+      addCodeArg(code, args2[i]);
       code.push(strs[++i]);
     }
     return new _Code(code);
   }
   exports._ = _;
   var plus = new _Code("+");
-  function str(strs, ...args) {
-    const expr = [safeStringify(strs[0])];
+  function str(strs, ...args2) {
+    const expr2 = [safeStringify(strs[0])];
     let i = 0;
-    while (i < args.length) {
-      expr.push(plus);
-      addCodeArg(expr, args[i]);
-      expr.push(plus, safeStringify(strs[++i]));
+    while (i < args2.length) {
+      expr2.push(plus);
+      addCodeArg(expr2, args2[i]);
+      expr2.push(plus, safeStringify(strs[++i]));
     }
-    optimize(expr);
-    return new _Code(expr);
+    optimize(expr2);
+    return new _Code(expr2);
   }
   exports.str = str;
   function addCodeArg(code, arg) {
@@ -6894,16 +6894,16 @@ var require_code = __commonJS((exports) => {
       code.push(interpolate(arg));
   }
   exports.addCodeArg = addCodeArg;
-  function optimize(expr) {
+  function optimize(expr2) {
     let i = 1;
-    while (i < expr.length - 1) {
-      if (expr[i] === plus) {
-        const res = mergeExprItems(expr[i - 1], expr[i + 1]);
+    while (i < expr2.length - 1) {
+      if (expr2[i] === plus) {
+        const res = mergeExprItems(expr2[i - 1], expr2[i + 1]);
         if (res !== undefined) {
-          expr.splice(i - 1, 3, res);
+          expr2.splice(i - 1, 3, res);
           continue;
         }
-        expr[i++] = "+";
+        expr2[i++] = "+";
       }
       i++;
     }
@@ -7449,10 +7449,10 @@ var require_codegen = __commonJS((exports) => {
   }
 
   class Func extends BlockNode {
-    constructor(name, args, async) {
+    constructor(name, args2, async) {
       super();
       this.name = name;
-      this.args = args;
+      this.args = args2;
       this.async = async;
     }
     render(opts) {
@@ -7703,8 +7703,8 @@ var require_codegen = __commonJS((exports) => {
       this._nodes.length = len;
       return this;
     }
-    func(name, args = code_1.nil, async, funcBody) {
-      this._blockNode(new Func(name, args, async));
+    func(name, args2 = code_1.nil, async, funcBody) {
+      this._blockNode(new Func(name, args2, async));
       if (funcBody)
         this.code(funcBody).endFunc();
       return this;
@@ -7763,12 +7763,12 @@ var require_codegen = __commonJS((exports) => {
   function addExprNames(names, from) {
     return from instanceof code_1._CodeOrName ? addNames(names, from.names) : names;
   }
-  function optimizeExpr(expr, names, constants) {
-    if (expr instanceof code_1.Name)
-      return replaceName(expr);
-    if (!canOptimize(expr))
-      return expr;
-    return new code_1._Code(expr._items.reduce((items, c) => {
+  function optimizeExpr(expr2, names, constants) {
+    if (expr2 instanceof code_1.Name)
+      return replaceName(expr2);
+    if (!canOptimize(expr2))
+      return expr2;
+    return new code_1._Code(expr2._items.reduce((items, c) => {
       if (c instanceof code_1.Name)
         c = replaceName(c);
       if (c instanceof code_1._Code)
@@ -7797,13 +7797,13 @@ var require_codegen = __commonJS((exports) => {
   }
   exports.not = not;
   var andCode = mappend(exports.operators.AND);
-  function and(...args) {
-    return args.reduce(andCode);
+  function and(...args2) {
+    return args2.reduce(andCode);
   }
   exports.and = and;
   var orCode = mappend(exports.operators.OR);
-  function or(...args) {
-    return args.reduce(orCode);
+  function or(...args2) {
+    return args2.reduce(orCode);
   }
   exports.or = or;
   function mappend(op) {
@@ -8320,8 +8320,8 @@ var require_dataType = __commonJS((exports) => {
       }
     }
   }
-  function assignParentData({ gen, parentData, parentDataProperty }, expr) {
-    gen.if((0, codegen_1._)`${parentData} !== undefined`, () => gen.assign((0, codegen_1._)`${parentData}[${parentDataProperty}]`, expr));
+  function assignParentData({ gen, parentData, parentDataProperty }, expr2) {
+    gen.if((0, codegen_1._)`${parentData} !== undefined`, () => gen.assign((0, codegen_1._)`${parentData}[${parentDataProperty}]`, expr2));
   }
   function checkDataType(dataType, data, strictNums, correct = DataType.Correct) {
     const EQ = correct === DataType.Correct ? codegen_1.operators.EQ : codegen_1.operators.NEQ;
@@ -8496,8 +8496,8 @@ var require_code2 = __commonJS((exports) => {
     ];
     if (it.opts.dynamicRef)
       valCxt.push([names_1.default.dynamicAnchors, names_1.default.dynamicAnchors]);
-    const args = (0, codegen_1._)`${dataAndSchema}, ${gen.object(...valCxt)}`;
-    return context !== codegen_1.nil ? (0, codegen_1._)`${func}.call(${context}, ${args})` : (0, codegen_1._)`${func}(${args})`;
+    const args2 = (0, codegen_1._)`${dataAndSchema}, ${gen.object(...valCxt)}`;
+    return context !== codegen_1.nil ? (0, codegen_1._)`${func}.call(${context}, ${args2})` : (0, codegen_1._)`${func}(${args2})`;
   }
   exports.callValidateCode = callValidateCode;
   var newRegExp = (0, codegen_1._)`new RegExp`;
@@ -8645,10 +8645,10 @@ var require_keyword = __commonJS((exports) => {
     if (def.async && !schemaEnv.$async)
       throw new Error("async keyword in sync schema");
   }
-  function useKeyword(gen, keyword, result) {
-    if (result === undefined)
+  function useKeyword(gen, keyword, result2) {
+    if (result2 === undefined)
       throw new Error(`keyword "${keyword}" failed to compile`);
-    return gen.scopeValue("keyword", typeof result == "function" ? { ref: result } : { ref: result, code: (0, codegen_1.stringify)(result) });
+    return gen.scopeValue("keyword", typeof result2 == "function" ? { ref: result2 } : { ref: result2, code: (0, codegen_1.stringify)(result2) });
   }
   function validSchemaType(schema, schemaType, allowUndefined = false) {
     return !schemaType.length || schemaType.some((st) => st === "array" ? Array.isArray(schema) : st === "object" ? schema && typeof schema == "object" && !Array.isArray(schema) : typeof schema == st || allowUndefined && typeof schema == "undefined");
@@ -9523,15 +9523,15 @@ var require_validate = __commonJS((exports) => {
       if (!jsonPointer)
         return data;
     }
-    let expr = data;
+    let expr2 = data;
     const segments = jsonPointer.split("/");
     for (const segment of segments) {
       if (segment) {
         data = (0, codegen_1._)`${data}${(0, codegen_1.getProperty)((0, util_1.unescapeJsonPointer)(segment))}`;
-        expr = (0, codegen_1._)`${expr} && ${data}`;
+        expr2 = (0, codegen_1._)`${expr2} && ${data}`;
       }
     }
-    return expr;
+    return expr2;
     function errorMsg(pointerType, up) {
       return `Cannot access ${pointerType} ${up} levels up, current level is ${dataLevel}`;
     }
@@ -13334,17 +13334,17 @@ class ExperimentalClientTasks {
     const validator = clientInternal.getToolOutputValidator(params.name);
     for await (const message of stream) {
       if (message.type === "result" && validator) {
-        const result = message.result;
-        if (!result.structuredContent && !result.isError) {
+        const result2 = message.result;
+        if (!result2.structuredContent && !result2.isError) {
           yield {
             type: "error",
             error: new McpError(ErrorCode.InvalidRequest, `Tool ${params.name} has an output schema but did not return structured content`)
           };
           return;
         }
-        if (result.structuredContent) {
+        if (result2.structuredContent) {
           try {
-            const validationResult = validator(result.structuredContent);
+            const validationResult = validator(result2.structuredContent);
             if (!validationResult.valid) {
               yield {
                 type: "error",
@@ -13489,20 +13489,20 @@ var init_client2 = __esm(() => {
     _setupListChangedHandlers(config2) {
       if (config2.tools && this._serverCapabilities?.tools?.listChanged) {
         this._setupListChangedHandler("tools", ToolListChangedNotificationSchema, config2.tools, async () => {
-          const result = await this.listTools();
-          return result.tools;
+          const result2 = await this.listTools();
+          return result2.tools;
         });
       }
       if (config2.prompts && this._serverCapabilities?.prompts?.listChanged) {
         this._setupListChangedHandler("prompts", PromptListChangedNotificationSchema, config2.prompts, async () => {
-          const result = await this.listPrompts();
-          return result.prompts;
+          const result2 = await this.listPrompts();
+          return result2.prompts;
         });
       }
       if (config2.resources && this._serverCapabilities?.resources?.listChanged) {
         this._setupListChangedHandler("resources", ResourceListChangedNotificationSchema, config2.resources, async () => {
-          const result = await this.listResources();
-          return result.resources;
+          const result2 = await this.listResources();
+          return result2.resources;
         });
       }
     }
@@ -13556,16 +13556,16 @@ var init_client2 = __esm(() => {
           if (params.mode === "url" && !supportsUrlMode) {
             throw new McpError(ErrorCode.InvalidParams, "Client does not support URL-mode elicitation requests");
           }
-          const result = await Promise.resolve(handler(request, extra));
+          const result2 = await Promise.resolve(handler(request, extra));
           if (params.task) {
-            const taskValidationResult = safeParse2(CreateTaskResultSchema, result);
+            const taskValidationResult = safeParse2(CreateTaskResultSchema, result2);
             if (!taskValidationResult.success) {
               const errorMessage = taskValidationResult.error instanceof Error ? taskValidationResult.error.message : String(taskValidationResult.error);
               throw new McpError(ErrorCode.InvalidParams, `Invalid task creation result: ${errorMessage}`);
             }
             return taskValidationResult.data;
           }
-          const validationResult = safeParse2(ElicitResultSchema, result);
+          const validationResult = safeParse2(ElicitResultSchema, result2);
           if (!validationResult.success) {
             const errorMessage = validationResult.error instanceof Error ? validationResult.error.message : String(validationResult.error);
             throw new McpError(ErrorCode.InvalidParams, `Invalid elicitation result: ${errorMessage}`);
@@ -13591,9 +13591,9 @@ var init_client2 = __esm(() => {
             throw new McpError(ErrorCode.InvalidParams, `Invalid sampling request: ${errorMessage}`);
           }
           const { params } = validatedRequest.data;
-          const result = await Promise.resolve(handler(request, extra));
+          const result2 = await Promise.resolve(handler(request, extra));
           if (params.task) {
-            const taskValidationResult = safeParse2(CreateTaskResultSchema, result);
+            const taskValidationResult = safeParse2(CreateTaskResultSchema, result2);
             if (!taskValidationResult.success) {
               const errorMessage = taskValidationResult.error instanceof Error ? taskValidationResult.error.message : String(taskValidationResult.error);
               throw new McpError(ErrorCode.InvalidParams, `Invalid task creation result: ${errorMessage}`);
@@ -13602,7 +13602,7 @@ var init_client2 = __esm(() => {
           }
           const hasTools = params.tools || params.toolChoice;
           const resultSchema = hasTools ? CreateMessageResultWithToolsSchema : CreateMessageResultSchema;
-          const validationResult = safeParse2(resultSchema, result);
+          const validationResult = safeParse2(resultSchema, result2);
           if (!validationResult.success) {
             const errorMessage = validationResult.error instanceof Error ? validationResult.error.message : String(validationResult.error);
             throw new McpError(ErrorCode.InvalidParams, `Invalid sampling result: ${errorMessage}`);
@@ -13624,7 +13624,7 @@ var init_client2 = __esm(() => {
         return;
       }
       try {
-        const result = await this.request({
+        const result2 = await this.request({
           method: "initialize",
           params: {
             protocolVersion: LATEST_PROTOCOL_VERSION,
@@ -13632,18 +13632,18 @@ var init_client2 = __esm(() => {
             clientInfo: this._clientInfo
           }
         }, InitializeResultSchema, options);
-        if (result === undefined) {
-          throw new Error(`Server sent invalid initialize result: ${result}`);
+        if (result2 === undefined) {
+          throw new Error(`Server sent invalid initialize result: ${result2}`);
         }
-        if (!SUPPORTED_PROTOCOL_VERSIONS.includes(result.protocolVersion)) {
-          throw new Error(`Server's protocol version is not supported: ${result.protocolVersion}`);
+        if (!SUPPORTED_PROTOCOL_VERSIONS.includes(result2.protocolVersion)) {
+          throw new Error(`Server's protocol version is not supported: ${result2.protocolVersion}`);
         }
-        this._serverCapabilities = result.capabilities;
-        this._serverVersion = result.serverInfo;
+        this._serverCapabilities = result2.capabilities;
+        this._serverVersion = result2.serverInfo;
         if (transport.setProtocolVersion) {
-          transport.setProtocolVersion(result.protocolVersion);
+          transport.setProtocolVersion(result2.protocolVersion);
         }
-        this._instructions = result.instructions;
+        this._instructions = result2.instructions;
         await this.notification({
           method: "notifications/initialized"
         });
@@ -13797,15 +13797,15 @@ var init_client2 = __esm(() => {
       if (this.isToolTaskRequired(params.name)) {
         throw new McpError(ErrorCode.InvalidRequest, `Tool "${params.name}" requires task-based execution. Use client.experimental.tasks.callToolStream() instead.`);
       }
-      const result = await this.request({ method: "tools/call", params }, resultSchema, options);
+      const result2 = await this.request({ method: "tools/call", params }, resultSchema, options);
       const validator = this.getToolOutputValidator(params.name);
       if (validator) {
-        if (!result.structuredContent && !result.isError) {
+        if (!result2.structuredContent && !result2.isError) {
           throw new McpError(ErrorCode.InvalidRequest, `Tool ${params.name} has an output schema but did not return structured content`);
         }
-        if (result.structuredContent) {
+        if (result2.structuredContent) {
           try {
-            const validationResult = validator(result.structuredContent);
+            const validationResult = validator(result2.structuredContent);
             if (!validationResult.valid) {
               throw new McpError(ErrorCode.InvalidParams, `Structured content does not match the tool's output schema: ${validationResult.errorMessage}`);
             }
@@ -13817,7 +13817,7 @@ var init_client2 = __esm(() => {
           }
         }
       }
-      return result;
+      return result2;
     }
     isToolTask(toolName) {
       if (!this._serverCapabilities?.tasks?.requests?.tools?.call) {
@@ -13850,9 +13850,9 @@ var init_client2 = __esm(() => {
       return this._cachedToolOutputValidators.get(toolName);
     }
     async listTools(params, options) {
-      const result = await this.request({ method: "tools/list", params }, ListToolsResultSchema2, options);
-      this.cacheToolMetadata(result.tools);
-      return result;
+      const result2 = await this.request({ method: "tools/list", params }, ListToolsResultSchema2, options);
+      this.cacheToolMetadata(result2.tools);
+      return result2;
     }
     _setupListChangedHandler(listType, notificationSchema, options, fetcher) {
       const parseResult = ListChangedOptionsBaseSchema.safeParse(options);
@@ -14260,21 +14260,21 @@ var require_parse = __commonJS((exports, module) => {
     }
     return parsed;
   }
-  function parse6(command, args, options) {
-    if (args && !Array.isArray(args)) {
-      options = args;
-      args = null;
+  function parse6(command, args2, options) {
+    if (args2 && !Array.isArray(args2)) {
+      options = args2;
+      args2 = null;
     }
-    args = args ? args.slice(0) : [];
+    args2 = args2 ? args2.slice(0) : [];
     options = Object.assign({}, options);
     const parsed = {
       command,
-      args,
+      args: args2,
       options,
       file: undefined,
       original: {
         command,
-        args
+        args: args2
       }
     };
     return options.shell ? parsed : parseNonShell(parsed);
@@ -14334,17 +14334,17 @@ var require_cross_spawn = __commonJS((exports, module) => {
   var cp = __require("child_process");
   var parse6 = require_parse();
   var enoent = require_enoent();
-  function spawn(command, args, options) {
-    const parsed = parse6(command, args, options);
+  function spawn(command, args2, options) {
+    const parsed = parse6(command, args2, options);
     const spawned = cp.spawn(parsed.command, parsed.args, parsed.options);
     enoent.hookChildProcess(spawned, parsed);
     return spawned;
   }
-  function spawnSync(command, args, options) {
-    const parsed = parse6(command, args, options);
-    const result = cp.spawnSync(parsed.command, parsed.args, parsed.options);
-    result.error = result.error || enoent.verifyENOENTSync(result.status, parsed);
-    return result;
+  function spawnSync(command, args2, options) {
+    const parsed = parse6(command, args2, options);
+    const result2 = cp.spawnSync(parsed.command, parsed.args, parsed.options);
+    result2.error = result2.error || enoent.verifyENOENTSync(result2.status, parsed);
+    return result2;
   }
   module.exports = spawn;
   module.exports.spawn = spawn;
@@ -14832,16 +14832,16 @@ async function getRandomValues(size) {
 async function random(size) {
   const mask = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~";
   const evenDistCutoff = Math.pow(2, 8) - Math.pow(2, 8) % mask.length;
-  let result = "";
-  while (result.length < size) {
-    const randomBytes = await getRandomValues(size - result.length);
+  let result2 = "";
+  while (result2.length < size) {
+    const randomBytes = await getRandomValues(size - result2.length);
     for (const randomByte of randomBytes) {
       if (randomByte < evenDistCutoff) {
-        result += mask[randomByte % mask.length];
+        result2 += mask[randomByte % mask.length];
       }
     }
   }
-  return result;
+  return result2;
 }
 async function generateVerifier(length) {
   return await random(length);
@@ -15191,8 +15191,8 @@ async function parseErrorResponse(input) {
   const statusCode = input instanceof Response ? input.status : undefined;
   const body = input instanceof Response ? await input.text() : input;
   try {
-    const result = OAuthErrorResponseSchema.parse(JSON.parse(body));
-    const { error: error2, error_description, error_uri } = result;
+    const result2 = OAuthErrorResponseSchema.parse(JSON.parse(body));
+    const { error: error2, error_description, error_uri } = result2;
     const errorClass = OAUTH_ERRORS[error2] || ServerError;
     return new errorClass(error_description || "", error_uri);
   } catch (error2) {
@@ -15691,9 +15691,9 @@ class SSEClientTransport {
     if (!this._authProvider) {
       throw new UnauthorizedError("No auth provider");
     }
-    let result;
+    let result2;
     try {
-      result = await auth(this._authProvider, {
+      result2 = await auth(this._authProvider, {
         serverUrl: this._url,
         resourceMetadataUrl: this._resourceMetadataUrl,
         scope: this._scope,
@@ -15703,7 +15703,7 @@ class SSEClientTransport {
       this.onerror?.(error2);
       throw error2;
     }
-    if (result !== "AUTHORIZED") {
+    if (result2 !== "AUTHORIZED") {
       throw new UnauthorizedError;
     }
     return await this._startOrAuth();
@@ -15794,14 +15794,14 @@ class SSEClientTransport {
     if (!this._authProvider) {
       throw new UnauthorizedError("No auth provider");
     }
-    const result = await auth(this._authProvider, {
+    const result2 = await auth(this._authProvider, {
       serverUrl: this._url,
       authorizationCode,
       resourceMetadataUrl: this._resourceMetadataUrl,
       scope: this._scope,
       fetchFn: this._fetchWithInit
     });
-    if (result !== "AUTHORIZED") {
+    if (result2 !== "AUTHORIZED") {
       throw new UnauthorizedError("Failed to authorize");
     }
   }
@@ -15831,13 +15831,13 @@ class SSEClientTransport {
           const { resourceMetadataUrl, scope } = extractWWWAuthenticateParams(response);
           this._resourceMetadataUrl = resourceMetadataUrl;
           this._scope = scope;
-          const result = await auth(this._authProvider, {
+          const result2 = await auth(this._authProvider, {
             serverUrl: this._url,
             resourceMetadataUrl: this._resourceMetadataUrl,
             scope: this._scope,
             fetchFn: this._fetchWithInit
           });
-          if (result !== "AUTHORIZED") {
+          if (result2 !== "AUTHORIZED") {
             throw new UnauthorizedError;
           }
           return this.send(message);
@@ -15914,9 +15914,9 @@ class StreamableHTTPClientTransport {
     if (!this._authProvider) {
       throw new UnauthorizedError("No auth provider");
     }
-    let result;
+    let result2;
     try {
-      result = await auth(this._authProvider, {
+      result2 = await auth(this._authProvider, {
         serverUrl: this._url,
         resourceMetadataUrl: this._resourceMetadataUrl,
         scope: this._scope,
@@ -15926,7 +15926,7 @@ class StreamableHTTPClientTransport {
       this.onerror?.(error2);
       throw error2;
     }
-    if (result !== "AUTHORIZED") {
+    if (result2 !== "AUTHORIZED") {
       throw new UnauthorizedError;
     }
     return await this._startOrAuthSse({ resumptionToken: undefined });
@@ -16084,14 +16084,14 @@ class StreamableHTTPClientTransport {
     if (!this._authProvider) {
       throw new UnauthorizedError("No auth provider");
     }
-    const result = await auth(this._authProvider, {
+    const result2 = await auth(this._authProvider, {
       serverUrl: this._url,
       authorizationCode,
       resourceMetadataUrl: this._resourceMetadataUrl,
       scope: this._scope,
       fetchFn: this._fetchWithInit
     });
-    if (result !== "AUTHORIZED") {
+    if (result2 !== "AUTHORIZED") {
       throw new UnauthorizedError("Failed to authorize");
     }
   }
@@ -16134,13 +16134,13 @@ class StreamableHTTPClientTransport {
           const { resourceMetadataUrl, scope } = extractWWWAuthenticateParams(response);
           this._resourceMetadataUrl = resourceMetadataUrl;
           this._scope = scope;
-          const result = await auth(this._authProvider, {
+          const result2 = await auth(this._authProvider, {
             serverUrl: this._url,
             resourceMetadataUrl: this._resourceMetadataUrl,
             scope: this._scope,
             fetchFn: this._fetchWithInit
           });
-          if (result !== "AUTHORIZED") {
+          if (result2 !== "AUTHORIZED") {
             throw new UnauthorizedError;
           }
           this._hasCompletedAuthFlow = true;
@@ -16160,13 +16160,13 @@ class StreamableHTTPClientTransport {
               this._resourceMetadataUrl = resourceMetadataUrl;
             }
             this._lastUpscopingHeader = wwwAuthHeader ?? undefined;
-            const result = await auth(this._authProvider, {
+            const result2 = await auth(this._authProvider, {
               serverUrl: this._url,
               resourceMetadataUrl: this._resourceMetadataUrl,
               scope: this._scope,
               fetchFn: this._fetch
             });
-            if (result !== "AUTHORIZED") {
+            if (result2 !== "AUTHORIZED") {
               throw new UnauthorizedError;
             }
             return this.send(message);
@@ -16424,14 +16424,14 @@ class MCPClientManager {
       throw new Error(`MCP server "${serverName}" not connected`);
     }
     try {
-      const result = await server.client.request({
+      const result2 = await server.client.request({
         method: "tools/call",
         params: {
           name: toolName,
           arguments: arguments_
         }
       }, CallToolResultSchema);
-      const content = result.content.map((block) => {
+      const content = result2.content.map((block) => {
         if (block.type === "text")
           return block.text;
         if (block.type === "image")
@@ -16441,7 +16441,7 @@ class MCPClientManager {
         return JSON.stringify(block);
       }).join(`
 `);
-      const isError = result.isError || content.includes("error") || content.includes("Error");
+      const isError = result2.isError || content.includes("error") || content.includes("Error");
       return { content, isError };
     } catch (error2) {
       return {
@@ -16517,8 +16517,8 @@ class MCPRegistry {
     return { server: rest.slice(0, secondSep), tool: rest.slice(secondSep + 2) };
   }
   async callTool(server, tool, input) {
-    const result = await this.client.callTool(server, tool, input);
-    return result.content;
+    const result2 = await this.client.callTool(server, tool, input);
+    return result2.content;
   }
 }
 var mcpClient, mcpRegistry;
@@ -17350,10 +17350,10 @@ function resetRules() {
   permissionRules = [...DEFAULT_RULES];
   savePermissions();
 }
-function formatPermission(toolName, input, result, reason) {
-  const icon = result === "allow" ? "✅" : result === "deny" ? "❌" : "⚠️";
+function formatPermission(toolName, input, result2, reason) {
+  const icon = result2 === "allow" ? "✅" : result2 === "deny" ? "❌" : "⚠️";
   const cmd = input.command ? ` ${input.command.slice(0, 50)}` : "";
-  return `${icon} ${toolName}${cmd}: ${result} (${reason})`;
+  return `${icon} ${toolName}${cmd}: ${result2} (${reason})`;
 }
 var PERMISSIONS_DIR, PERMISSIONS_FILE, DEFAULT_RULES, permissionRules, currentMode = "default";
 var init_rules_engine = __esm(() => {
@@ -17521,19 +17521,19 @@ Dangerous patterns: ${security.dangerousPatterns?.join(", ") || "unknown"}`,
       };
     }
   }
-  let result;
+  let result2;
   const mcpParsed = mcpRegistry.parseMCPToolName(name);
   if (mcpParsed) {
     try {
       const content = await mcpRegistry.callTool(mcpParsed.server, mcpParsed.tool, input);
-      result = { content };
+      result2 = { content };
     } catch (err) {
-      result = { content: `MCP error: ${err}`, isError: true };
+      result2 = { content: `MCP error: ${err}`, isError: true };
     }
   } else if (name === "WordPressPost" || name === "WordPressUpdate") {
     const { WP_USER: WP_USER2, WP_APP_PASSWORD: WP_APP_PASSWORD2, WP_API_URL: WP_API_URL2 } = await Promise.resolve().then(() => (init_env(), exports_env));
     if (!WP_USER2 || !WP_APP_PASSWORD2 || !WP_API_URL2) {
-      result = { content: "WordPress credentials not configured. Set WP_USER, WP_APP_PASSWORD, WP_API_URL in .env", isError: true };
+      result2 = { content: "WordPress credentials not configured. Set WP_USER, WP_APP_PASSWORD, WP_API_URL in .env", isError: true };
     } else {
       const credentials = Buffer.from(`${WP_USER2}:${WP_APP_PASSWORD2}`).toString("base64");
       try {
@@ -17545,10 +17545,10 @@ Dangerous patterns: ${security.dangerousPatterns?.join(", ") || "unknown"}`,
             body: JSON.stringify({ title, content, status })
           });
           if (!res.ok) {
-            result = { content: `WP post failed: ${res.status} ${await res.text()}`, isError: true };
+            result2 = { content: `WP post failed: ${res.status} ${await res.text()}`, isError: true };
           } else {
             const post = await res.json();
-            result = { content: `Post created: ID=${post.id} | ${post.link}` };
+            result2 = { content: `Post created: ID=${post.id} | ${post.link}` };
           }
         } else {
           const { post_id, title, content, status } = input;
@@ -17565,26 +17565,26 @@ Dangerous patterns: ${security.dangerousPatterns?.join(", ") || "unknown"}`,
             body: JSON.stringify(body)
           });
           if (!res.ok) {
-            result = { content: `WP update failed: ${res.status}`, isError: true };
+            result2 = { content: `WP update failed: ${res.status}`, isError: true };
           } else {
             const post = await res.json();
-            result = { content: `Post ${post.id} updated: ${post.link}` };
+            result2 = { content: `Post ${post.id} updated: ${post.link}` };
           }
         }
       } catch (err) {
-        result = { content: `WP error: ${err}`, isError: true };
+        result2 = { content: `WP error: ${err}`, isError: true };
       }
     }
   } else {
     const tool = tools.get(name);
     if (!tool) {
-      result = { content: `Tool ${name} not found`, isError: true };
+      result2 = { content: `Tool ${name} not found`, isError: true };
     } else {
       try {
         const content = await tool.execute(input, ctx);
-        result = { content };
+        result2 = { content };
       } catch (err) {
-        result = { content: `Error: ${err}`, isError: true };
+        result2 = { content: `Error: ${err}`, isError: true };
       }
     }
   }
@@ -17592,7 +17592,7 @@ Dangerous patterns: ${security.dangerousPatterns?.join(", ") || "unknown"}`,
   if (postHooks.length > 0) {
     const hookResults = await runHooks(postHooks, { tool: name, input, cwd: ctx.cwd });
     if (hookResults.length > 0) {
-      result.content += `
+      result2.content += `
 ` + hookResults.join(`
 `);
     }
@@ -17602,11 +17602,11 @@ Dangerous patterns: ${security.dangerousPatterns?.join(", ") || "unknown"}`,
     sessionId: ctx.sessionId,
     tool: name,
     input,
-    resultLength: result.content.length,
-    isError: result.isError || false,
+    resultLength: result2.content.length,
+    isError: result2.isError || false,
     durationMs: Date.now() - toolStart
   });
-  return result;
+  return result2;
 }
 async function runBash(command, timeout = 30000) {
   try {
@@ -18179,7 +18179,7 @@ Agent ID: ${agent.id}
 PID: ${agent.pid}
 Running in background. Check status with /agents`;
         }
-        const result = await new Promise((resolve4) => {
+        const result2 = await new Promise((resolve4) => {
           const timeout = setTimeout(() => resolve4(`Agent ${agent.id} timed out after 120s`), 120000);
           const unsub = onAgentMessage((msg) => {
             if (msg.agentId === agent.id && (msg.type === "done" || msg.type === "error")) {
@@ -18189,7 +18189,7 @@ Running in background. Check status with /agents`;
             }
           });
         });
-        return result;
+        return result2;
       } catch (err) {
         return `Agent spawn error: ${err}`;
       }
@@ -18593,8 +18593,8 @@ ${responseBody}`;
       const replacement = input.replacement;
       const fileGlob = input.glob || "*";
       const dryRun = input.dry_run !== false;
-      const result = await runBash(`find "${searchDir}" -type f -name "${fileGlob}" ! -path "*/node_modules/*" ! -path "*/.git/*" 2>/dev/null | head -50`);
-      const files = result.trim().split(`
+      const result2 = await runBash(`find "${searchDir}" -type f -name "${fileGlob}" ! -path "*/node_modules/*" ! -path "*/.git/*" 2>/dev/null | head -50`);
+      const files = result2.trim().split(`
 `).filter(Boolean);
       const changes = [];
       let totalMatches = 0;
@@ -18731,8 +18731,8 @@ ${staged.trim()}`;
         parts.push(String(input.ref));
       if (input.file)
         parts.push("--", String(input.file));
-      const result = await runBash(parts.join(" ") + " 2>/dev/null");
-      return result.trim() || "No differences";
+      const result2 = await runBash(parts.join(" ") + " 2>/dev/null");
+      return result2.trim() || "No differences";
     }
   });
   registerTool({
@@ -18842,10 +18842,10 @@ ${output.slice(0, 500) || "(no output yet)"}`;
         return `File not found: ${f1}`;
       if (!existsSync7(f2))
         return `File not found: ${f2}`;
-      const result = await runBash(`diff --color=never -u "${f1}" "${f2}" 2>/dev/null`);
-      if (!result.trim())
+      const result2 = await runBash(`diff --color=never -u "${f1}" "${f2}" 2>/dev/null`);
+      if (!result2.trim())
         return "Files are identical";
-      const colored = result.split(`
+      const colored = result2.split(`
 `).map((line) => {
         if (line.startsWith("+") && !line.startsWith("+++"))
           return `\x1B[32m${line}\x1B[0m`;
@@ -20516,8 +20516,8 @@ var init_spawner2 = __esm(() => {
 });
 
 // src/loop/executor.ts
-function isActualFailure(result) {
-  return FAILURE_SIGNATURES.some((r) => r.test(result));
+function isActualFailure(result2) {
+  return FAILURE_SIGNATURES.some((r) => r.test(result2));
 }
 function clearLine2() {
   process.stdout.write("\r" + "\x1B[K");
@@ -20608,12 +20608,12 @@ GOOD examples:
 Return a JSON array of step descriptions:
 ["Action description 1", "Action description 2", ...]`;
   try {
-    const result = await client.chat([
+    const result2 = await client.chat([
       { role: "system", content: systemPrompt },
       { role: "user", content: `Goal: ${goal}
 CWD: ${cwd}` }
     ], { max_tokens: 1000, temperature: 0 });
-    const content = result.content.trim();
+    const content = result2.content.trim();
     let jsonStr = content;
     if (content.includes("```json")) {
       jsonStr = content.split("```json")[1].split("```")[0];
@@ -20650,7 +20650,7 @@ Errors so far: ${context.errorsEncountered.length}
 ${step.retryCount > 0 ? buildRetryContext({ steps: [step], context }, 0) : ""}
 `.trim();
   try {
-    const result = await client.chat([
+    const result2 = await client.chat([
       ...sessionMessages.slice(-20),
       { role: "user", content: `
 
@@ -20661,8 +20661,8 @@ ${stepContext}
 
 What tools should I use to complete this step? Respond with specific tool calls.` }
     ], { tools: toolDefs, max_tokens: 2000, temperature: 0 });
-    if (result.toolCalls && result.toolCalls.length > 0) {
-      for (const tc of result.toolCalls) {
+    if (result2.toolCalls && result2.toolCalls.length > 0) {
+      for (const tc of result2.toolCalls) {
         if (options.verbose) {
           console.log(`  ${dim("→")} ${tc.name}(${JSON.stringify(tc.input).slice(0, 50)}...)`);
         }
@@ -20707,11 +20707,11 @@ What tools should I use to complete this step? Respond with specific tool calls.
         }
       }
     } else {
-      if (result.content) {
+      if (result2.content) {
         toolCalls.push({
           name: "Response",
           input: {},
-          result: result.content,
+          result: result2.content,
           success: true
         });
       }
@@ -21021,14 +21021,14 @@ var init_LocalAgentTask = __esm(() => {
       this.task.startedAt = Date.now();
       const execPath = process.execPath;
       const scriptPath = join13(process.cwd(), "dist/index.js");
-      const args = [scriptPath, "--loop"];
+      const args2 = [scriptPath, "--loop"];
       if (this.task.sessionId) {
-        args.push("--session", this.task.sessionId);
+        args2.push("--session", this.task.sessionId);
       }
       if (this.task.prompt) {
-        args.push("--prompt", this.task.prompt);
+        args2.push("--prompt", this.task.prompt);
       }
-      this.proc = spawn5(execPath, args, {
+      this.proc = spawn5(execPath, args2, {
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env },
         cwd: process.cwd()
@@ -21134,15 +21134,15 @@ var init_DreamTask = __esm(() => {
         const model = this.task.model || "MiniMax-M2.7";
         this.task.output.push(`[Dream] Generating content with ${model}...`);
         this.emit("output", this.task.output[this.task.output.length - 1]);
-        const result = await chat({
+        const result2 = await chat({
           messages: [
             { role: "system", content: "You are a creative assistant. Generate content based on the user prompt." },
             { role: "user", content: this.task.prompt }
           ],
           model
         });
-        this.task.generatedContent = result.content;
-        this.task.output.push(`[Dream] Generated ${result.content.length} chars`);
+        this.task.generatedContent = result2.content;
+        this.task.output.push(`[Dream] Generated ${result2.content.length} chars`);
         this.emit("output", this.task.output[this.task.output.length - 1]);
         this.task.status = "completed";
       } catch (err) {
@@ -21322,9 +21322,9 @@ var init_manager2 = __esm(() => {
       const runner = this.runners.get(id);
       if (!runner)
         return false;
-      const result = runner.stop();
+      const result2 = runner.stop();
       this.updateTaskState(id);
-      return result;
+      return result2;
     }
     removeTask(id) {
       const existed = this.tasks.has(id);
@@ -21405,8 +21405,8 @@ function registerServerCommand(register) {
     name: "server",
     description: "Server management: /server start|stop|status",
     aliases: ["srv"],
-    execute: async (args, ctx) => {
-      const action = args[0] || "status";
+    execute: async (args2, ctx) => {
+      const action = args2[0] || "status";
       const noleCodeDir = join15(homedir13(), "nole-code");
       switch (action) {
         case "start": {
@@ -21690,14 +21690,14 @@ var exports_commands = {};
 __export(exports_commands, {
   registerBuddyCommands: () => registerBuddyCommands
 });
-function registerBuddyCommands(registerCmd) {
+function registerBuddyCommands(registerCmd2) {
   const companion = getCompanion();
-  registerCmd({
+  registerCmd2({
     name: "buddy",
     description: "Show or control your buddy companion",
     aliases: ["buddy"],
-    execute: async (args, _ctx) => {
-      const subcommand = args[0];
+    execute: async (args2, _ctx) => {
+      const subcommand = args2[0];
       if (!subcommand || subcommand === "show") {
         const comp = getCompanion();
         if (!comp.isEnabled) {
@@ -21707,7 +21707,7 @@ function registerBuddyCommands(registerCmd) {
 ${comp.spriteArt}`;
       }
       if (subcommand === "set") {
-        const newName = args.slice(1).join(" ");
+        const newName = args2.slice(1).join(" ");
         if (!newName) {
           return "Usage: /buddy set <name>";
         }
@@ -21716,7 +21716,7 @@ ${comp.spriteArt}`;
         return `✨ Buddy renamed to "${newName}"`;
       }
       if (subcommand === "sprite") {
-        const newSprite = args[1];
+        const newSprite = args2[1];
         if (!newSprite) {
           return `Available sprites: ${validSprites.join(", ")}`;
         }
@@ -21729,7 +21729,7 @@ ${comp.spriteArt}`;
 ${comp.spriteArt}`;
       }
       if (subcommand === "mood") {
-        const newMood = args[1];
+        const newMood = args2[1];
         if (!newMood) {
           return `Available moods: ${validMoods.join(", ")}`;
         }
@@ -21770,10 +21770,10 @@ var init_commands = __esm(() => {
 // src/skills/registry.ts
 async function callLlm(prompt) {
   const { default: { llm } } = await Promise.resolve().then(() => (init_llm(), exports_llm));
-  const result = await llm([{ role: "user", content: prompt }], {
+  const result2 = await llm([{ role: "user", content: prompt }], {
     model: "default"
   });
-  return result.content;
+  return result2.content;
 }
 var builtinSkills;
 var init_registry2 = __esm(() => {
@@ -21835,16 +21835,16 @@ Code to Review:
 
 Original Code (` + file + `):
 ` + content.slice(0, 6000);
-        const result = await callLlm(prompt);
-        const codeMatch = result.match(/```(?:typescript|javascript|ts|js)?\n([\s\S]*?)```/)?.[1];
+        const result2 = await callLlm(prompt);
+        const codeMatch = result2.match(/```(?:typescript|javascript|ts|js)?\n([\s\S]*?)```/)?.[1];
         if (codeMatch) {
           return "## Refactoring " + file + `
 
-` + result.split("```")[0] + `
+` + result2.split("```")[0] + `
 
 Apply? (yes/no)`;
         }
-        return result;
+        return result2;
       }
     },
     {
@@ -21905,8 +21905,8 @@ Code to Explain:
 
 Source Code:
 ` + content;
-        const result = await callLlm(prompt);
-        const codeMatch = result.match(/```(?:typescript|javascript|ts|js)?\n([\s\S]*?)```/)?.[1] || result;
+        const result2 = await callLlm(prompt);
+        const codeMatch = result2.match(/```(?:typescript|javascript|ts|js)?\n([\s\S]*?)```/)?.[1] || result2;
         return "// Test file: " + testFile + `
 // Framework: ` + framework + `
 
@@ -22088,13 +22088,13 @@ __export(exports_skills, {
 });
 import { join as join18 } from "path";
 import { homedir as homedir15 } from "os";
-function registerSkillCommands(registerCmd) {
-  registerCmd({
+function registerSkillCommands(registerCmd2) {
+  registerCmd2({
     name: "skills",
     description: "Manage skills. Usage: /skills [list|run|install] [args]",
     aliases: ["skill"],
-    execute: async (args, ctx) => {
-      const subcommand = args[0] || "list";
+    execute: async (args2, ctx) => {
+      const subcommand = args2[0] || "list";
       if (subcommand === "list") {
         skillLoader.loadSkills();
         const skills = skillLoader.getAllSkills();
@@ -22114,20 +22114,20 @@ function registerSkillCommands(registerCmd) {
 `);
       }
       if (subcommand === "run") {
-        const skillName = args[1];
-        const input = args.slice(2).join(" ");
+        const skillName = args2[1];
+        const input = args2.slice(2).join(" ");
         if (!skillName) {
           return "Usage: /skill run <name> <input>";
         }
-        const result = await skillLoader.runSkill(skillName, input, {
+        const result2 = await skillLoader.runSkill(skillName, input, {
           cwd: ctx.cwd,
           model: "default",
           tools: {}
         });
-        return result;
+        return result2;
       }
       if (subcommand === "install") {
-        const url2 = args[1];
+        const url2 = args2[1];
         if (!url2) {
           return "Usage: /skill install <url>  (not implemented)";
         }
@@ -22136,15 +22136,15 @@ function registerSkillCommands(registerCmd) {
       return "Unknown /skills command: " + subcommand + ". Use: list, run, install";
     }
   });
-  registerCmd({
+  registerCmd2({
     name: "skill",
     description: "Run or list skills. Use /skill run <name> <input>",
     aliases: [],
-    execute: async (args, ctx) => {
+    execute: async (args2, ctx) => {
       const cmd = getCommand("skills");
       if (!cmd)
         return "Skills command not found";
-      return cmd.execute(args, ctx);
+      return cmd.execute(args2, ctx);
     }
   });
 }
@@ -22157,8 +22157,8 @@ var init_skills2 = __esm(() => {
     name: "skills",
     description: "Manage skills. Usage: /skills [list|run|install] [args]",
     aliases: ["skill"],
-    execute: async (args, ctx) => {
-      const subcommand = args[0] || "list";
+    execute: async (args2, ctx) => {
+      const subcommand = args2[0] || "list";
       if (subcommand === "list") {
         skillLoader.loadSkills();
         const skills = skillLoader.getAllSkills();
@@ -22178,20 +22178,20 @@ var init_skills2 = __esm(() => {
 `);
       }
       if (subcommand === "run") {
-        const skillName = args[1];
-        const input = args.slice(2).join(" ");
+        const skillName = args2[1];
+        const input = args2.slice(2).join(" ");
         if (!skillName) {
           return "Usage: /skill run <name> <input>";
         }
-        const result = await skillLoader.runSkill(skillName, input, {
+        const result2 = await skillLoader.runSkill(skillName, input, {
           cwd: ctx.cwd,
           model: "default",
           tools: {}
         });
-        return result;
+        return result2;
       }
       if (subcommand === "install") {
-        const url2 = args[1];
+        const url2 = args2[1];
         if (!url2) {
           return "Usage: /skill install <url>  (not implemented - create ~/.nole-code/skills/<name>/skill.md manually)";
         }
@@ -22204,11 +22204,11 @@ var init_skills2 = __esm(() => {
     name: "skill",
     description: "Run or list skills. Use /skill run <name> <input>",
     aliases: [],
-    execute: async (args, ctx) => {
+    execute: async (args2, ctx) => {
       const cmd = getCommand("skills");
       if (!cmd)
         return "Skills command not found";
-      return cmd.execute(args, ctx);
+      return cmd.execute(args2, ctx);
     }
   });
 });
@@ -22672,7 +22672,7 @@ var Gt = (n, t, e) => {
     }
     return [r, W(t), !!e, o];
   }
-}, tt = (n2, { windowsPathsNoEscape: t = false, magicalBraces: e = false } = {}) => e ? t ? n2.replace(/[?*()[\]{}]/g, "[$&]") : n2.replace(/[?*()[\]\\{}]/g, "\\$&") : t ? n2.replace(/[?*()[\]]/g, "[$&]") : n2.replace(/[?*()[\]\\]/g, "\\$&"), O = (n2, t, e = {}) => (at(t), !e.nocomment && t.charAt(0) === "#" ? false : new D(t, e).match(n2)), Rs, Os = (n2) => (t) => !t.startsWith(".") && t.endsWith(n2), Fs = (n2) => (t) => t.endsWith(n2), Ds = (n2) => (n2 = n2.toLowerCase(), (t) => !t.startsWith(".") && t.toLowerCase().endsWith(n2)), Ms = (n2) => (n2 = n2.toLowerCase(), (t) => t.toLowerCase().endsWith(n2)), Ns, _s = (n2) => !n2.startsWith(".") && n2.includes("."), Ls = (n2) => n2 !== "." && n2 !== ".." && n2.includes("."), Ws, Ps = (n2) => n2 !== "." && n2 !== ".." && n2.startsWith("."), js, Is = (n2) => n2.length !== 0 && !n2.startsWith("."), zs = (n2) => n2.length !== 0 && n2 !== "." && n2 !== "..", Bs, Us = ([n2, t = ""]) => {
+}, tt = (n2, { windowsPathsNoEscape: t = false, magicalBraces: e = false } = {}) => e ? t ? n2.replace(/[?*()[\]{}]/g, "[$&]") : n2.replace(/[?*()[\]\\{}]/g, "\\$&") : t ? n2.replace(/[?*()[\]]/g, "[$&]") : n2.replace(/[?*()[\]\\]/g, "\\$&"), O = (n2, t, e = {}) => (at(t), !e.nocomment && t.charAt(0) === "#" ? false : new D(t, e).match(n2)), Rs, Os = (n2) => (t) => !t.startsWith(".") && t.endsWith(n2), Fs = (n2) => (t) => t.endsWith(n2), Ds = (n2) => (n2 = n2.toLowerCase(), (t) => !t.startsWith(".") && t.toLowerCase().endsWith(n2)), Ms = (n2) => (n2 = n2.toLowerCase(), (t) => t.toLowerCase().endsWith(n2)), Ns, _s = (n2) => !n2.startsWith(".") && n2.includes("."), Ls = (n2) => n2 !== "." && n2 !== ".." && n2.includes("."), Ws, Ps = (n2) => n2 !== "." && n2 !== ".." && n2.startsWith("."), js2, Is = (n2) => n2.length !== 0 && !n2.startsWith("."), zs = (n2) => n2.length !== 0 && n2 !== "." && n2 !== "..", Bs, Us = ([n2, t = ""]) => {
   let e = Ce([n2]);
   return t ? (t = t.toLowerCase(), (s) => e(s) && s.toLowerCase().endsWith(t)) : e;
 }, $s = ([n2, t = ""]) => {
@@ -22960,7 +22960,7 @@ globstar while`, t, d, e, f, m), this.matchOne(t.slice(d), e.slice(f), s))
     if (t === "")
       return "";
     let s, i = null;
-    (s = t.match(js)) ? i = e.dot ? zs : Is : (s = t.match(Rs)) ? i = (e.nocase ? e.dot ? Ms : Ds : e.dot ? Fs : Os)(s[1]) : (s = t.match(Bs)) ? i = (e.nocase ? e.dot ? $s : Us : e.dot ? Gs : Hs)(s) : (s = t.match(Ns)) ? i = e.dot ? Ls : _s : (s = t.match(Ws)) && (i = Ps);
+    (s = t.match(js2)) ? i = e.dot ? zs : Is : (s = t.match(Rs)) ? i = (e.nocase ? e.dot ? Ms : Ds : e.dot ? Fs : Os)(s[1]) : (s = t.match(Bs)) ? i = (e.nocase ? e.dot ? $s : Us : e.dot ? Gs : Hs)(s) : (s = t.match(Ns)) ? i = e.dot ? Ls : _s : (s = t.match(Ws)) && (i = Ps);
     let r = Q.fromGlob(t, this.options).toMMPattern();
     return i && typeof r == "object" && Reflect.defineProperty(r, "test", { value: i }), r;
   }
@@ -23466,7 +23466,7 @@ var init_index_min = __esm(() => {
   Rs = /^\*+([^+@!?\*\[\(]*)$/;
   Ns = /^\*+\.\*+$/;
   Ws = /^\.\*+$/;
-  js = /^\*+$/;
+  js2 = /^\*+$/;
   Bs = /^\?+([^+@!?\*\[\(]*)?$/;
   Ae = typeof process == "object" && process ? typeof process.env == "object" && process.env && process.env.__MINIMATCH_TESTING_PLATFORM__ || process.platform : "posix";
   xe = { win32: { sep: "\\" }, posix: { sep: "/" } };
@@ -25512,17 +25512,17 @@ function readFile(filePath, options = {}) {
   return output.join(`
 `);
 }
-async function execute(args, ctx) {
+async function execute(args2, ctx) {
   let filePattern = "";
   let linesLimit;
   let offset;
-  for (let i = 0;i < args.length; i++) {
-    const arg = args[i];
+  for (let i = 0;i < args2.length; i++) {
+    const arg = args2[i];
     if (arg === "--lines" || arg === "-n") {
-      linesLimit = parseInt(args[i + 1]);
+      linesLimit = parseInt(args2[i + 1]);
       i++;
     } else if (arg === "--offset" || arg === "-o") {
-      offset = parseInt(args[i + 1]);
+      offset = parseInt(args2[i + 1]);
       i++;
     } else {
       filePattern = arg;
@@ -25570,13 +25570,13 @@ Supported: .ts, .js, .py, .sh, .json, .md, .yml, .html, .css, .sql, .go, .rs, .j
     return `Error reading ${filePattern}: ${e.message}`;
   }
 }
-function registerReadCommand(registerCmd) {
-  registerCmd({
+function registerReadCommand(registerCmd2) {
+  registerCmd2({
     name: "read",
     description: "Read file(s) with syntax highlighting. Use glob patterns.",
     aliases: ["cat", "view"],
-    execute: async (args, ctx) => {
-      return execute(args, ctx);
+    execute: async (args2, ctx) => {
+      return execute(args2, ctx);
     }
   });
 }
@@ -25601,8 +25601,8 @@ __export(exports_grep, {
 });
 import { readFileSync as readFileSync17, statSync as statSync3 } from "fs";
 import { join as join20 } from "path";
-async function execute2(args, ctx) {
-  if (args.length === 0) {
+async function execute2(args2, ctx) {
+  if (args2.length === 0) {
     return `Usage: /grep <pattern> [file...]
 
 Search for pattern in files with regex support.
@@ -25628,20 +25628,20 @@ Options:
   let caseInsensitive = false;
   let invertMatch = false;
   let limit = MAX_MATCHES;
-  for (let i = 0;i < args.length; i++) {
-    const arg = args[i];
-    if (arg === "--include" || arg === "-i" && args[i + 1] && !args[i + 1].startsWith("-")) {
-      includePattern = args[i + 1];
+  for (let i = 0;i < args2.length; i++) {
+    const arg = args2[i];
+    if (arg === "--include" || arg === "-i" && args2[i + 1] && !args2[i + 1].startsWith("-")) {
+      includePattern = args2[i + 1];
       i++;
     } else if (arg === "--exclude") {
-      excludePattern = args[i + 1];
+      excludePattern = args2[i + 1];
       i++;
-    } else if (arg === "-i" && !args[i + 1]?.startsWith("-")) {
+    } else if (arg === "-i" && !args2[i + 1]?.startsWith("-")) {
       caseInsensitive = true;
     } else if (arg === "-v") {
       invertMatch = true;
     } else if (arg === "--limit" || arg === "-l") {
-      limit = parseInt(args[i + 1]) || MAX_MATCHES;
+      limit = parseInt(args2[i + 1]) || MAX_MATCHES;
       i++;
     } else if (!arg.startsWith("-")) {
       if (!pattern) {
@@ -25725,26 +25725,26 @@ Options:
   output.push(`\x1B[1;32m${results.length} match${results.length === 1 ? "" : "es"} found\x1B[0m in ${searchedFiles.length} file(s)${results.length >= limit ? ` (limited to ${limit})` : ""}
 `);
   let currentFile = "";
-  for (const result of results) {
-    if (showFileHeaders && result.file !== currentFile) {
-      currentFile = result.file;
+  for (const result2 of results) {
+    if (showFileHeaders && result2.file !== currentFile) {
+      currentFile = result2.file;
       output.push(`
-\x1B[1;35m${result.file}\x1B[0m:`);
+\x1B[1;35m${result2.file}\x1B[0m:`);
     }
-    const highlightedContent = result.content.replace(regex, `\x1B[31m$&\x1B[0m`);
-    const prefix = showFileHeaders ? "" : `\x1B[90m${String(result.line).padStart(4)}:\x1B[0m `;
+    const highlightedContent = result2.content.replace(regex, `\x1B[31m$&\x1B[0m`);
+    const prefix = showFileHeaders ? "" : `\x1B[90m${String(result2.line).padStart(4)}:\x1B[0m `;
     output.push(`${prefix}${highlightedContent}`);
   }
   return output.join(`
 `);
 }
-function registerGrepCommand(registerCmd) {
-  registerCmd({
+function registerGrepCommand(registerCmd2) {
+  registerCmd2({
     name: "grep",
     description: "Search file contents with regex and colored output",
     aliases: ["find", "search"],
-    execute: async (args, ctx) => {
-      return execute2(args, ctx);
+    execute: async (args2, ctx) => {
+      return execute2(args2, ctx);
     }
   });
 }
@@ -25800,8 +25800,8 @@ async function detectTestFramework(cwd) {
     return "pytest";
   return null;
 }
-async function runJestTests(cwd, args) {
-  const testArgs = args.length > 0 ? args.join(" ") : "";
+async function runJestTests(cwd, args2) {
+  const testArgs = args2.length > 0 ? args2.join(" ") : "";
   const cmd = `npx jest ${testArgs} --passWithNoTests 2>&1`;
   try {
     const { stdout, stderr } = await execAsync2(cmd, { cwd, timeout: 120000 });
@@ -25812,8 +25812,8 @@ async function runJestTests(cwd, args) {
     return parseJestOutput(output, true);
   }
 }
-async function runVitestTests(cwd, args) {
-  const testArgs = args.length > 0 ? args.join(" ") : "";
+async function runVitestTests(cwd, args2) {
+  const testArgs = args2.length > 0 ? args2.join(" ") : "";
   const cmd = `npx vitest run ${testArgs} 2>&1`;
   try {
     const { stdout, stderr } = await execAsync2(cmd, { cwd, timeout: 120000 });
@@ -25824,8 +25824,8 @@ async function runVitestTests(cwd, args) {
     return parseJestOutput(output, true);
   }
 }
-async function runMochaTests(cwd, args) {
-  const testArgs = args.length > 0 ? args.join(" ") : "";
+async function runMochaTests(cwd, args2) {
+  const testArgs = args2.length > 0 ? args2.join(" ") : "";
   const cmd = `npx mocha ${testArgs} --timeout 30000 2>&1`;
   try {
     const { stdout, stderr } = await execAsync2(cmd, { cwd, timeout: 120000 });
@@ -25836,8 +25836,8 @@ async function runMochaTests(cwd, args) {
     return parseMochaOutput(output, true);
   }
 }
-async function runPytest(cwd, args) {
-  const testArgs = args.length > 0 ? args.join(" ") : "";
+async function runPytest(cwd, args2) {
+  const testArgs = args2.length > 0 ? args2.join(" ") : "";
   const cmd = `python -m pytest ${testArgs} -v 2>&1`;
   try {
     const { stdout, stderr } = await execAsync2(cmd, { cwd, timeout: 120000 });
@@ -25887,10 +25887,10 @@ function parsePytestOutput(output, hasError = false) {
     output: output.slice(0, 2000)
   };
 }
-async function execute3(args, ctx) {
+async function execute3(args2, ctx) {
   let target = ctx.cwd;
   const options = [];
-  for (const arg of args) {
+  for (const arg of args2) {
     if (arg.startsWith("--")) {
       options.push(arg);
     } else if (!arg.startsWith("-")) {
@@ -25918,31 +25918,31 @@ Or specify a test file directly:
 Make sure you have dependencies installed (npm install / pip install).`;
   }
   const targetName = stat.isDirectory() ? basename4(cwd) : basename4(target);
-  const result = framework === "jest" ? await runJestTests(cwd, options) : framework === "vitest" ? await runVitestTests(cwd, options) : framework === "mocha" ? await runMochaTests(cwd, options) : await runPytest(cwd, options);
-  const icon = result.failed > 0 ? "\x1B[31m✗" : "\x1B[32m✓";
-  const status = result.failed > 0 ? "FAILED" : "PASSED";
+  const result2 = framework === "jest" ? await runJestTests(cwd, options) : framework === "vitest" ? await runVitestTests(cwd, options) : framework === "mocha" ? await runMochaTests(cwd, options) : await runPytest(cwd, options);
+  const icon = result2.failed > 0 ? "\x1B[31m✗" : "\x1B[32m✓";
+  const status = result2.failed > 0 ? "FAILED" : "PASSED";
   const output = [];
   output.push(`\x1B[1mTest Results for ${targetName}\x1B[0m`);
   output.push(`  Framework: ${framework}`);
   output.push(`  Status:    ${icon} ${status}`);
-  output.push(`  Passed:    \x1B[32m${result.passed}\x1B[0m`);
-  output.push(`  Failed:    \x1B[31m${result.failed}\x1B[0m`);
-  output.push(`  Total:     ${result.total}`);
-  output.push(`  Duration:  ${result.duration}`);
+  output.push(`  Passed:    \x1B[32m${result2.passed}\x1B[0m`);
+  output.push(`  Failed:    \x1B[31m${result2.failed}\x1B[0m`);
+  output.push(`  Total:     ${result2.total}`);
+  output.push(`  Duration:  ${result2.duration}`);
   output.push("");
-  output.push("\x1B[90m" + result.output.split(`
+  output.push("\x1B[90m" + result2.output.split(`
 `).slice(-10).join(`
 `) + "\x1B[0m");
   return output.join(`
 `);
 }
-function registerTestCommand(registerCmd) {
-  registerCmd({
+function registerTestCommand(registerCmd2) {
+  registerCmd2({
     name: "test",
     description: "Run tests (jest, mocha, pytest). Auto-detects framework.",
     aliases: ["t", "run-tests"],
-    execute: async (args, ctx) => {
-      return execute3(args, ctx);
+    execute: async (args2, ctx) => {
+      return execute3(args2, ctx);
     }
   });
 }
@@ -26100,12 +26100,12 @@ async function showBasicInfo(pid) {
   Uptime:    ${info.uptime ? `${info.uptime}s` : "N/A"}
   Command:   ${info.cmdline.join(" ").slice(0, 80)}`;
 }
-function registerDebugCommand(registerCmd) {
-  registerCmd({
+function registerDebugCommand(registerCmd2) {
+  registerCmd2({
     name: "debug",
     description: "Attach to Node.js/Python process for debugging",
-    execute: async (args) => {
-      const pidStr = args[0];
+    execute: async (args2) => {
+      const pidStr = args2[0];
       if (!pidStr) {
         return `Usage: /debug <pid>
 
@@ -26121,7 +26121,7 @@ Examples:
       if (isNaN(pid)) {
         return `Invalid PID: ${pidStr}`;
       }
-      const mode = args[1] || "info";
+      const mode = args2[1] || "info";
       if (mode === "node" || mode === "js") {
         return attachNodejs(pid);
       }
@@ -26150,11 +26150,11 @@ async function makeCall(client, prompt) {
   const messages = [
     { role: "user", content: prompt }
   ];
-  const result = await client.chat(messages, { temperature: 0.7 });
+  const result2 = await client.chat(messages, { temperature: 0.7 });
   return {
     index: 0,
-    content: result.content,
-    toolCalls: result.toolCalls
+    content: result2.content,
+    toolCalls: result2.toolCalls
   };
 }
 function findDifferences(responses) {
@@ -26171,13 +26171,13 @@ function findDifferences(responses) {
   }
   return diffLines;
 }
-function registerMultiCommand(registerCmd) {
-  registerCmd({
+function registerMultiCommand(registerCmd2) {
+  registerCmd2({
     name: "multi",
     description: "Run LLM 3 times and pick the best response",
     aliases: ["bestof", "branch"],
-    execute: async (args) => {
-      const prompt = args.join(" ");
+    execute: async (args2) => {
+      const prompt = args2.join(" ");
       if (!prompt) {
         return `Usage: /multi <prompt>
 
@@ -26335,17 +26335,17 @@ async function callTool(name, arguments_) {
 async function handleRequest(request) {
   const { method, params, id } = request;
   try {
-    let result;
+    let result2;
     if (method === "initialize") {
-      result = initializeServer();
+      result2 = initializeServer();
     } else if (method === "tools/list") {
-      result = listTools();
+      result2 = listTools();
     } else if (method === "tools/call") {
-      const { name, arguments: args } = params || {};
+      const { name, arguments: args2 } = params || {};
       if (!name) {
         return { jsonrpc: "2.0", id, error: { code: -32602, message: "Missing tool name" } };
       }
-      result = await callTool(name, args || {});
+      result2 = await callTool(name, args2 || {});
     } else {
       return {
         jsonrpc: "2.0",
@@ -26353,7 +26353,7 @@ async function handleRequest(request) {
         error: { code: -32601, message: `Method not found: ${method}` }
       };
     }
-    return { jsonrpc: "2.0", id, result };
+    return { jsonrpc: "2.0", id, result: result2 };
   } catch (e) {
     return {
       jsonrpc: "2.0",
@@ -26402,12 +26402,12 @@ async function runMCPServer() {
     process.exit(0);
   });
 }
-function registerMCPCommand(registerCmd) {
-  registerCmd({
+function registerMCPCommand(registerCmd2) {
+  registerCmd2({
     name: "mcp",
     description: "Start MCP server mode (JSON-RPC 2.0 over stdin/stdout)",
-    execute: async (args) => {
-      const action = args[0];
+    execute: async (args2) => {
+      const action = args2[0];
       if (action === "start") {
         return `Starting MCP server on stdin/stdout...
 Use JSON-RPC 2.0 requests.`;
@@ -26562,6 +26562,668 @@ var init_mcp = __esm(() => {
   ];
 });
 
+// src/commands/web.ts
+var exports_web = {};
+__export(exports_web, {
+  registerWebCommand: () => registerWebCommand
+});
+import { exec as exec5 } from "child_process";
+import { promisify as promisify5 } from "util";
+async function webSearch2(query, count = 5) {
+  try {
+    const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+    const response = await fetch(searchUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      }
+    });
+    const html = await response.text();
+    const results = [];
+    const resultRegex = /<a class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
+    let match;
+    let idx = 0;
+    while ((match = resultRegex.exec(html)) !== null && idx < count) {
+      const url2 = decodeURIComponent(match[1].replace(/\/redirect\?q=/, "").replace(/\s/g, ""));
+      const title = match[2].replace(/<[^>]*>/g, "").trim();
+      const snippet = match[3].replace(/<[^>]*>/g, "").trim();
+      if (title && url2) {
+        results.push({ title, url: url2, snippet });
+        idx++;
+      }
+    }
+    if (results.length > 0) {
+      return results;
+    }
+  } catch {}
+  try {
+    const url2 = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_redirect=1&skip_disambig=1`;
+    const response = await fetch(url2, {
+      headers: { "User-Agent": "Nole-Code/1.0" }
+    });
+    const data = await response.json();
+    const results = [];
+    if (data.AbstractText && data.AbstractURL) {
+      results.push({
+        title: String(data.AbstractText).slice(0, 100),
+        url: String(data.AbstractURL),
+        snippet: String(data.AbstractText)
+      });
+    }
+    if (Array.isArray(data.RelatedTopics)) {
+      for (const topic of data.RelatedTopics.slice(0, count)) {
+        if (topic.Text && topic.FirstURL) {
+          results.push({
+            title: String(topic.Text).slice(0, 100),
+            url: String(topic.FirstURL),
+            snippet: String(topic.Text)
+          });
+        }
+      }
+    }
+    return results.slice(0, count);
+  } catch {
+    return [];
+  }
+}
+function registerWebCommand(registerCmd2) {
+  registerCmd2({
+    name: "web",
+    description: "Search the web and optionally fetch a result",
+    execute: async (args2) => {
+      if (args2.length === 0) {
+        return `Usage: /web <query>
+Searches the web and shows results.`;
+      }
+      const query = args2.join(" ");
+      const results = await webSearch2(query, 5);
+      if (results.length === 0) {
+        return `No results found for "${query}"`;
+      }
+      const lines = results.map((r, i) => `${i + 1}. ${r.title}
+   ${r.url}
+   ${r.snippet?.slice(0, 150) || ""}`);
+      return `Search results for "${query}":
+
+${lines.join(`
+
+`)}
+
+Fetch a result? (enter number 1-5 or skip)`;
+    }
+  });
+}
+var execAsync5;
+var init_web = __esm(() => {
+  execAsync5 = promisify5(exec5);
+});
+
+// src/commands/context.ts
+var exports_context = {};
+__export(exports_context, {
+  registerContextCommand: () => registerContextCommand
+});
+import { existsSync as existsSync21, readFileSync as readFileSync21 } from "fs";
+import { cwd } from "process";
+import { homedir as homedir16 } from "os";
+function getAge(dateStr) {
+  const ms2 = Date.now() - new Date(dateStr).getTime();
+  if (ms2 < 60000)
+    return "just now";
+  if (ms2 < 3600000)
+    return `${Math.floor(ms2 / 60000)}m ago`;
+  if (ms2 < 86400000)
+    return `${Math.floor(ms2 / 3600000)}h ago`;
+  return `${Math.floor(ms2 / 86400000)}d ago`;
+}
+function loadSessionInfo(sessionId) {
+  try {
+    const sessionPath = `/home/tim/.nole/sessions/${sessionId}.json`;
+    if (!existsSync21(sessionPath))
+      return null;
+    const data = readFileSync21(sessionPath, "utf-8");
+    return JSON.parse(data);
+  } catch {
+    return null;
+  }
+}
+function getGitBranch() {
+  try {
+    const cwdPath = cwd();
+    const headPath = `${cwdPath}/.git/HEAD`;
+    if (!existsSync21(headPath))
+      return "not a git repo";
+    const head = readFileSync21(headPath, "utf-8").trim();
+    const match = head.match(/ref: refs\/heads\/(\S+)/);
+    return match ? match[1] : "detached";
+  } catch {
+    return "unknown";
+  }
+}
+function getTokenCount(messages) {
+  let totalChars = 0;
+  for (const msg of messages) {
+    if (msg.content) {
+      totalChars += msg.content.length;
+    }
+  }
+  return Math.floor(totalChars / 4);
+}
+function registerContextCommand(registerCmd2) {
+  registerCmd2({
+    name: "context",
+    description: "Show current REPL context state",
+    aliases: ["ctx", "status"],
+    execute: async (_args, ctx) => {
+      const session = loadSessionInfo(ctx.sessionId);
+      const currentCwd = ctx.cwd || cwd();
+      const branch = getGitBranch();
+      const sessionAge = session ? getAge(session.updatedAt) : "unknown";
+      const tokenCount = session ? getTokenCount(session.messages) : 0;
+      const userMsgs = session ? session.messages.filter((m) => m.role === "user").length : 0;
+      let loopStatus = "idle";
+      try {
+        const loopPath = "/tmp/.nole_loop_running";
+        if (existsSync21(loopPath)) {
+          const pid = readFileSync21(loopPath, "utf-8").trim();
+          loopStatus = `running (PID: ${pid})`;
+        }
+      } catch {
+        loopStatus = "idle";
+      }
+      const info = `
+\uD83D\uDCCA CONTEXT STATE
+━━━━━━━━━━━━━━━━━━━━
+  Session: ${ctx.sessionId.slice(0, 12)}...
+  Age: ${sessionAge}
+  Messages: ${userMsgs} user, ${session.messages.length - userMsgs} total
+  Est. Tokens: ~${tokenCount.toLocaleString()}
+  Branch: ${branch}
+  Loop: ${loopStatus}
+
+\uD83D\uDCC1 DIRECTORY
+━━━━━━━━━━━━━━━━━━━━
+  ${currentCwd.replace(homedir16(), "~")}
+`;
+      return info.trim();
+    }
+  });
+}
+var init_context = () => {};
+
+// src/commands/git.ts
+var exports_git = {};
+__export(exports_git, {
+  registerGitCommand: () => registerGitCommand
+});
+import { exec as exec6 } from "child_process";
+import { promisify as promisify6 } from "util";
+import { cwd as cwd2 } from "process";
+async function git(args2) {
+  try {
+    const { stdout, stderr } = await execAsync6(`git ${args2.join(" ")}`, { cwd: cwd2() });
+    return stdout + stderr;
+  } catch (e) {
+    return e.message || String(e);
+  }
+}
+function registerGitCommand(registerCmd2) {
+  registerCmd2({
+    name: "git",
+    description: "Git wrapper: commit, push, pull, branch, stash, log, diff",
+    execute: async (args2) => {
+      if (args2.length === 0) {
+        return `Usage: /git <subcommand> [args...]
+Subcommands:
+  /git commit <msg>     - Git add -A && commit with message
+  /git push           - Git push
+  /git pull           - Git pull
+  /git branch         - List branches (current marked with *)
+  /git branch create <name> - Create new branch
+  /git worktree list  - List worktrees
+  /git worktree create <branch> <path> - Add worktree
+  /git stash         - Git stash
+  /git stash pop    - Git stash pop
+  /git log [-n N]   - Git log --oneline (default 10)
+  /git diff [file]  - Git diff [file]`;
+      }
+      const subcmd = args2[0];
+      const rest = args2.slice(1);
+      switch (subcmd) {
+        case "commit": {
+          const msg = rest.join(" ");
+          if (!msg)
+            return "Usage: /git commit <message>";
+          const addRes = await git(["add", "-A"]);
+          if (addRes.includes("fatal"))
+            return addRes;
+          const commitRes = await git(["commit", "-m", msg]);
+          return commitRes || `Committed: ${msg}`;
+        }
+        case "push":
+          return git(["push"]);
+        case "pull":
+          return git(["pull"]);
+        case "branch": {
+          if (rest[0] === "create" && rest[1]) {
+            return git(["checkout", "-b", rest[1]]);
+          }
+          return git(["branch", "-a"]);
+        }
+        case "worktree": {
+          if (rest[0] === "list") {
+            return git(["worktree", "list"]);
+          }
+          if (rest[0] === "create" && rest[1] && rest[2]) {
+            return git(["worktree", "add", rest[2], rest[1]]);
+          }
+          return "Usage: /git worktree list | create <branch> <path>";
+        }
+        case "stash": {
+          if (rest[0] === "pop") {
+            return git(["stash", "pop"]);
+          }
+          return git(["stash"]);
+        }
+        case "log": {
+          const n7 = rest[0]?.match(/-n\s*(\d+)/)?.[1] || "10";
+          return git(["log", `--oneline`, `-n${n7}`]);
+        }
+        case "diff": {
+          const file = rest[0] || "";
+          return git(["diff", file]);
+        }
+        default:
+          return `Unknown subcommand: ${subcmd}
+Use /git for usage.`;
+      }
+    }
+  });
+}
+var execAsync6;
+var init_git = __esm(() => {
+  execAsync6 = promisify6(exec6);
+});
+
+// src/commands/send.ts
+var exports_send = {};
+__export(exports_send, {
+  registerSendCommand: () => registerSendCommand
+});
+import { exec as exec7 } from "child_process";
+import { promisify as promisify7 } from "util";
+function getEnv(key) {
+  if (process.env[key])
+    return process.env[key];
+  try {
+    const { readFileSync: readFileSync22, existsSync: existsSync22 } = __require("fs");
+    const envPath = __require("os").homedir() + "/.nole/env";
+    if (existsSync22(envPath)) {
+      const envContent = __require("fs").readFileSync(envPath, "utf-8");
+      const match = envContent.match(new RegExp(`${key}=(.+)`));
+      if (match)
+        return match[1].trim();
+    }
+  } catch {}
+  return;
+}
+async function sendTelegram(text, token, chatId) {
+  const url2 = `https://api.telegram.org/bot${token}/sendMessage`;
+  const body = JSON.stringify({
+    chat_id: chatId,
+    text,
+    parse_mode: "Markdown"
+  });
+  try {
+    const response = await fetch(url2, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body
+    });
+    const result2 = await response.json();
+    if (result2.ok)
+      return "✅ Sent to Telegram";
+    return `Telegram error: ${result2.description || "unknown"}`;
+  } catch (e) {
+    return `Telegram error: ${e.message}`;
+  }
+}
+async function sendDiscord(text, webhookUrl) {
+  try {
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: text })
+    });
+    if (response.ok)
+      return "✅ Sent to Discord";
+    return `Discord error: ${response.status}`;
+  } catch (e) {
+    return `Discord error: ${e.message}`;
+  }
+}
+function registerSendCommand(registerCmd2) {
+  registerCmd2({
+    name: "send",
+    description: "Send notification to Telegram or Discord",
+    execute: async (args2) => {
+      if (args2.length === 0) {
+        return `Usage: /send <message>
+Sends a notification to configured Telegram/Discord.`;
+      }
+      const message = args2.join(" ");
+      const telegramToken = getEnv("TELEGRAM_BOT_TOKEN");
+      const telegramChatId = getEnv("TELEGRAM_CHAT_ID");
+      const discordWebhook = getEnv("DISCORD_WEBHOOK_URL");
+      if (telegramToken && telegramChatId) {
+        return await sendTelegram(message, telegramToken, telegramChatId);
+      }
+      if (discordWebhook) {
+        return await sendDiscord(message, discordWebhook);
+      }
+      return `Telegram/Discord not configured.
+Set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID or DISCORD_WEBHOOK_URL in ~/.nole/env`;
+    }
+  });
+}
+var execAsync7;
+var init_send = __esm(() => {
+  execAsync7 = promisify7(exec7);
+});
+
+// src/commands/exec.ts
+var exports_exec = {};
+__export(exports_exec, {
+  registerExecCommand: () => registerExecCommand
+});
+import { exec as exec8 } from "child_process";
+import { promisify as promisify8 } from "util";
+function isPythonExpression(expr2) {
+  return expr2.startsWith("print") || expr2.startsWith("def ") || expr2.startsWith("import ") || expr2.startsWith("class ") || expr2.includes("print(") || expr2.includes("def ") || /\s+def\s+/.test(expr2) || /\s+import\s+/.test(expr2) || /\s+class\s+/.test(expr2);
+}
+async function evalJs(expr) {
+  try {
+    const result = eval(expr);
+    if (result === undefined)
+      return "undefined";
+    if (result === null)
+      return "null";
+    return String(result);
+  } catch (e) {
+    return `Error: ${e.message}`;
+  }
+}
+async function evalPython(expr2) {
+  try {
+    const { stdout, stderr } = await execAsync8(`python3 -c "${expr2.replace(/"/g, "\\\"")}"`, { timeout: 5000 });
+    if (stderr && !stderr.includes("Warning")) {
+      return `Error: ${stderr}`;
+    }
+    return stdout.trim() || "(no output)";
+  } catch (e) {
+    return `Error: ${e.message}`;
+  }
+}
+function registerExecCommand(registerCmd) {
+  registerCmd({
+    name: "exec",
+    description: "Evaluate a code expression (JS or Python)",
+    aliases: ["eval", "evaljs"],
+    execute: async (args) => {
+      if (args.length === 0) {
+        return `Usage: /exec <expression>
+Evaluates JavaScript or Python expressions.
+Examples:
+  /exec 2 + 2
+  /exec "hello".toUpperCase()
+  /exec print(1 + 2)`;
+      }
+      const expr = args.join(" ");
+      if (isPythonExpression(expr)) {
+        return await evalPython(expr);
+      }
+      let js = expr;
+      if (!expr.includes("=") && !expr.includes("return") && !expr.match(/^(if|for|while|function|class|import|export)/)) {
+        try {
+          const result = eval(js);
+          return `${result}`;
+        } catch {
+          js = `(function() { return ${expr} })()`;
+          try {
+            const result = eval(js);
+            return `${result}`;
+          } catch (e) {
+            return `Error: ${e.message}`;
+          }
+        }
+      }
+      try {
+        const result = eval(js);
+        return `${result}`;
+      } catch (e) {
+        return `Error: ${e.message}`;
+      }
+    }
+  });
+}
+var execAsync8;
+var init_exec = __esm(() => {
+  execAsync8 = promisify8(exec8);
+});
+
+// src/commands/alias.ts
+var exports_alias = {};
+__export(exports_alias, {
+  registerAliasCommand: () => registerAliasCommand
+});
+import { existsSync as existsSync22, readFileSync as readFileSync22, writeFileSync as writeFileSync10, mkdirSync as mkdirSync9 } from "fs";
+import { join as join22 } from "path";
+import { homedir as homedir17 } from "os";
+function ensureAliasDir() {
+  const dir = join22(homedir17(), ".nole-code");
+  if (!existsSync22(dir)) {
+    mkdirSync9(dir, { recursive: true });
+  }
+}
+function loadAliases() {
+  ensureAliasDir();
+  if (!existsSync22(ALIAS_FILE))
+    return {};
+  try {
+    return JSON.parse(readFileSync22(ALIAS_FILE, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+function saveAliases(aliases) {
+  ensureAliasDir();
+  writeFileSync10(ALIAS_FILE, JSON.stringify(aliases, null, 2), "utf-8");
+}
+function registerAliasCommand(registerCommand2) {
+  registerCommand2({
+    name: "alias",
+    description: "Manage command aliases: list, add, or delete",
+    execute: async (args2) => {
+      if (args2.length === 0) {
+        const aliases2 = loadAliases();
+        if (Object.keys(aliases2).length === 0) {
+          return `No aliases defined.
+
+Usage: /alias <name> <cmd>  — create alias
+       /alias <name>          — show alias value
+       /alias <name> --delete — delete alias`;
+        }
+        const lines = ["Aliases:"];
+        for (const [name2, cmd2] of Object.entries(aliases2)) {
+          lines.push(`  /${name2} → /${cmd2}`);
+        }
+        return lines.join(`
+`);
+      }
+      if (args2[args2.length - 1] === "--delete") {
+        const name2 = args2[0];
+        const aliases2 = loadAliases();
+        if (!aliases2[name2]) {
+          return `Alias /${name2} not found`;
+        }
+        delete aliases2[name2];
+        saveAliases(aliases2);
+        return `Deleted alias /${name2}`;
+      }
+      if (args2.length === 1) {
+        const aliases2 = loadAliases();
+        const name2 = args2[0];
+        if (!aliases2[name2]) {
+          return `Alias /${name2} not found`;
+        }
+        return `/${name2} → /${aliases2[name2]}`;
+      }
+      const name = args2[0];
+      const cmd = args2.slice(1).join(" ");
+      if (!/^[a-zA-Z0-9]+$/.test(name)) {
+        return "Alias name must be alphanumeric (no spaces or special chars)";
+      }
+      const aliases = loadAliases();
+      aliases[name] = cmd;
+      saveAliases(aliases);
+      return `Created alias /${name} → /${cmd}`;
+    }
+  });
+}
+var ALIAS_FILE;
+var init_alias = __esm(() => {
+  ALIAS_FILE = join22(homedir17(), ".nole-code", "aliases.json");
+});
+
+// src/commands/port.ts
+var exports_port = {};
+__export(exports_port, {
+  registerPortCommand: () => registerPortCommand
+});
+import { execSync as execSync3 } from "child_process";
+function parseListeningPorts() {
+  try {
+    const output = execSync3("ss -tlnp", { encoding: "utf-8" });
+    const lines = output.split(`
+`).slice(1);
+    const ports = [];
+    for (const line of lines) {
+      const match = line.match(/:\s*(\d+)\s+\d+\.\d+\.\d+\.\d+:(\d+)/);
+      if (!match)
+        continue;
+      const localAddr = match[0].split(/\s+/)[3] || "";
+      const port = parseInt(match[1]);
+      const addr = localAddr.includes("127.0.0.1") ? "127.0.0.1" : localAddr.includes("0.0.0.0") ? "0.0.0.0" : localAddr.includes("::") ? "::" : localAddr;
+      const pidMatch = line.match(/pid=(\d+)/);
+      const pid = pidMatch ? pidMatch[1] : "";
+      let processName = "";
+      if (pid) {
+        try {
+          const procOutput = execSync3(`ps -p ${pid} -o comm=`, { encoding: "utf-8" });
+          processName = procOutput.trim();
+        } catch {}
+      }
+      ports.push({ pid, process: processName, port, address: addr });
+    }
+    return ports;
+  } catch {
+    return [];
+  }
+}
+function getPortProcess(port) {
+  try {
+    const output = execSync3(`ss -tlnp | grep :${port}`, { encoding: "utf-8" });
+    const lines = output.trim().split(`
+`);
+    if (lines.length === 0 || lines[0] === "")
+      return null;
+    const line = lines[0];
+    const addrMatch = line.match(/(?:0\.0\.0\.0|127\.0\.0\.1|::|\*):(\d+)/);
+    const addr = line.includes("127.0.0.1") ? "127.0.0.1" : line.includes("0.0.0.0") ? "0.0.0.0" : line.includes("::") ? "::" : "*";
+    const pidMatch = line.match(/pid=(\d+)/);
+    const pid = pidMatch ? pidMatch[1] : "";
+    let processName = "";
+    if (pid) {
+      try {
+        const procOutput = execSync3(`ps -p ${pid} -o comm=`, { encoding: "utf-8" });
+        processName = procOutput.trim();
+      } catch {}
+    }
+    return { pid, process: processName, port, address: addr };
+  } catch {
+    return null;
+  }
+}
+function killProcess(pid) {
+  try {
+    execSync3(`kill ${pid}`, { encoding: "utf-8" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function registerPortCommand(registerCommand2) {
+  registerCommand2({
+    name: "port",
+    description: "Show listening ports or kill process on a port",
+    execute: async (args2) => {
+      if (args2.length === 0) {
+        const ports = parseListeningPorts();
+        if (ports.length === 0) {
+          return "No listening ports found";
+        }
+        const lines2 = [`Listening Ports:
+`];
+        lines2.push("  PID       Process          Port   Address");
+        lines2.push("  " + "-".repeat(45));
+        for (const p of ports) {
+          const pid = (p.pid || "-").padEnd(8);
+          const proc = (p.process || "-").padEnd(16);
+          const port2 = String(p.port).padEnd(7);
+          const addr = p.address;
+          lines2.push(`  ${pid} ${proc} ${port2} ${addr}`);
+        }
+        return lines2.join(`
+`);
+      }
+      const killIndex = args2.indexOf("--kill");
+      const portArg = killIndex >= 0 ? args2.slice(0, killIndex)[0] : args2[0];
+      const shouldKill = killIndex >= 0;
+      const port = parseInt(portArg);
+      if (isNaN(port)) {
+        return "Invalid port number";
+      }
+      const info = getPortProcess(port);
+      if (!info) {
+        return `No process found on port ${port}`;
+      }
+      const lines = [`Port ${port}:`, ""];
+      lines.push(`  PID:      ${info.pid || "unknown"}`);
+      lines.push(`  Process:  ${info.process || "unknown"}`);
+      lines.push(`  Address:  ${info.address}:${port}`);
+      if (shouldKill && info.pid) {
+        const confirmed = args2.includes("--yes") || args2.includes("-y");
+        if (!confirmed) {
+          lines.push("");
+          lines.push(`Run with --yes to confirm killing PID ${info.pid}`);
+          return lines.join(`
+`);
+        }
+        const killed = killProcess(info.pid);
+        if (killed) {
+          lines.push("");
+          lines.push(`✅ Killed process ${info.pid}`);
+        } else {
+          lines.push("");
+          lines.push(`❌ Failed to kill process ${info.pid}`);
+        }
+      }
+      return lines.join(`
+`);
+    }
+  });
+}
+var init_port = () => {};
+
 // src/commands/index.ts
 var exports_commands2 = {};
 __export(exports_commands2, {
@@ -26570,12 +27232,12 @@ __export(exports_commands2, {
   getCommand: () => getCommand,
   getAllCommands: () => getAllCommands
 });
-import { exec as exec5 } from "child_process";
-import { promisify as promisify5 } from "util";
-import { existsSync as existsSync21, readFileSync as readFileSync21 } from "fs";
-import { join as join22 } from "path";
-import { homedir as homedir16 } from "os";
-function getAge(dateStr) {
+import { exec as exec9 } from "child_process";
+import { promisify as promisify9 } from "util";
+import { existsSync as existsSync23, readFileSync as readFileSync23 } from "fs";
+import { join as join23 } from "path";
+import { homedir as homedir18 } from "os";
+function getAge2(dateStr) {
   const ms2 = Date.now() - new Date(dateStr).getTime();
   if (ms2 < 60000)
     return "just now";
@@ -26601,10 +27263,10 @@ function parseCommand(input) {
   const parts = input.slice(1).split(/\s+/);
   return { cmd: parts[0], args: parts.slice(1) };
 }
-var execAsync5, commands;
+var execAsync9, commands;
 var init_commands2 = __esm(() => {
   init_env();
-  execAsync5 = promisify5(exec5);
+  execAsync9 = promisify9(exec9);
   commands = new Map;
   registerCommand({
     name: "help",
@@ -26628,9 +27290,9 @@ var init_commands2 = __esm(() => {
     name: "clear",
     description: "Clear screen. Use /clear context to also reset conversation history.",
     aliases: ["cls"],
-    execute: async (args, ctx) => {
+    execute: async (args2, ctx) => {
       process.stdout.write("\x1B[2J\x1B[H");
-      if (args[0] === "context" || args[0] === "all") {
+      if (args2[0] === "context" || args2[0] === "all") {
         const { loadSession: load, saveSession: save } = await Promise.resolve().then(() => (init_manager(), exports_manager));
         const session = load(ctx.sessionId);
         if (session) {
@@ -26655,7 +27317,7 @@ var init_commands2 = __esm(() => {
         const current = s.id === ctx.sessionId ? " \x1B[32m← current\x1B[0m" : "";
         const userMsgs = s.messages.filter((m) => m.role === "user").length;
         const dir = s.cwd ? s.cwd.split("/").pop() : "?";
-        const age = getAge(s.updatedAt);
+        const age = getAge2(s.updatedAt);
         return `  ${s.id.slice(0, 20).padEnd(20)} ${String(userMsgs).padStart(3)} msgs  ${dir?.padEnd(15)}  ${age}${current}`;
       });
       return `Sessions:
@@ -26669,12 +27331,12 @@ ${lines.join(`
     name: "commit",
     description: "Git commit with message",
     aliases: ["ci"],
-    execute: async (args) => {
-      if (args.length === 0)
+    execute: async (args2) => {
+      if (args2.length === 0)
         return "Usage: /commit <message>";
-      const msg = args.join(" ");
-      await execAsync5("git add -A", { cwd: process.cwd() });
-      const { stdout, stderr } = await execAsync5('git commit -m "$COMMIT_MSG"', {
+      const msg = args2.join(" ");
+      await execAsync9("git add -A", { cwd: process.cwd() });
+      const { stdout, stderr } = await execAsync9('git commit -m "$COMMIT_MSG"', {
         cwd: process.cwd(),
         env: { ...process.env, COMMIT_MSG: msg }
       });
@@ -26685,9 +27347,9 @@ ${lines.join(`
     name: "diff",
     description: "Show git diff",
     aliases: ["d"],
-    execute: async (args) => {
-      const target = args[0] || "";
-      const { stdout } = await execAsync5("git diff -- " + (target ? `"${target.replace(/'/g, `'"'"'`)}"` : ""), { cwd: process.cwd() });
+    execute: async (args2) => {
+      const target = args2[0] || "";
+      const { stdout } = await execAsync9("git diff -- " + (target ? `"${target.replace(/'/g, `'"'"'`)}"` : ""), { cwd: process.cwd() });
       return stdout || "No changes";
     }
   });
@@ -26696,7 +27358,7 @@ ${lines.join(`
     description: "Show git status",
     aliases: ["st"],
     execute: async () => {
-      const { stdout } = await execAsync5("git status --short", { cwd: process.cwd() });
+      const { stdout } = await execAsync9("git status --short", { cwd: process.cwd() });
       return stdout || "Clean working tree";
     }
   });
@@ -26704,9 +27366,9 @@ ${lines.join(`
     name: "log",
     description: "Show recent git commits",
     aliases: ["lg"],
-    execute: async (args) => {
-      const n7 = args[0] || "10";
-      const { stdout } = await execAsync5("git log --oneline -n " + String(n7), { cwd: process.cwd() });
+    execute: async (args2) => {
+      const n7 = args2[0] || "10";
+      const { stdout } = await execAsync9("git log --oneline -n " + String(n7), { cwd: process.cwd() });
       return stdout || "No commits";
     }
   });
@@ -26715,19 +27377,19 @@ ${lines.join(`
     description: "Show git branches",
     aliases: ["br"],
     execute: async () => {
-      const { stdout } = await execAsync5("git branch -v", { cwd: process.cwd() });
+      const { stdout } = await execAsync9("git branch -v", { cwd: process.cwd() });
       return stdout || "No branches";
     }
   });
   registerCommand({
     name: "checkout",
     description: "Git checkout a branch or file",
-    execute: async (args) => {
-      if (args.length === 0)
+    execute: async (args2) => {
+      if (args2.length === 0)
         return "Usage: /checkout <branch|file>";
       try {
-        const { stdout, stderr } = await execAsync5("git checkout -- " + args.map((a) => `'${a.replace(/'/g, `'"'"'`)}'`).join(" "), { cwd: process.cwd() });
-        return (stdout + stderr).trim() || `Checked out ${args[0]}`;
+        const { stdout, stderr } = await execAsync9("git checkout -- " + args2.map((a) => `'${a.replace(/'/g, `'"'"'`)}'`).join(" "), { cwd: process.cwd() });
+        return (stdout + stderr).trim() || `Checked out ${args2[0]}`;
       } catch (e) {
         const err = e;
         return `Checkout failed: ${err.message || String(e)}`;
@@ -26737,11 +27399,11 @@ ${lines.join(`
   registerCommand({
     name: "lsof",
     description: "Show open ports or file handles",
-    execute: async (args) => {
-      const port = args[0] || "";
+    execute: async (args2) => {
+      const port = args2[0] || "";
       const cmd = port ? `lsof -i :${port}` : "lsof -i -P";
       try {
-        const { stdout } = await execAsync5(cmd);
+        const { stdout } = await execAsync9(cmd);
         return stdout || "No results";
       } catch {
         return "lsof not available";
@@ -26751,9 +27413,9 @@ ${lines.join(`
   registerCommand({
     name: "ps",
     description: "Show running processes",
-    execute: async (args) => {
-      const filter = args.join(" ") || "aux";
-      const { stdout } = await execAsync5(`ps ${filter} | head -20`);
+    execute: async (args2) => {
+      const filter = args2.join(" ") || "aux";
+      const { stdout } = await execAsync9(`ps ${filter} | head -20`);
       return stdout || "No processes";
     }
   });
@@ -26761,8 +27423,8 @@ ${lines.join(`
     name: "env",
     description: "Show environment variables (filtered)",
     aliases: ["environment"],
-    execute: async (args) => {
-      const filter = (args[0] || "").toLowerCase();
+    execute: async (args2) => {
+      const filter = (args2[0] || "").toLowerCase();
       const SENSITIVE_KEYS = ["KEY", "SECRET", "TOKEN", "PASSWORD", "CREDENTIAL", "AUTH", "PASS"];
       const env = Object.entries(process.env).filter(([k2]) => !filter || k2.toLowerCase().includes(filter)).map(([k2, v2]) => {
         const isSensitive = SENSITIVE_KEYS.some((s) => k2.toUpperCase().includes(s));
@@ -26787,11 +27449,11 @@ ${lines.join(`
     name: "cost",
     description: "Show estimated API usage for this session",
     execute: async (_args, ctx) => {
-      const sessionFile = join22(homedir16(), ".nole-code", "sessions", `${ctx.sessionId}.json`);
-      if (!existsSync21(sessionFile))
+      const sessionFile = join23(homedir18(), ".nole-code", "sessions", `${ctx.sessionId}.json`);
+      if (!existsSync23(sessionFile))
         return "Session not found";
       try {
-        const session = JSON.parse(readFileSync21(sessionFile, "utf-8"));
+        const session = JSON.parse(readFileSync23(sessionFile, "utf-8"));
         const msgs = session.messages?.length || 0;
         return `Session: ${ctx.sessionId}
 Messages: ${msgs}
@@ -26809,7 +27471,7 @@ Note: Actual token usage available in provider dashboard.`;
       const checks4 = [
         ["Node.js", process.version],
         ["API Key", MINIMAX_API_KEY ? "✅ set" : "❌ missing"],
-        ["Session Dir", existsSync21(join22(homedir16(), ".nole-code")) ? "✅ exists" : "❌ missing"]
+        ["Session Dir", existsSync23(join23(homedir18(), ".nole-code")) ? "✅ exists" : "❌ missing"]
       ];
       return `\uD83E\uDD9E NOLE CODE — Health Check:
 
@@ -26832,12 +27494,12 @@ Edit this file to configure project context for Nole Code.`;
     name: "fork",
     description: "Fork the current session",
     aliases: ["session-fork"],
-    execute: async (args, ctx) => {
+    execute: async (args2, ctx) => {
       const { forkSession: forkSession2, loadSession: loadSession2 } = await Promise.resolve().then(() => (init_manager(), exports_manager));
       const parent = loadSession2(ctx.sessionId);
       if (!parent)
         return "❌ Session not found";
-      const reason = args.join(" ") || undefined;
+      const reason = args2.join(" ") || undefined;
       const forked = forkSession2(ctx.sessionId, reason);
       if (forked) {
         return `✅ Forked session: ${forked.id}
@@ -26849,11 +27511,11 @@ Resume with: nole-code --session ${forked.id}`;
   registerCommand({
     name: "team",
     description: "Create or manage a team of agents",
-    execute: async (args, ctx) => {
+    execute: async (args2, ctx) => {
       const { createTeam: createTeam2, getAllTeams: getAllTeams2, sendTeamMessage: sendTeamMessage2 } = await Promise.resolve().then(() => (init_team(), exports_team));
-      const action = args[0];
+      const action = args2[0];
       if (action === "create") {
-        const name = args[1] || "my-team";
+        const name = args2[1] || "my-team";
         const team = await createTeam2({ name, parentSessionId: ctx.sessionId });
         return `✅ Team created: ${team.name} (${team.id})`;
       }
@@ -26865,7 +27527,7 @@ Resume with: nole-code --session ${forked.id}`;
 `);
       }
       if (action === "send") {
-        const [to, ...msgParts] = args.slice(1);
+        const [to, ...msgParts] = args2.slice(1);
         if (!to || msgParts.length === 0)
           return "Usage: /team send <to> <message>";
         return "⚠️ Send requires specifying a team ID";
@@ -26880,13 +27542,13 @@ Resume with: nole-code --session ${forked.id}`;
     name: "agents",
     description: "List and manage running agents",
     aliases: ["tasks"],
-    execute: async (args, ctx) => {
+    execute: async (args2, ctx) => {
       const { getAllAgents: getAllAgents2, killAgent: killAgent2 } = await Promise.resolve().then(() => (init_spawner(), exports_spawner));
-      const action = args[0];
+      const action = args2[0];
       const agents2 = getAllAgents2();
-      if (action === "kill" && args[1]) {
-        const killed = killAgent2(args[1]);
-        return killed ? `✅ Killed ${args[1]}` : `❌ Agent ${args[1]} not found`;
+      if (action === "kill" && args2[1]) {
+        const killed = killAgent2(args2[1]);
+        return killed ? `✅ Killed ${args2[1]}` : `❌ Agent ${args2[1]} not found`;
       }
       if (agents2.length === 0)
         return "No active agents";
@@ -26898,8 +27560,8 @@ Resume with: nole-code --session ${forked.id}`;
     name: "plan",
     description: "Enter plan mode for step-by-step approval",
     aliases: ["steps"],
-    execute: async (args, ctx) => {
-      const goal = args.join(" ") || "Build and verify the requested feature";
+    execute: async (args2, ctx) => {
+      const goal = args2.join(" ") || "Build and verify the requested feature";
       const { enterPlanMode: enterPlanMode2, getCurrentPlan: getCurrentPlan2, displayPlan: displayPlan2, isPlanModeActive: isPlanModeActive2 } = await Promise.resolve().then(() => (init_plan(), exports_plan));
       if (isPlanModeActive2()) {
         const plan2 = getCurrentPlan2();
@@ -26957,14 +27619,14 @@ Use /plan approve to proceed step by step.`;
     aliases: ["save-chat"],
     execute: async (_args, ctx) => {
       const { loadSession: load, exportSession: exportSession2 } = await Promise.resolve().then(() => (init_manager(), exports_manager));
-      const { writeFileSync: writeFileSync10 } = __require("fs");
-      const { join: join23 } = __require("path");
+      const { writeFileSync: writeFileSync11 } = __require("fs");
+      const { join: join24 } = __require("path");
       const transcript = exportSession2(ctx.sessionId);
       if (!transcript)
         return "Session not found";
       const filename = `nole-session-${ctx.sessionId.slice(5, 15)}.md`;
-      const outPath = join23(ctx.cwd, filename);
-      writeFileSync10(outPath, transcript, "utf-8");
+      const outPath = join24(ctx.cwd, filename);
+      writeFileSync11(outPath, transcript, "utf-8");
       return `Exported to ${filename} (${transcript.split(`
 `).length} lines)`;
     }
@@ -27021,10 +27683,10 @@ Restart nole to use it, or /fork to keep the current one.`;
     name: "settings",
     description: "View or change settings (model, temperature, maxTokens)",
     aliases: ["config", "set"],
-    execute: async (args) => {
+    execute: async (args2) => {
       const { loadSettings: loadSettings2, saveSettings: saveSettings2 } = await Promise.resolve().then(() => (init_onboarding(), exports_onboarding));
       const current = loadSettings2();
-      if (args.length === 0) {
+      if (args2.length === 0) {
         return `Current Settings:
 
   model:        ${current.model || "MiniMax-M2.7"}
@@ -27037,7 +27699,7 @@ Restart nole to use it, or /fork to keep the current one.`;
 
 Usage: /settings <key> <value>`;
       }
-      const [key, ...valueParts] = args;
+      const [key, ...valueParts] = args2;
       const value = valueParts.join(" ");
       if (!value)
         return `Usage: /settings ${key} <value>`;
@@ -27112,8 +27774,8 @@ Usage: /settings <key> <value>`;
   registerCommand({
     name: "model",
     description: "Switch the LLM model mid-session",
-    execute: async (args) => {
-      if (args.length === 0) {
+    execute: async (args2) => {
+      if (args2.length === 0) {
         const { loadSettings: loadSettings2 } = await Promise.resolve().then(() => (init_onboarding(), exports_onboarding));
         const s = loadSettings2();
         const provider = (() => {
@@ -27138,7 +27800,7 @@ Examples:
 Provider auto-detected from model name.`;
       }
       const { saveSettings: saveSettings2 } = await Promise.resolve().then(() => (init_onboarding(), exports_onboarding));
-      const model = args.join(" ");
+      const model = args2.join(" ");
       saveSettings2({ model });
       try {
         const { activeClient } = await Promise.resolve().then(() => (init_src(), exports_src));
@@ -27151,9 +27813,9 @@ Provider auto-detected from model name.`;
   registerCommand({
     name: "replay",
     description: "Replay a session — shows the conversation without re-executing",
-    execute: async (args, ctx) => {
+    execute: async (args2, ctx) => {
       const { loadSession: load } = await Promise.resolve().then(() => (init_manager(), exports_manager));
-      const id = args[0] || ctx.sessionId;
+      const id = args2[0] || ctx.sessionId;
       const session = load(id);
       if (!session)
         return `Session not found: ${id}`;
@@ -27179,10 +27841,10 @@ ${session.messages.length} messages total.`);
   registerCommand({
     name: "audit",
     description: "Show recent tool execution log",
-    execute: async (args, ctx) => {
+    execute: async (args2, ctx) => {
       const { getAuditLog: getAuditLog2 } = await Promise.resolve().then(() => (init_audit(), exports_audit));
-      const limit = parseInt(args[0]) || 20;
-      const entries = getAuditLog2(limit, args.includes("--session") ? ctx.sessionId : undefined);
+      const limit = parseInt(args2[0]) || 20;
+      const entries = getAuditLog2(limit, args2.includes("--session") ? ctx.sessionId : undefined);
       if (entries.length === 0)
         return "No audit entries.";
       const lines = entries.map((e) => {
@@ -27202,11 +27864,11 @@ ${lines.join(`
     name: "plugins",
     description: "List installed plugins",
     execute: async () => {
-      const { existsSync: existsSync22, readdirSync: readdirSync7 } = __require("fs");
-      const { join: join23 } = __require("path");
-      const { homedir: homedir17 } = __require("os");
-      const dir = join23(homedir17(), ".nole-code", "plugins");
-      if (!existsSync22(dir)) {
+      const { existsSync: existsSync24, readdirSync: readdirSync7 } = __require("fs");
+      const { join: join24 } = __require("path");
+      const { homedir: homedir19 } = __require("os");
+      const dir = join24(homedir19(), ".nole-code", "plugins");
+      if (!existsSync24(dir)) {
         return `No plugins directory.
 Create ~/.nole-code/plugins/ and add .js files.
 
@@ -27249,21 +27911,21 @@ ${files.map((f) => "  " + f).join(`
       const assistantMsgs = session.messages.filter((m) => m.role === "assistant").length;
       const toolMsgs = session.messages.filter((m) => m.role === "tool").length;
       const sessionCost = costTracker2.getCurrentSession();
-      let git = "";
+      let git2 = "";
       try {
         const branch = execFileSync("git", ["branch", "--show-current"], { encoding: "utf-8", cwd: ctx.cwd }).trim();
         const status = execFileSync("git", ["status", "--short"], { encoding: "utf-8", cwd: ctx.cwd }).trim();
         const changed = status ? status.split(`
 `).length : 0;
         if (branch)
-          git = `
+          git2 = `
   Git:       ${branch}${changed ? ` (${changed} changed)` : " (clean)"}`;
       } catch {}
       return `Session Context:
 
   Session:   ${session.id}
   Model:     ${settings.model || "MiniMax-M2.7"}
-  CWD:       ${session.cwd || ctx.cwd}${git}
+  CWD:       ${session.cwd || ctx.cwd}${git2}
   Messages:  ${session.messages.length} (${userMsgs} user, ${assistantMsgs} assistant, ${toolMsgs} tool)
   Tokens:    [${bar}] ~${tokens}/${maxTokens} (${percent}%)
   Created:   ${new Date(session.createdAt).toLocaleString()}
@@ -27276,9 +27938,9 @@ ${files.map((f) => "  " + f).join(`
     name: "loop",
     description: "Start autonomous loop: /loop <goal> or /loop --resume <id>",
     aliases: ["autonomous", "run"],
-    execute: async (args, ctx) => {
-      if (args[0] === "--resume" || args[0] === "-r") {
-        const id = args[1];
+    execute: async (args2, ctx) => {
+      if (args2[0] === "--resume" || args2[0] === "-r") {
+        const id = args2[1];
         if (!id) {
           const { listCheckpoints: listCheckpoints2 } = await Promise.resolve().then(() => (init_checkpoint(), exports_checkpoint));
           const checkpoints = listCheckpoints2(10);
@@ -27302,7 +27964,7 @@ Use /loop --resume <id> to continue`;
         return `Resuming loop ${id} in background...
 Use /progress to check status.`;
       }
-      const goal = args.join(" ");
+      const goal = args2.join(" ");
       if (!goal)
         return `Usage: /loop <goal>
 Example: /loop build a REST API with authentication
@@ -27326,9 +27988,9 @@ Pause: /pause  |  Abort: /abort`;
     name: "checkpoints",
     description: "List saved loop checkpoints",
     aliases: ["cp", "checkpoint"],
-    execute: async (args, ctx) => {
+    execute: async (args2, ctx) => {
       const { listCheckpoints: listCheckpoints2, loadCheckpoint: loadCheckpoint2 } = await Promise.resolve().then(() => (init_checkpoint(), exports_checkpoint));
-      const checkpoints = listCheckpoints2(parseInt(args[0]) || 10);
+      const checkpoints = listCheckpoints2(parseInt(args2[0]) || 10);
       if (checkpoints.length === 0)
         return `No checkpoints found.
 Start a loop with /loop <goal>`;
@@ -27338,7 +28000,7 @@ Start a loop with /loop <goal>`;
         const progress = `${cp.currentStep}/${cp.steps.length}`;
         const errors3 = cp.context.errorsEncountered.length;
         const files = cp.context.filesCreated.length;
-        const age = getAge(cp.updatedAt);
+        const age = getAge2(cp.updatedAt);
         lines.push(`${cp.id}`);
         lines.push(`  Goal: ${cp.goal.slice(0, 60)}`);
         lines.push(`  State: ${cp.state} | Progress: ${progress} | Age: ${age}`);
@@ -27357,7 +28019,7 @@ Start a loop with /loop <goal>`;
     name: "progress",
     description: "Show current loop progress",
     aliases: ["status"],
-    execute: async (args, ctx) => {
+    execute: async (args2, ctx) => {
       const { loadLatestCheckpoint: loadLatestCheckpoint3, getProgress: getProgress2 } = await Promise.resolve().then(() => (init_loop(), exports_loop));
       const cp = loadLatestCheckpoint3();
       if (!cp)
@@ -27391,7 +28053,7 @@ Start one with /loop <goal>`;
     name: "pause",
     description: "Pause running loop (SIGTERM, 2s to checkpoint)",
     aliases: ["suspend"],
-    execute: async (args, ctx) => {
+    execute: async (args2, ctx) => {
       const { pauseLoop: pauseLoop3, isLoopRunning: isLoopRunning2, getActiveLoop: getActiveLoop2 } = await Promise.resolve().then(() => (init_spawner2(), exports_spawner2));
       if (!isLoopRunning2()) {
         return "No loop running.";
@@ -27405,7 +28067,7 @@ Start one with /loop <goal>`;
     name: "abort",
     description: "Abort running loop immediately (SIGKILL)",
     aliases: ["kill", "stop"],
-    execute: async (args, ctx) => {
+    execute: async (args2, ctx) => {
       const { abortLoop: abortLoop2, isLoopRunning: isLoopRunning2, getActiveLoop: getActiveLoop2 } = await Promise.resolve().then(() => (init_spawner2(), exports_spawner2));
       if (!isLoopRunning2()) {
         return "No loop running.";
@@ -27439,16 +28101,16 @@ Start one with /loop <goal>`;
     name: "task",
     description: "Manage background tasks: stop <id>, log <id>",
     aliases: [],
-    execute: async (args) => {
+    execute: async (args2) => {
       const { taskManager: taskManager2 } = await Promise.resolve().then(() => (init_tasks(), exports_tasks));
-      const action = args[0];
-      const taskId = args[1];
+      const action = args2[0];
+      const taskId = args2[1];
       if (!action || !taskId) {
         return "Usage: /task <stop|log> <task-id>";
       }
       if (action === "stop") {
-        const result = taskManager2.stopTask(taskId);
-        return result ? `Stopped task ${taskId}` : `Failed to stop task ${taskId}`;
+        const result2 = taskManager2.stopTask(taskId);
+        return result2 ? `Stopped task ${taskId}` : `Failed to stop task ${taskId}`;
       }
       if (action === "log") {
         const output = taskManager2.getTaskOutput(taskId, 30);
@@ -27471,6 +28133,13 @@ Start one with /loop <goal>`;
     Promise.resolve().then(() => (init_debug(), exports_debug)).then((m) => m.registerDebugCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_multi(), exports_multi)).then((m) => m.registerMultiCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_mcp(), exports_mcp)).then((m) => m.registerMCPCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_web(), exports_web)).then((m) => m.registerWebCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_context(), exports_context)).then((m) => m.registerContextCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_git(), exports_git)).then((m) => m.registerGitCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_send(), exports_send)).then((m) => m.registerSendCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_exec(), exports_exec)).then((m) => m.registerExecCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_alias(), exports_alias)).then((m) => m.registerAliasCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_port(), exports_port)).then((m) => m.registerPortCommand(registerCommand)).catch(() => {});
   }, 0);
 });
 
@@ -27487,16 +28156,16 @@ __export(exports_session_memory, {
   extractMemoryFromConversation: () => extractMemoryFromConversation,
   addToWorklog: () => addToWorklog
 });
-import { existsSync as existsSync22, readFileSync as readFileSync22, writeFileSync as writeFileSync10, mkdirSync as mkdirSync9 } from "fs";
-import { join as join23 } from "path";
-import { homedir as homedir17 } from "os";
+import { existsSync as existsSync24, readFileSync as readFileSync24, writeFileSync as writeFileSync11, mkdirSync as mkdirSync10 } from "fs";
+import { join as join24 } from "path";
+import { homedir as homedir19 } from "os";
 function getMemoryPath(sessionId) {
-  mkdirSync9(MEMORY_DIR, { recursive: true });
-  return join23(MEMORY_DIR, `${sessionId}.md`);
+  mkdirSync10(MEMORY_DIR, { recursive: true });
+  return join24(MEMORY_DIR, `${sessionId}.md`);
 }
 function loadMemory(sessionId) {
   const path = getMemoryPath(sessionId);
-  if (!existsSync22(path)) {
+  if (!existsSync24(path)) {
     return {
       title: "",
       currentState: "",
@@ -27509,7 +28178,7 @@ function loadMemory(sessionId) {
       lastUpdated: new Date().toISOString()
     };
   }
-  const content = readFileSync22(path, "utf-8");
+  const content = readFileSync24(path, "utf-8");
   return parseMemoryContent(content);
 }
 function parseMemoryContent(content) {
@@ -27554,7 +28223,7 @@ function saveMemory(sessionId, memory) {
   const merged = { ...existing, ...memory, lastUpdated: new Date().toISOString() };
   const path = getMemoryPath(sessionId);
   const content = formatMemory(merged);
-  writeFileSync10(path, content, "utf-8");
+  writeFileSync11(path, content, "utf-8");
 }
 function formatMemory(memory) {
   return `# Session Title
@@ -27659,7 +28328,7 @@ function getMemorySummary(sessionId) {
 }
 var MEMORY_DIR;
 var init_session_memory = __esm(() => {
-  MEMORY_DIR = join23(homedir17(), ".nole-code", "memory");
+  MEMORY_DIR = join24(homedir19(), ".nole-code", "memory");
 });
 
 // src/services/compact/index.ts
@@ -27886,7 +28555,7 @@ var init_verbose = __esm(() => {
 });
 
 // src/ui/output/spinner.ts
-function formatVerboseResult(toolName, result, options = {}) {
+function formatVerboseResult(toolName, result2, options = {}) {
   const {
     isError = false,
     timestamp,
@@ -27906,7 +28575,7 @@ function formatVerboseResult(toolName, result, options = {}) {
     timingStr = elapsed > 1000 ? ` ${dim2}[${(elapsed / 1000).toFixed(1)}s]${reset}` : ` ${dim2}[${elapsed}ms]${reset}`;
   }
   parts.push(`  ${status} ${bold2}${toolName}${reset}${timingStr}`);
-  const lines = result.split(`
+  const lines = result2.split(`
 `);
   const truncated = lines.length > maxLines;
   const displayLines = truncated ? lines.slice(0, maxLines) : lines;
@@ -28040,17 +28709,17 @@ var exports_loader = {};
 __export(exports_loader, {
   loadPlugins: () => loadPlugins
 });
-import { existsSync as existsSync23, readdirSync as readdirSync7 } from "fs";
-import { join as join24 } from "path";
-import { homedir as homedir18 } from "os";
+import { existsSync as existsSync25, readdirSync as readdirSync7 } from "fs";
+import { join as join25 } from "path";
+import { homedir as homedir20 } from "os";
 async function loadPlugins() {
-  if (!existsSync23(PLUGINS_DIR2))
+  if (!existsSync25(PLUGINS_DIR2))
     return [];
   const files = readdirSync7(PLUGINS_DIR2).filter((f) => f.endsWith(".js"));
   const loaded = [];
   for (const file of files) {
     try {
-      const pluginPath = join24(PLUGINS_DIR2, file);
+      const pluginPath = join25(PLUGINS_DIR2, file);
       const plugin = __require(pluginPath);
       if (!plugin.name || !plugin.execute) {
         console.error(`Plugin ${file}: missing name or execute`);
@@ -28078,7 +28747,7 @@ async function loadPlugins() {
 var PLUGINS_DIR2;
 var init_loader2 = __esm(() => {
   init_registry();
-  PLUGINS_DIR2 = join24(homedir18(), ".nole-code", "plugins");
+  PLUGINS_DIR2 = join25(homedir20(), ".nole-code", "plugins");
 });
 
 // src/services/indexer.ts
@@ -28087,8 +28756,8 @@ __export(exports_indexer, {
   indexProject: () => indexProject,
   formatIndexForPrompt: () => formatIndexForPrompt
 });
-import { readFileSync as readFileSync23, readdirSync as readdirSync8, statSync as statSync5 } from "fs";
-import { join as join25, relative as relative3, extname as extname3 } from "path";
+import { readFileSync as readFileSync25, readdirSync as readdirSync8, statSync as statSync5 } from "fs";
+import { join as join26, relative as relative3, extname as extname3 } from "path";
 function indexProject(root, maxFiles = 200) {
   const languages = {};
   const keyFiles = [];
@@ -28107,7 +28776,7 @@ function indexProject(root, maxFiles = 200) {
     for (const entry of entries) {
       if (entry.startsWith(".") || IGNORE_DIRS.has(entry))
         continue;
-      const fullPath = join25(dir, entry);
+      const fullPath = join26(dir, entry);
       try {
         const stat = statSync5(fullPath);
         const rel = relative3(root, fullPath);
@@ -28122,7 +28791,7 @@ function indexProject(root, maxFiles = 200) {
           const lang = LANG_MAP[ext] || ext;
           languages[lang] = (languages[lang] || 0) + 1;
           try {
-            const content = readFileSync23(fullPath, "utf-8");
+            const content = readFileSync25(fullPath, "utf-8");
             const lines = content.split(`
 `).length;
             totalLines += lines;
@@ -28247,7 +28916,7 @@ async function summarizeMessages(messages, client, keepRecent = 10) {
   }).join(`
 `);
   try {
-    const result = await client.chat([
+    const result2 = await client.chat([
       {
         role: "user",
         content: `Summarize this coding session in 3-5 bullet points. Focus on: what was asked, what files were changed, what tools were used, and any errors encountered. Be concise.
@@ -28258,7 +28927,7 @@ ${transcript.slice(0, 8000)}`
       max_tokens: 300,
       temperature: 0
     });
-    const summary = result.content.trim();
+    const summary = result2.content.trim();
     messages.length = 0;
     messages.push(...systemMsgs);
     messages.push({
@@ -28277,18 +28946,20 @@ ${summary}`,
 // src/index.ts
 var exports_src = {};
 __export(exports_src, {
+  lastOutput: () => lastOutput,
   getMiniMaxToken: () => getMiniMaxToken,
+  expandAlias: () => expandAlias,
   activeClient: () => activeClient
 });
-import { existsSync as existsSync25, readFileSync as readFileSync24, mkdirSync as mkdirSync10 } from "fs";
-import { homedir as homedir19 } from "node:os";
-import { join as join26 } from "node:path";
+import { existsSync as existsSync27, readFileSync as readFileSync26, writeFileSync as writeFileSync12, mkdirSync as mkdirSync11 } from "fs";
+import { homedir as homedir21 } from "node:os";
+import { join as join27 } from "node:path";
 import * as readline3 from "readline";
 function _loadEnv(path) {
-  if (!existsSync25(path))
+  if (!existsSync27(path))
     return;
   try {
-    const content = readFileSync24(path, "utf-8");
+    const content = readFileSync26(path, "utf-8");
     for (const line of content.split(`
 `)) {
       const t = line.trim();
@@ -28329,9 +29000,9 @@ async function streamOutput(lines, maxLines, delayMs = 10) {
 }
 function getMiniMaxToken() {
   try {
-    const authPath = join26(homedir19(), ".openclaw", "agents", "main", "agent", "auth-profiles.json");
-    if (existsSync25(authPath)) {
-      const auth2 = JSON.parse(readFileSync24(authPath, "utf-8"));
+    const authPath = join27(homedir21(), ".openclaw", "agents", "main", "agent", "auth-profiles.json");
+    if (existsSync27(authPath)) {
+      const auth2 = JSON.parse(readFileSync26(authPath, "utf-8"));
       return auth2.profiles?.["minimax-portal:default"]?.access || "";
     }
   } catch {}
@@ -28350,15 +29021,61 @@ function detectPlanIntent(input) {
   }
   return null;
 }
-function getBanner(cwd, verbose = false) {
+function getBanner(cwd3, verbose = false) {
   const v2 = verbose ? `${dim("· ")}verbose` : "";
   return `
 ${bold(c2.cyan("▐▛███▜▌"))} ${bold("Nole Code v1.18")} ${dim("· MiniMax")}
-${dim("▝▜█████▛▘")} ${dim(cwd)} ${v2}
+${dim("▝▜█████▛▘")} ${dim(cwd3)} ${v2}
 
 ${divider()}
 ${formatShortcuts()}
 `;
+}
+function ensureHistoryDir() {
+  const dir = join27(homedir21(), ".nole-code");
+  if (!existsSync27(dir)) {
+    mkdirSync11(dir, { recursive: true });
+  }
+}
+function loadHistory() {
+  ensureHistoryDir();
+  if (!existsSync27(HISTORY_FILE))
+    return [];
+  try {
+    const content = readFileSync26(HISTORY_FILE, "utf-8");
+    const lines = content.split(`
+`).filter((l) => l.trim());
+    return lines.slice(-MAX_HISTORY);
+  } catch {
+    return [];
+  }
+}
+function saveHistory(history) {
+  ensureHistoryDir();
+  const trimmed = history.slice(-MAX_HISTORY);
+  writeFileSync12(HISTORY_FILE, trimmed.join(`
+`) + `
+`, "utf-8");
+}
+function loadAliases2() {
+  if (!existsSync27(ALIAS_FILE2))
+    return {};
+  try {
+    return JSON.parse(readFileSync26(ALIAS_FILE2, "utf-8"));
+  } catch {
+    return {};
+  }
+}
+function expandAlias(input) {
+  if (!input.startsWith("/"))
+    return input;
+  const aliases = loadAliases2();
+  const parts = input.slice(1).split(/\s+/);
+  const name = parts[0];
+  if (aliases[name]) {
+    return "/" + aliases[name] + (parts.length > 1 ? " " + parts.slice(1).join(" ") : "");
+  }
+  return input;
 }
 async function runRepl(opts) {
   if (opts.verbose || feature("VERBOSE_OUTPUT")) {
@@ -28397,9 +29114,9 @@ ${dim("Or add keys to ~/.nole-code/.env:")}
 
 Then run ${bold("nole")} again.
 `);
-    const configDir = join26(homedir19(), ".nole-code");
-    if (!existsSync25(configDir)) {
-      mkdirSync10(configDir, { recursive: true });
+    const configDir = join27(homedir21(), ".nole-code");
+    if (!existsSync27(configDir)) {
+      mkdirSync11(configDir, { recursive: true });
       console.log(dim(`  Created ${configDir}/`));
     }
     process.exit(0);
@@ -28428,20 +29145,20 @@ Then run ${bold("nole")} again.
       console.log(dim(`  Loaded ${plugins.length} plugin${plugins.length > 1 ? "s" : ""}: ${plugins.join(", ")}`));
     }
   } catch {}
-  const cwd = opts.cwd || process.cwd();
+  const cwd3 = opts.cwd || process.cwd();
   let session;
   if (opts.session) {
-    session = loadSession(opts.session) || createSession(cwd);
+    session = loadSession(opts.session) || createSession(cwd3);
   } else {
     const recent = listSessions(5);
-    const lastForCwd = recent.find((s) => s.cwd === cwd && s.messages.length > 1);
+    const lastForCwd = recent.find((s) => s.cwd === cwd3 && s.messages.length > 1);
     if (lastForCwd) {
       session = lastForCwd;
       console.log(dim(`  Resuming session ${session.id.slice(0, 20)}... (${session.messages.length} messages)`));
       console.log(dim(`  Use /fork to branch off, /compact to shrink context
 `));
     } else {
-      session = createSession(cwd);
+      session = createSession(cwd3);
     }
   }
   costTracker.startSession(session.id);
@@ -28449,7 +29166,7 @@ Then run ${bold("nole")} again.
   let projectIndex = "";
   try {
     const { indexProject: indexProject2, formatIndexForPrompt: formatIndexForPrompt2 } = await Promise.resolve().then(() => (init_indexer(), exports_indexer));
-    const index = indexProject2(cwd);
+    const index = indexProject2(cwd3);
     if (index.fileCount > 0) {
       projectIndex = formatIndexForPrompt2(index);
       console.log(dim(`  Indexed ${index.fileCount} files (${Object.keys(index.languages).join(", ")})`));
@@ -28460,12 +29177,12 @@ Then run ${bold("nole")} again.
   let gitContext = "";
   try {
     const { execFileSync } = __require("child_process");
-    const cwd2 = opts.cwd || process.cwd();
-    const branch = execFileSync("git", ["branch", "--show-current"], { encoding: "utf-8", cwd: cwd2 }).trim();
-    const status = execFileSync("git", ["status", "--short"], { encoding: "utf-8", cwd: cwd2 }).trim();
+    const cwd4 = opts.cwd || process.cwd();
+    const branch = execFileSync("git", ["branch", "--show-current"], { encoding: "utf-8", cwd: cwd4 }).trim();
+    const status = execFileSync("git", ["status", "--short"], { encoding: "utf-8", cwd: cwd4 }).trim();
     const changed = status ? status.split(`
 `).length : 0;
-    const lastCommit = execFileSync("git", ["log", "--oneline", "-1"], { encoding: "utf-8", cwd: cwd2 }).trim();
+    const lastCommit = execFileSync("git", ["log", "--oneline", "-1"], { encoding: "utf-8", cwd: cwd4 }).trim();
     if (branch) {
       gitContext = `
 - Git branch: ${branch}${changed ? ` (${changed} files changed)` : " (clean)"}`;
@@ -28597,8 +29314,23 @@ ${memorySummary}` : ""}${resumeContext}`;
     if (line.startsWith("/")) {
       const { getAllCommands: getAllCommands2 } = (init_commands2(), __toCommonJS(exports_commands2));
       const cmds = getAllCommands2().map((c3) => "/" + c3.name);
-      const hits = cmds.filter((c3) => c3.startsWith(line));
-      return [hits.length ? hits : cmds, line];
+      const aliases = loadAliases2();
+      const aliasNames = Object.keys(aliases).map((a) => "/" + a);
+      const all = [...cmds, ...aliasNames];
+      const hits = all.filter((c3) => c3.startsWith(line));
+      return [hits.length ? hits : all, line];
+    }
+    if (line.startsWith("!")) {
+      const cmd = line.slice(1).trim();
+      if (cmd) {
+        try {
+          const { execSync: execSync4 } = __require("child_process");
+          const completions = execSync4(`compgen -c ${cmd}`, { encoding: "utf-8" }).split(`
+`).filter(Boolean).slice(0, 20);
+          return [completions, line];
+        } catch {}
+      }
+      return [[], line];
     }
     const parts = line.split(/\s+/);
     const last = parts[parts.length - 1] || "";
@@ -28625,10 +29357,12 @@ ${memorySummary}` : ""}${resumeContext}`;
     }
     return [[], line];
   };
+  const history = loadHistory();
   const rl3 = readline3.createInterface({
     input: process.stdin,
     output: process.stdout,
-    completer
+    completer,
+    historySize: 0
   });
   const prompt = () => process.stdout.write(`${dim("❯")} `);
   let toolCallId = 0;
@@ -28651,6 +29385,7 @@ ${c2.yellow("⏹")} Cancelled`);
     }
     sigintCount++;
     if (sigintCount >= 2) {
+      saveHistory(history);
       unsubAgent();
       const { getAllAgents: getAllAgents2, killAgent: ka } = (init_spawner(), __toCommonJS(exports_spawner));
       for (const agent of getAllAgents2()) {
@@ -28679,29 +29414,34 @@ ${dim("Press Ctrl+C again to exit, or type a message.")}`);
     prompt();
   });
   const processInput = async (input) => {
-    if (!input.trim()) {
+    let expandedInput = expandAlias(input);
+    if (!expandedInput.trim()) {
       prompt();
       return;
     }
-    if (input.length > 50000) {
+    if (expandedInput.length > 50000) {
       console.log(`
-${c2.yellow("⚠")} Message too large (${(input.length / 1024).toFixed(0)}KB). Max ~50KB.`);
+${c2.yellow("⚠")} Message too large (${(expandedInput.length / 1024).toFixed(0)}KB). Max ~50KB.`);
       console.log(dim("Use @filename to reference files instead of pasting contents."));
       prompt();
       return;
     }
-    const planIntent = detectPlanIntent(input);
+    if (expandedInput.trim()) {
+      history.push(expandedInput.trim());
+      saveHistory(history);
+    }
+    const planIntent = detectPlanIntent(expandedInput);
     if (planIntent) {
       const { generatePlanSteps: generatePlanSteps2, enterPlanMode: enterPlanMode2 } = await Promise.resolve().then(() => (init_plan(), exports_plan));
       const steps = generatePlanSteps2(planIntent);
       const plan = enterPlanMode2(planIntent, steps);
       console.log(`
-${c2.cyan("\uD83D\uDCCB PLAN MODE")} — triggered by "${input.slice(0, 50)}..."`);
+${c2.cyan("\uD83D\uDCCB PLAN MODE")} — triggered by "${expandedInput.slice(0, 50)}..."`);
       console.log(`${plan.steps.length} steps identified. Use /plan approve to proceed.`);
       prompt();
       return;
     }
-    if (input.startsWith("!")) {
+    if (expandedInput.startsWith("!")) {
       const shellCmd = input.slice(1).trim();
       if (!shellCmd) {
         console.log(`
@@ -28729,18 +29469,18 @@ ${dim("Usage: ! <command>")}`);
       prompt();
       return;
     }
-    const parsed = parseCommand(input);
+    const parsed = parseCommand(expandedInput);
     if (parsed) {
       const cmd = getCommand(parsed.cmd);
       if (cmd) {
         try {
-          const result = await cmd.execute(parsed.args, {
+          const result2 = await cmd.execute(parsed.args, {
             cwd: opts.cwd || process.cwd(),
             sessionId: session.id
           });
-          if (result)
+          if (result2)
             console.log(`
-${result}
+${result2}
 `);
         } catch (err) {
           printError(String(err));
@@ -28759,15 +29499,14 @@ ${c2.yellow("❓ Unknown command:")} /${parsed.cmd}`);
     const sessionStartTime = Date.now();
     let toolErrorCount = 0;
     lastUserMessage = input;
-    let expandedInput = input;
-    const fileRefs = input.match(/@([\w.\/\-]+)/g);
+    const fileRefs = expandedInput.match(/@([\w.\/\-]+)/g);
     if (fileRefs) {
       for (const ref of fileRefs) {
         const filePath = ref.slice(1);
         const fullPath = resolve(opts.cwd || process.cwd(), filePath);
-        if (existsSync25(fullPath)) {
+        if (existsSync27(fullPath)) {
           try {
-            const content = readFileSync24(fullPath, "utf-8");
+            const content = readFileSync26(fullPath, "utf-8");
             const truncated = content.length > 5000 ? content.slice(0, 5000) + `
 ... (truncated)` : content;
             expandedInput = expandedInput.replace(ref, `
@@ -28780,7 +29519,7 @@ ${truncated}
         }
       }
     }
-    console.log(`${c2.blue("➜ you")} │ ${input}`);
+    console.log(`${c2.blue("➜ you")} │ ${expandedInput}`);
     session.messages.push({
       role: "user",
       content: expandedInput,
@@ -28911,6 +29650,7 @@ ${divider()}
           }));
         }
         session.messages.push(assistantMsg);
+        lastOutput = responseText;
         if (usage) {
           costTracker.trackRequest(settings.model || "MiniMax-M2.7", usage.input, usage.output);
         }
@@ -28933,20 +29673,20 @@ ${divider()}
           const preview = tc.input.command ? String(tc.input.command).slice(0, 60) : JSON.stringify(tc.input).slice(0, 60);
           process.stdout.write(`\r${c2.cyan("⟳")} ${tc.name} ${dim(`(${preview})`)}
 `);
-          const result = await executeTool(tc.name, tc.input, { cwd: opts.cwd || process.cwd(), sessionId: session.id });
-          toolResults.push({ tc, result, ms: Date.now() - toolStart });
+          const result2 = await executeTool(tc.name, tc.input, { cwd: opts.cwd || process.cwd(), sessionId: session.id });
+          toolResults.push({ tc, result: result2, ms: Date.now() - toolStart });
         } else {
           console.log(dim(`  Running ${toolCalls.length} tools in parallel...`));
           const promises = toolCalls.map(async (tc) => {
             const toolStart = Date.now();
-            const result = await executeTool(tc.name, tc.input, { cwd: opts.cwd || process.cwd(), sessionId: session.id });
-            return { tc, result, ms: Date.now() - toolStart };
+            const result2 = await executeTool(tc.name, tc.input, { cwd: opts.cwd || process.cwd(), sessionId: session.id });
+            return { tc, result: result2, ms: Date.now() - toolStart };
           });
           const results = await Promise.all(promises);
           toolResults.push(...results);
         }
-        for (const { tc, result, ms: ms2 } of toolResults) {
-          let llmContent = result.content;
+        for (const { tc, result: result2, ms: ms2 } of toolResults) {
+          let llmContent = result2.content;
           if (llmContent.length > MAX_TOOL_RESULT) {
             const lines = llmContent.split(`
 `);
@@ -28967,22 +29707,22 @@ ${divider()}
             name: tc.name,
             timestamp: new Date().toISOString()
           });
-          const displayLines = result.content.split(`
+          const displayLines = result2.content.split(`
 `);
           const maxLines = opts.verbose ? 50 : 10;
           const elapsed2 = ms2 > 1000 ? `${(ms2 / 1000).toFixed(1)}s` : `${ms2}ms`;
           if (opts.verbose) {
-            console.log(formatVerboseResult(tc.name, result.content, {
-              isError: result.isError,
+            console.log(formatVerboseResult(tc.name, result2.content, {
+              isError: result2.isError,
               timestamp: Date.now() - ms2,
               maxLines
             }));
           } else {
-            if (result.isError)
+            if (result2.isError)
               toolErrorCount++;
             streamOutput(displayLines, maxLines, displayLines.length > 20 ? 5 : 0);
           }
-          const status = result.isError ? "❌" : "✅";
+          const status = result2.isError ? "❌" : "✅";
           console.log(`  ${status} ${tc.name} ${dim(`[${elapsed2}]`)}
 `);
         }
@@ -29036,29 +29776,29 @@ ${c2.yellow("⚠")} Reached maximum ${MAX_TURNS} turns in agentic loop.
 }
 function parseArgs() {
   const opts = { cwd: process.cwd() };
-  const args = process.argv.slice(2);
-  if (args[0] === "init") {
+  const args2 = process.argv.slice(2);
+  if (args2[0] === "init") {
     const { createNoleMd: createNoleMd2 } = (init_onboarding(), __toCommonJS(exports_onboarding));
-    const cwd = args[1] || process.cwd();
-    const path = createNoleMd2(cwd);
+    const cwd3 = args2[1] || process.cwd();
+    const path = createNoleMd2(cwd3);
     console.log(`Created ${path}`);
     console.log("Edit this file to configure project context for Nole.");
     process.exit(0);
   }
-  for (let i = 0;i < args.length; i++) {
-    switch (args[i]) {
+  for (let i = 0;i < args2.length; i++) {
+    switch (args2[i]) {
       case "-s":
       case "--session":
-        opts.session = args[++i];
+        opts.session = args2[++i];
         break;
       case "-c":
       case "--cwd":
-        opts.cwd = args[++i];
+        opts.cwd = args2[++i];
         break;
       case "-m":
       case "--message":
-        opts.message = args.slice(i + 1).join(" ");
-        i = args.length;
+        opts.message = args2.slice(i + 1).join(" ");
+        i = args2.length;
         break;
       case "--verbose":
       case "-v":
@@ -29075,8 +29815,8 @@ Sessions:`);
         process.exit(0);
         break;
       case "--delete-session":
-        deleteSession(args[++i]);
-        console.log(`Deleted session ${args[i - 1]}`);
+        deleteSession(args2[++i]);
+        console.log(`Deleted session ${args2[i - 1]}`);
         process.exit(0);
         break;
       case "--version":
@@ -29134,7 +29874,7 @@ async function main() {
   const opts = parseArgs();
   await runRepl(opts);
 }
-var cancelRequested = false, isProcessing = false, lastUserMessage = "", activeClient = null, PLAN_INTENT_PATTERNS;
+var cancelRequested = false, isProcessing = false, lastUserMessage = "", lastOutput = "", activeClient = null, PLAN_INTENT_PATTERNS, HISTORY_FILE, MAX_HISTORY = 1000, ALIAS_FILE2;
 var init_src = __esm(() => {
   init_llm();
   init_registry();
@@ -29150,9 +29890,9 @@ var init_src = __esm(() => {
   init_spinner();
   init_streaming();
   init_markdown();
-  _loadEnv(join26(homedir19(), "nole-code", ".env"));
-  _loadEnv(join26(homedir19(), ".nole-code", ".env"));
-  _loadEnv(join26(process.cwd(), ".env"));
+  _loadEnv(join27(homedir21(), "nole-code", ".env"));
+  _loadEnv(join27(homedir21(), ".nole-code", ".env"));
+  _loadEnv(join27(process.cwd(), ".env"));
   PLAN_INTENT_PATTERNS = [
     /^let['’]?s?\s+(make\s+a\s+plan|plan|break\s+this\s+down|walk\s+me\s+through)/i,
     /^plan\s+(this|it|that|out|for|our|the)/i,
@@ -29170,6 +29910,8 @@ var init_src = __esm(() => {
     /^should\s+we\s+plan/i,
     /^approach\s+(this|it)\s+step\s+by\s+step/i
   ];
+  HISTORY_FILE = join27(homedir21(), ".nole-code", "history");
+  ALIAS_FILE2 = join27(homedir21(), ".nole-code", "aliases.json");
   main().catch((err) => {
     console.error("FATAL ERR:", err?.message, err?.stack?.split(`
 `).slice(0, 3).join("|"));
@@ -29179,6 +29921,8 @@ var init_src = __esm(() => {
 init_src();
 
 export {
+  lastOutput,
   getMiniMaxToken,
+  expandAlias,
   activeClient
 };
