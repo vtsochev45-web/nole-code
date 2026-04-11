@@ -160,7 +160,7 @@ function detectPlanIntent(input: string): string | null {
 function getBanner(cwd: string, verbose = false) {
   const v = verbose ? `${dim('· ')}verbose` : ''
   return `
-${bold(c.cyan('▐▛███▜▌'))} ${bold('Nole Code v1.18')} ${dim('· MiniMax')}
+${bold(c.cyan('▐▛███▜▌'))} ${bold('Nole Code v1.19')} ${dim('· MiniMax')}
 ${dim('▝▜█████▛▘')} ${dim(cwd)} ${v}
 
 ${divider()}

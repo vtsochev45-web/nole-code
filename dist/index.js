@@ -29589,7 +29589,7 @@ function detectPlanIntent(input) {
 function getBanner(cwd3, verbose = false) {
   const v2 = verbose ? `${dim("· ")}verbose` : "";
   return `
-${bold(c2.cyan("▐▛███▜▌"))} ${bold("Nole Code v1.18")} ${dim("· MiniMax")}
+${bold(c2.cyan("▐▛███▜▌"))} ${bold("Nole Code v1.19")} ${dim("· MiniMax")}
 ${dim("▝▜█████▛▘")} ${dim(cwd3)} ${v2}
 
 ${divider()}

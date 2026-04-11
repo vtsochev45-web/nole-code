@@ -1,6 +1,6 @@
 {
   "name": "nole-code",
-  "version": "1.18.0",
+  "version": "1.19.0",
   "description": "AI coding assistant CLI — 31 tools, multi-provider, agentic tool loop, MCP server mode",
   "type": "module",
   "bin": {
