@@ -108,7 +108,7 @@ export class Companion {
 
   introduce(): string {
     if (!this.isEnabled) return ''
-    return `${moodEmojis[this.currentMood} ${this.config.name} here! ${this.spriteArt}`
+    return `${moodEmojis[this.currentMood]} ${this.config.name} here! ${this.spriteArt}`
   }
 
   setMood(mood: Mood): void {

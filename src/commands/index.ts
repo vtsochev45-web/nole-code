@@ -908,3 +908,7 @@ registerCommand({
     return `Unknown action: ${action}. Use 'stop' or 'log'.`
   },
 })
+
+// Buddy commands
+import { registerBuddyCommands } from '../buddy/commands.js'
+registerBuddyCommands(registerCommand)
