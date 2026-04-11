@@ -219,22 +219,33 @@ export class LLMClient {
       }))
     }
 
-    const response = await fetchWithRetry('https://api.minimax.io/anthropic/v1/messages', {
+    // Use active provider's URL and headers (default to MiniMax if no providers configured)
+    const activeP = this.providers[this.activeProvider]
+    const chatUrl = activeP?.baseUrl || 'https://api.minimax.io/anthropic/v1/messages'
+    const chatHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${this.apiKey}`,
+      ...(activeP?.headers || { 'anthropic-version': '2023-06-01' }),
+    }
+
+    // If active provider uses OpenAI format (not MiniMax), route through chatViaOpenAI
+    if (activeP && activeP.name !== 'minimax') {
+      return this.chatViaOpenAI(messages, options, activeP)
+    }
+
+    const response = await fetchWithRetry(chatUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
-        'anthropic-version': '2023-06-01',
-      },
+      headers: chatHeaders,
       body: JSON.stringify(body),
     })
 
     if (!response.ok) {
       const errorText = await response.text()
 
-      // Try fallback providers before giving up
+      // Try fallback providers before giving up (skip the one that just failed)
       if (RETRY_STATUS.has(response.status) && this.providers.length > 1) {
-        for (let p = 1; p < this.providers.length; p++) {
+        for (let p = 0; p < this.providers.length; p++) {
+          if (p === this.activeProvider) continue  // skip the provider that failed
           const provider = this.providers[p]
           try {
             process.stderr.write(`\x1b[33m⟳ Falling back to ${provider.name}...\x1b[0m\n`)
@@ -370,13 +381,18 @@ export class LLMClient {
     }
 
     try {
-      const response = await fetchWithRetry('https://api.minimax.io/anthropic/v1/messages', {
+      // Use active provider's URL and headers
+      const activeP = this.providers[this.activeProvider]
+      const streamUrl = activeP?.baseUrl || 'https://api.minimax.io/anthropic/v1/messages'
+      const streamHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`,
+        ...(activeP?.headers || { 'anthropic-version': '2023-06-01' }),
+      }
+
+      const response = await fetchWithRetry(streamUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-          'anthropic-version': '2023-06-01',
-        },
+        headers: streamHeaders,
         body: JSON.stringify(body),
       })
 
@@ -587,4 +603,5 @@ export class LLMClient {
   }
 }
 
-export const llm = new LLMClient()
+// Default client — use LLMClient constructor directly with proper key/model instead
+// export const llm = new LLMClient()

@@ -918,4 +918,8 @@ setTimeout(() => {
   import('../buddy/commands.js').then(m => m.registerBuddyCommands(registerCommand)).catch(() => {})
   // Skills commands
   import('./skills.js').then(m => m.registerSkillCommands(registerCommand)).catch(() => {})
+  // New file commands
+  import('./read.js').then(m => m.registerReadCommand(registerCommand)).catch(() => {})
+  import('./grep.js').then(m => m.registerGrepCommand(registerCommand)).catch(() => {})
+  import('./test.js').then(m => m.registerTestCommand(registerCommand)).catch(() => {})
 }, 0)

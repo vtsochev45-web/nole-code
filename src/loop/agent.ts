@@ -65,6 +65,7 @@ function startStepWatcher(checkpointId: string): void {
         emit({
           type: 'step_complete',
           step: i,
+          total,
           duration: completed - started,
           description: step.description,
         })
@@ -139,8 +140,6 @@ function cleanup(): void {
 // ============ Signal Handling ============
 
 function setupSignalHandlers(checkpointId: string): void {
-  const { pauseCheckpoint, saveCheckpoint, loadCheckpoint } = require('./checkpoint.js')
-  
   // SIGTERM - checkpoint and exit gracefully
   process.on('SIGTERM', async () => {
     cleanup()

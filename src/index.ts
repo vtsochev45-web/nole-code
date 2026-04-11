@@ -200,15 +200,15 @@ ${dim('▝▜█████▛▘')} ${dim('First-time setup')}
 
 ${bold('You need an API key to get started.')}
 
-${c.cyan('Option 1 — OpenRouter')} ${dim('(recommended, many free models)')}
-  1. Go to ${c.cyan('https://openrouter.ai/keys')}
-  2. Create a free account and generate a key
-  3. Run: ${bold('export OPENROUTER_API_KEY=sk-or-...')}
-
-${c.cyan('Option 2 — MiniMax')} ${dim('(free tier, can be slow)')}
+${c.cyan('Option 1 — MiniMax')} ${dim('(recommended, free with reasoning)')}
   1. Go to ${c.cyan('https://platform.minimaxi.com')}
   2. Get your API key
   3. Run: ${bold('export MINIMAX_API_KEY=your-key')}
+
+${c.cyan('Option 2 — OpenRouter')} ${dim('(fallback, many free models)')}
+  1. Go to ${c.cyan('https://openrouter.ai/keys')}
+  2. Create a free account and generate a key
+  3. Run: ${bold('export OPENROUTER_API_KEY=sk-or-...')}
 
 ${c.cyan('Option 3 — OpenAI')}
   1. Go to ${c.cyan('https://platform.openai.com/api-keys')}
@@ -232,7 +232,6 @@ Then run ${bold('nole')} again.
 
   // Determine which API key to use — priority: MiniMax (OAuth or API key) > OpenRouter > OpenAI
   const { OPENROUTER_API_KEY, OPENAI_API_KEY, MINIMAX_API_KEY: minimaxKey } = await import('./utils/env.js')
-  console.error(`[DEBUG] token=${token ? 'YES' : 'NO'}, minimaxKey=${minimaxKey ? 'YES' : 'NO'}, OPENROUTER=${OPENROUTER_API_KEY ? 'YES' : 'NO'}`)
   let primaryKey = token || minimaxKey
   let primaryModel = settings.model || 'MiniMax-M2.7'
 
@@ -287,7 +286,7 @@ Then run ${bold('nole')} again.
   costTracker.startSession(session.id)
 
   // Load project context
-  const projectContext = loadProjectContext(opts.cwd || process.cwd())
+  const { content: projectContext, projectInstructions } = loadProjectContext(opts.cwd || process.cwd())
 
   // Index the project (fast scan of files, exports, structure)
   let projectIndex = ''
@@ -415,6 +414,7 @@ You have access to these tools. Call them when needed — do not ask for permiss
 - Users can reference files with @filename — the contents are inlined into the message
 ${projectIndex ? `\n${projectIndex}` : ''}
 ${projectContext ? `\n# Project Context (from NOLE.md)\n${projectContext}` : ''}
+${projectInstructions ? `\n# Project Instructions\n${projectInstructions}` : ''}
 ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
 
   // Initialize messages
@@ -664,10 +664,23 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
 
         if (cancelRequested) break
 
-        // Pre-flight: check if context is too large, auto-compact if needed
+        // Auto-compact if context > 70% full (before LLM call)
         const { estimateTotalTokens: estTokens } = await import('./utils/count-tokens.js')
         const currentTokens = estTokens(session!.messages)
-        if (currentTokens > 100000) {
+        const maxCtx = 128000
+        const ctxPercent = (currentTokens / maxCtx) * 100
+        if (ctxPercent > 70) {
+          console.log(dim(`  Auto-compacting context (${ctxPercent.toFixed(0)}% full)...`))
+          try {
+            const { maybeCompact } = await import('./services/compact/index.js')
+            maybeCompact(session!.messages, session!.id)
+            saveSession(session!)
+            console.log(dim(`  Compaction complete`))
+          } catch (e) {
+            console.log(dim(`  Compaction failed: ${e}`))
+          }
+        } else if (currentTokens > 100000) {
+          // Pre-flight: check if context is too large, auto-compact if needed
           console.log(dim(`  Context large (~${(currentTokens/1000).toFixed(0)}K tokens), summarizing...`))
           try {
             const { summarizeMessages } = await import('./services/summarize.js')

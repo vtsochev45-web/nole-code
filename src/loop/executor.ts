@@ -85,7 +85,7 @@ function printProgress(checkpoint: Checkpoint): void {
   // State color
   let stateColor = dim
   if (checkpoint.state === 'running') stateColor = c.yellow
-  if (checkpoint.state === 'complete') stateColor = green
+  if (checkpoint.state === 'complete') stateColor = c.green
   if (checkpoint.state === 'failed' || checkpoint.state === 'aborted') stateColor = c.red
   
   // Header
@@ -370,7 +370,7 @@ export async function runLoop(options: ExecutorOptions): Promise<ExecutionResult
   const client = new LLMClient(token, settings.model || 'MiniMax-M2.7')
   
   // Session messages for context
-  const sessionMessages: Array<{ role: string; content: string; name?: string }> = []
+  const sessionMessages: Array<{ role: string; content: string; name?: string; tool_call_id?: string; tool_calls?: Array<{ id?: string; name: string; input: Record<string, unknown> }> }> = []
   
   // Plan steps if pending
   if (checkpoint.state === 'pending' || checkpoint.steps.length === 0) {

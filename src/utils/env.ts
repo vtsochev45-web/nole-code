@@ -48,17 +48,7 @@ export interface ProviderConfig {
 export function getProviders(): ProviderConfig[] {
   const providers: ProviderConfig[] = []
 
-  // OpenRouter first — most reliable, many free models
-  if (OPENROUTER_API_KEY) {
-    providers.push({
-      name: 'openrouter',
-      baseUrl: 'https://openrouter.ai/api/v1/chat/completions',
-      apiKey: OPENROUTER_API_KEY,
-      model: 'google/gemini-2.5-flash',
-    })
-  }
-
-  // MiniMax — free but often overloaded
+  // MiniMax first — free, primary provider
   if (MINIMAX_API_KEY) {
     providers.push({
       name: 'minimax',
@@ -69,7 +59,17 @@ export function getProviders(): ProviderConfig[] {
     })
   }
 
-  // OpenAI
+  // OpenRouter — fallback, many free models
+  if (OPENROUTER_API_KEY) {
+    providers.push({
+      name: 'openrouter',
+      baseUrl: 'https://openrouter.ai/api/v1/chat/completions',
+      apiKey: OPENROUTER_API_KEY,
+      model: 'google/gemini-2.5-flash',
+    })
+  }
+
+  // OpenAI — last resort
   if (OPENAI_API_KEY) {
     providers.push({
       name: 'openai',

@@ -185,16 +185,17 @@ export function spawnLoop(goal: string, cwd?: string): string {
           }
         }
         
-        // Handle completion
+        // Handle completion — capture checkpointId before clearing activeLoop
         if (event.type === 'loop_complete') {
-          const cpId = activeLoop?.checkpointId || event.checkpointId
-          notifyComplete(cpId, true, event.errors || 0).catch(() => {})
-          if (activeLoop) activeLoop.onComplete?.({ success: true, errors: event.errors || 0 })
+          const cpId = activeLoop?.checkpointId
+          const onComplete = activeLoop?.onComplete
           activeLoop = null
+          if (cpId) notifyComplete(cpId, true, event.errors || 0).catch(() => {})
+          onComplete?.({ success: true, errors: event.errors || 0 })
         } else if (event.type === 'loop_paused' || event.type === 'loop_aborted') {
           const cpId = activeLoop?.checkpointId
-          notifyComplete(cpId, false, 0).catch(() => {})
           activeLoop = null
+          if (cpId) notifyComplete(cpId, false, 0).catch(() => {})
         }
       }
     }

@@ -192,8 +192,13 @@ ${structure || '# Project directory structure'}
   return path
 }
 
-// Load NOLE.md if exists
-export function loadProjectContext(cwd: string): string | null {
+// Load NOLE.md if exists - returns object with content and projectInstructions
+export interface ProjectContext {
+  content: string | null
+  projectInstructions: string
+}
+
+export function loadProjectContext(cwd: string): ProjectContext {
   const paths = [
     join(cwd, 'NOLE.md'),
     join(cwd, '.nole.md'),
@@ -201,15 +206,23 @@ export function loadProjectContext(cwd: string): string | null {
     join(cwd, 'CONTEXT.md'),
   ]
 
+  let content: string | null = null
+  let projectInstructions = ''
+
   for (const p of paths) {
     if (existsSync(p)) {
       try {
-        return readFileSync(p, 'utf-8')
+        content = readFileSync(p, 'utf-8')
+        // Check if it's a NOLE.md or .nolecode file and extract project instructions
+        if (p.endsWith('NOLE.md') || p.endsWith('.nolecode') || p.endsWith('.nole.md')) {
+          projectInstructions = content
+        }
+        break
       } catch {}
     }
   }
 
-  return null
+  return { content, projectInstructions }
 }
 
 // Settings management
