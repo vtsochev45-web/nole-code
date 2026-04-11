@@ -27509,7 +27509,7 @@ function registerContextCommand(registerCmd) {
   registerCmd({
     name: "context",
     description: "Show current REPL context state",
-    aliases: ["ctx", "status"],
+    aliases: ["ctx", "info"],
     execute: async (_args, ctx) => {
       const session = loadSessionInfo(ctx.sessionId);
       const currentCwd = ctx.cwd || cwd();

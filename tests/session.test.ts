@@ -99,7 +99,7 @@ describe('Session Compaction', () => {
     session.messages.push({ role: 'system', content: 'System prompt', timestamp: '' })
     for (let i = 0; i < 10; i++) {
       session.messages.push({ role: 'user', content: `Question ${i}`, timestamp: '' })
-      session.messages.push({ role: 'assistant', content: `Answer ${i}`, timestamp: '' })
+      session.messages.push({ role: 'assistant', content: `Answer ${i}`, tool_calls: [{ id: `tc_${i}`, name: 'Bash', input: {} }], timestamp: '' })
       session.messages.push({ role: 'tool', content: `Tool result ${i}`, tool_call_id: `tc_${i}`, name: 'Bash', timestamp: '' })
     }
     saveSession(session)
@@ -124,6 +124,7 @@ describe('Session Compaction', () => {
     testSessions.push(session.id)
 
     session.messages.push({ role: 'system', content: 'System', timestamp: '' })
+    session.messages.push({ role: 'assistant', content: 'Running tool', tool_calls: [{ id: 'tc1', name: 'Bash', input: {} }], timestamp: '' })
     session.messages.push({ role: 'tool', content: 'Result 1', tool_call_id: 'tc1', name: 'Bash', timestamp: '' })
     saveSession(session)
 
