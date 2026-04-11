@@ -25951,6 +25951,615 @@ var init_test = __esm(() => {
   execAsync2 = promisify2(exec2);
 });
 
+// src/commands/debug.ts
+var exports_debug = {};
+__export(exports_debug, {
+  registerDebugCommand: () => registerDebugCommand
+});
+import { exec as exec3 } from "child_process";
+import { promisify as promisify3 } from "util";
+import { existsSync as existsSync19, readFileSync as readFileSync19 } from "fs";
+async function getProcessInfo(pid) {
+  try {
+    process.kill(pid, 0);
+  } catch {
+    return null;
+  }
+  const cmdlinePath = `/proc/${pid}/cmdline`;
+  if (!existsSync19(cmdlinePath)) {
+    return { pid, language: "unknown", cmdline: [] };
+  }
+  const cmdline = readFileSync19(cmdlinePath, "utf-8").split("\x00").filter(Boolean);
+  const statusPath = `/proc/${pid}/status`;
+  let memoryRss;
+  let status;
+  if (existsSync19(statusPath)) {
+    const statusContent = readFileSync19(statusPath, "utf-8");
+    const rssMatch = statusContent.match(/VmRSS:\s+(\d+)\s+kB/);
+    if (rssMatch) {
+      memoryRss = `${Math.round(parseInt(rssMatch[1]) / 1024)} MB`;
+    }
+    const stateMatch = statusContent.match(/State:\s+(\S)/);
+    if (stateMatch) {
+      status = stateMatch[1];
+    }
+  }
+  let language = "unknown";
+  const firstCmd = cmdline[0]?.toLowerCase() || "";
+  if (firstCmd.includes("node") || firstCmd.includes("nodejs")) {
+    language = "node";
+  } else if (firstCmd.includes("python") || firstCmd.includes("python3")) {
+    language = "python";
+  } else if (firstCmd.includes("bun")) {
+    language = "bun";
+  } else if (firstCmd.includes("deno")) {
+    language = "deno";
+  }
+  let uptime;
+  try {
+    const statContent = readFileSync19("/proc/" + pid + "/stat", "utf-8");
+    const startTime = parseInt(statContent.split(" ")[21]);
+    const clkTck = 100;
+    const bootTime = Date.now() / 1000 - parseInt(readFileSync19("/proc/uptime", "utf-8").split(" ")[0]);
+    uptime = Math.floor(bootTime + startTime / clkTck);
+  } catch {}
+  return { pid, language, cmdline, memoryRss, status, uptime };
+}
+async function attachNodejs(pid) {
+  const info = await getProcessInfo(pid);
+  if (!info || info.language !== "node") {
+    return `Process ${pid} is not a Node.js process (language: ${info?.language || "unknown"})`;
+  }
+  try {
+    process.kill(pid, "SIGUSR1");
+  } catch (e) {
+    return `Failed to send SIGUSR1 to ${pid}: ${e}`;
+  }
+  await new Promise((r) => setTimeout(r, 500));
+  try {
+    const wsUrl = "http://localhost:9229/json";
+    const response = await fetch(wsUrl, { signal: AbortSignal.timeout(2000) });
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data[0]) {
+        const info2 = data[0];
+        return `✅ Node.js Inspector Attached
+
+  PID:        ${pid}
+  Debugger:   ws://localhost:9229
+  WebSocket:  ${info2.webSocketDebuggerUrl}
+  Type:       ${info2.type}
+  Title:      ${info2.title}
+  URL:        ${info2.devtoolsFrontendUrl}
+
+Connect with Chrome DevTools or:
+  node --inspect ${pid}
+`;
+      }
+    }
+  } catch {}
+  return `\uD83D\uDD0D Process ${pid} is Node.js but inspector may not be enabled.
+
+To enable, add --inspect flag when starting:
+  node --inspect server.js
+
+Or send SIGUSR1 to running process:
+  kill -USR1 ${pid}
+
+Then connect to ws://localhost:9229`;
+}
+async function attachPython(pid) {
+  const info = await getProcessInfo(pid);
+  if (!info || info.language !== "python") {
+    return `Process ${pid} is not a Python process (language: ${info?.language || "unknown"})`;
+  }
+  let pySpyVersion = "";
+  try {
+    const { stdout } = await execAsync3("py-spy --version");
+    pySpyVersion = stdout.trim();
+  } catch {}
+  if (!pySpyVersion) {
+    return `\uD83D\uDD0D Process ${pid} is Python but py-spy is not installed.
+
+Install py-spy for profile data:
+  pip install py-spy
+
+Quick info from /proc:
+${info.memoryRss ? `  Memory:    ${info.memoryRss}` : ""}
+${info.status ? `  State:    ${info.status}` : ""}
+${info.uptime ? `  Uptime:   ${info.uptime}s` : ""}
+  Command:  ${info.cmdline.join(" ").slice(0, 60)}`;
+  }
+  try {
+    const { stdout, stderr } = await execAsync3(`py-spy dump --pid ${pid}`, { timeout: 5000 });
+    if (stdout) {
+      return `✅ Python Process Info (py-spy)
+
+  PID:       ${pid}
+  Memory:    ${info.memoryRss || "N/A"}
+  State:     ${info.status || "N/A"}
+  Uptime:    ${info.uptime ? `${info.uptime}s` : "N/A"}
+
+${stdout.slice(0, 2000)}`;
+    }
+  } catch (e) {
+    return `py-spy failed: ${e}`;
+  }
+  return `Could not get py-spy data for ${pid}`;
+}
+async function showBasicInfo(pid) {
+  const info = await getProcessInfo(pid);
+  if (!info) {
+    return `Process ${pid} not found or not accessible`;
+  }
+  return `Process ${pid} Info:
+
+  Language:  ${info.language}
+  State:     ${info.status || "?"}
+  Memory:    ${info.memoryRss || "N/A"}
+  Uptime:    ${info.uptime ? `${info.uptime}s` : "N/A"}
+  Command:   ${info.cmdline.join(" ").slice(0, 80)}`;
+}
+function registerDebugCommand(registerCmd) {
+  registerCmd({
+    name: "debug",
+    description: "Attach to Node.js/Python process for debugging",
+    execute: async (args) => {
+      const pidStr = args[0];
+      if (!pidStr) {
+        return `Usage: /debug <pid>
+
+Attaches to a running Node.js or Python process.
+
+Examples:
+  /debug 12345           - Show basic process info
+  /debug 12345 node      - Attach Node.js inspector
+  /debug 12345 python    - Get Python stack with py-spy
+`;
+      }
+      const pid = parseInt(pidStr);
+      if (isNaN(pid)) {
+        return `Invalid PID: ${pidStr}`;
+      }
+      const mode = args[1] || "info";
+      if (mode === "node" || mode === "js") {
+        return attachNodejs(pid);
+      }
+      if (mode === "python" || mode === "py") {
+        return attachPython(pid);
+      }
+      return showBasicInfo(pid);
+    }
+  });
+}
+var execAsync3;
+var init_debug = __esm(() => {
+  execAsync3 = promisify3(exec3);
+});
+
+// src/commands/multi.ts
+var exports_multi = {};
+__export(exports_multi, {
+  registerMultiCommand: () => registerMultiCommand
+});
+function createClient() {
+  return new LLMClient;
+}
+async function makeCall(client, prompt) {
+  const messages = [
+    { role: "user", content: prompt }
+  ];
+  const result = await client.chat(messages, { temperature: 0.7 });
+  return {
+    index: 0,
+    content: result.content,
+    toolCalls: result.toolCalls
+  };
+}
+function findDifferences(responses) {
+  const diffLines = new Set;
+  const allLines = responses.map((r) => r.content.split(`
+`));
+  const maxLines = Math.max(...allLines.map((l) => l.length));
+  for (let i = 0;i < maxLines; i++) {
+    const lines = allLines.map((l) => l[i] || "");
+    const first = lines[0];
+    if (lines.some((l) => l !== first && l.trim() !== "")) {
+      diffLines.add(i);
+    }
+  }
+  return diffLines;
+}
+function registerMultiCommand(registerCmd) {
+  registerCmd({
+    name: "multi",
+    description: "Run LLM 3 times and pick the best response",
+    aliases: ["bestof", "branch"],
+    execute: async (args) => {
+      const prompt = args.join(" ");
+      if (!prompt) {
+        return `Usage: /multi <prompt>
+
+Runs the same prompt through the LLM 3 times concurrently
+and lets you pick the best response.
+
+Examples:
+  /multi Write a function to parse JSON
+  /multi Explain quantum computing simply
+`;
+      }
+      const clients = [createClient(), createClient(), createClient()];
+      const results = await Promise.all(clients.map((client, idx) => makeCall(client, prompt).then((r) => ({ ...r, index: idx + 1 }))));
+      const diffLines = findDifferences(results);
+      const lines = [
+        "═══ BEST-OF-3 RESULTS ═══",
+        "",
+        `Prompt: ${prompt.slice(0, 60)}${prompt.length > 60 ? "..." : ""}`,
+        ""
+      ];
+      const uniqueContents = new Set(results.map((r) => r.content.slice(0, 100)));
+      const isUnique = uniqueContents.size === results.length;
+      for (const r of results) {
+        lines.push(`┌─ Response ${r.index} ──────────────────────────────`);
+        const content = r.content.split(`
+`);
+        for (let i = 0;i < Math.min(content.length, 8); i++) {
+          const mark = diffLines.has(i) ? " ◆" : "  ";
+          lines.push(`│${mark} ${content[i]}`);
+        }
+        if (content.length > 8) {
+          lines.push(`│   ... (${content.length - 8} more lines)`);
+        }
+      }
+      lines.push("");
+      lines.push("Which response do you want to use? (1/2/3/r)");
+      lines.push("");
+      lines.push("Tip: r = regenerate all 3");
+      return lines.join(`
+`);
+    }
+  });
+}
+var init_multi = __esm(() => {
+  init_llm();
+});
+
+// src/commands/mcp.ts
+var exports_mcp = {};
+__export(exports_mcp, {
+  registerMCPCommand: () => registerMCPCommand
+});
+import * as readline2 from "readline";
+import { exec as exec4 } from "child_process";
+import { existsSync as existsSync20, readFileSync as readFileSync20, writeFileSync as writeFileSync9 } from "fs";
+import { promisify as promisify4 } from "util";
+function initializeServer() {
+  return {
+    protocolVersion: "2024-11-05",
+    capabilities: {
+      tools: {}
+    },
+    serverInfo: {
+      name: "nole-code",
+      version: "1.0.0"
+    }
+  };
+}
+function listTools() {
+  return { tools: MCP_TOOLS };
+}
+async function callTool(name, arguments_) {
+  switch (name) {
+    case "bash": {
+      const { command, timeout = 30 } = arguments_;
+      try {
+        const { stdout, stderr } = await execAsync4(command, { timeout });
+        return { stdout, stderr, error: null };
+      } catch (e) {
+        const err = e;
+        return { stdout: err.stdout || "", stderr: err.stderr || err.message || "", error: err.message };
+      }
+    }
+    case "read": {
+      const { path, offset = 1, limit = 100 } = arguments_;
+      if (!existsSync20(path)) {
+        return { error: `File not found: ${path}` };
+      }
+      const content = readFileSync20(path, "utf-8");
+      const lines = content.split(`
+`);
+      const start = Math.max(0, offset - 1);
+      const end = Math.min(lines.length, start + limit);
+      return { content: lines.slice(start, end).join(`
+`), lines: lines.length };
+    }
+    case "write": {
+      const { path, content } = arguments_;
+      writeFileSync9(path, content, "utf-8");
+      return { success: true, path };
+    }
+    case "edit": {
+      const { path, oldText, newText } = arguments_;
+      if (!existsSync20(path)) {
+        return { error: `File not found: ${path}` };
+      }
+      const content = readFileSync20(path, "utf-8");
+      if (!content.includes(oldText)) {
+        return { error: "oldText not found in file" };
+      }
+      const newContent = content.replace(oldText, newText);
+      writeFileSync9(path, newContent, "utf-8");
+      return { success: true, path };
+    }
+    case "glob": {
+      const { pattern, cwd = process.cwd() } = arguments_;
+      try {
+        const { stdout } = await execAsync4(`ls -la`, { cwd });
+        const files = stdout.split(`
+`).filter((l) => l.includes(pattern.replace("*", ""))).map((l) => l.split(" ").pop()).filter(Boolean);
+        return { files };
+      } catch {
+        return { files: [] };
+      }
+    }
+    case "grep": {
+      const { pattern, path = ".", ignoreCase = false } = arguments_;
+      try {
+        const flags = ignoreCase ? "-i" : "";
+        const { stdout } = await execAsync4(`grep ${flags} -r "${pattern}" "${path}" | head -20`);
+        return { matches: stdout };
+      } catch {
+        return { matches: "" };
+      }
+    }
+    case "web_search": {
+      const { query, count = 5 } = arguments_;
+      return { results: [{ title: query, url: `https://example.com/?q=${encodeURIComponent(query)}` }], count };
+    }
+    case "web_fetch": {
+      const { url: url2, extractMode = "markdown" } = arguments_;
+      try {
+        const response = await fetch(url2, { signal: AbortSignal.timeout(1e4) });
+        const content = await response.text();
+        return { content: content.slice(0, 5000), mode: extractMode };
+      } catch (e) {
+        return { error: String(e) };
+      }
+    }
+    default:
+      return { error: `Unknown tool: ${name}` };
+  }
+}
+async function handleRequest(request) {
+  const { method, params, id } = request;
+  try {
+    let result;
+    if (method === "initialize") {
+      result = initializeServer();
+    } else if (method === "tools/list") {
+      result = listTools();
+    } else if (method === "tools/call") {
+      const { name, arguments: args } = params || {};
+      if (!name) {
+        return { jsonrpc: "2.0", id, error: { code: -32602, message: "Missing tool name" }, id };
+      }
+      result = await callTool(name, args || {});
+    } else {
+      return {
+        jsonrpc: "2.0",
+        id,
+        error: { code: -32601, message: `Method not found: ${method}` }
+      };
+    }
+    return { jsonrpc: "2.0", id, result };
+  } catch (e) {
+    return {
+      jsonrpc: "2.0",
+      id,
+      error: { code: -32603, message: String(e) }
+    };
+  }
+}
+async function runMCPServer() {
+  isRunning = true;
+  rl2 = readline2.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: false
+  });
+  const responses = [];
+  rl2.on("line", async (line) => {
+    const trimmed = line.trim();
+    if (!trimmed)
+      return;
+    try {
+      const request = JSON.parse(trimmed);
+      const response = await handleRequest(request);
+      process.stdout.write(JSON.stringify(response) + `
+`);
+    } catch (e) {
+      const errorResponse = {
+        jsonrpc: "2.0",
+        id: null,
+        error: { code: -32700, message: `Parse error: ${e}` }
+      };
+      process.stdout.write(JSON.stringify(errorResponse) + `
+`);
+    }
+  });
+  rl2.on("close", () => {
+    isRunning = false;
+    process.exit(0);
+  });
+  process.on("SIGINT", () => {
+    isRunning = false;
+    process.exit(0);
+  });
+  process.on("SIGTERM", () => {
+    isRunning = false;
+    process.exit(0);
+  });
+}
+function registerMCPCommand(registerCmd) {
+  registerCmd({
+    name: "mcp",
+    description: "Start MCP server mode (JSON-RPC 2.0 over stdin/stdout)",
+    execute: async (args) => {
+      const action = args[0];
+      if (action === "start") {
+        return `Starting MCP server on stdin/stdout...
+Use JSON-RPC 2.0 requests.`;
+      }
+      if (action === "stop") {
+        if (isRunning) {
+          isRunning = false;
+          return "MCP server stopped.";
+        }
+        return "MCP server not running.";
+      }
+      if (action === "list") {
+        const tools2 = listTools();
+        return `Available MCP tools:
+
+` + tools2.tools.map((t) => `  ${t.name}
+    ${t.description}`).join(`
+`);
+      }
+      return `Usage: /mcp <action>
+
+Actions:
+  start   - Start MCP server on stdin/stdout
+  stop    - Stop MCP server
+  list    - List available MCP tools
+
+MCP Server Protocol (JSON-RPC 2.0):
+
+Example initialize:
+  {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+
+Example tools/list:
+  {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
+
+Example tools/call:
+  {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+    "name": "bash",
+    "arguments": {"command": "ls -la"}
+  }}
+`;
+    }
+  });
+  setTimeout(() => {
+    if (process.argv.includes("--mcp") || process.env.MCP_MODE === "true") {
+      runMCPServer();
+    }
+  }, 100);
+}
+var execAsync4, MCP_TOOLS, isRunning = false, rl2 = null;
+var init_mcp = __esm(() => {
+  execAsync4 = promisify4(exec4);
+  MCP_TOOLS = [
+    {
+      name: "bash",
+      description: "Execute shell commands",
+      input_schema: {
+        type: "object",
+        properties: {
+          command: { type: "string", description: "Shell command to execute" },
+          timeout: { type: "number", description: "Timeout in seconds", default: 30 }
+        },
+        required: ["command"]
+      }
+    },
+    {
+      name: "read",
+      description: "Read a file",
+      input_schema: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "File path to read" },
+          offset: { type: "number", description: "Line offset", default: 1 },
+          limit: { type: "number", description: "Line limit", default: 100 }
+        },
+        required: ["path"]
+      }
+    },
+    {
+      name: "write",
+      description: "Write content to a file",
+      input_schema: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "File path to write" },
+          content: { type: "string", description: "Content to write" }
+        },
+        required: ["path", "content"]
+      }
+    },
+    {
+      name: "edit",
+      description: "Edit a file with targeted replacement",
+      input_schema: {
+        type: "object",
+        properties: {
+          path: { type: "string", description: "File path" },
+          oldText: { type: "string", description: "Text to replace" },
+          newText: { type: "string", description: "Replacement text" }
+        },
+        required: ["path", "oldText", "newText"]
+      }
+    },
+    {
+      name: "glob",
+      description: "Find files matching pattern",
+      input_schema: {
+        type: "object",
+        properties: {
+          pattern: { type: "string", description: "Glob pattern" },
+          cwd: { type: "string", description: "Working directory" }
+        },
+        required: ["pattern"]
+      }
+    },
+    {
+      name: "grep",
+      description: "Search for pattern in files",
+      input_schema: {
+        type: "object",
+        properties: {
+          pattern: { type: "string", description: "Search pattern" },
+          path: { type: "string", description: "File or directory path" },
+          ignoreCase: { type: "boolean", description: "Case insensitive" }
+        },
+        required: ["pattern"]
+      }
+    },
+    {
+      name: "web_search",
+      description: "Search the web",
+      input_schema: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search query" },
+          count: { type: "number", description: "Number of results", default: 5 }
+        },
+        required: ["query"]
+      }
+    },
+    {
+      name: "web_fetch",
+      description: "Fetch a URL",
+      input_schema: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "URL to fetch" },
+          extractMode: { type: "string", description: "markdown or text", default: "markdown" }
+        },
+        required: ["url"]
+      }
+    }
+  ];
+});
+
 // src/commands/index.ts
 var exports_commands2 = {};
 __export(exports_commands2, {
@@ -25959,9 +26568,9 @@ __export(exports_commands2, {
   getCommand: () => getCommand,
   getAllCommands: () => getAllCommands
 });
-import { exec as exec3 } from "child_process";
-import { promisify as promisify3 } from "util";
-import { existsSync as existsSync19, readFileSync as readFileSync19 } from "fs";
+import { exec as exec5 } from "child_process";
+import { promisify as promisify5 } from "util";
+import { existsSync as existsSync21, readFileSync as readFileSync21 } from "fs";
 import { join as join22 } from "path";
 import { homedir as homedir16 } from "os";
 function getAge(dateStr) {
@@ -25990,10 +26599,10 @@ function parseCommand(input) {
   const parts = input.slice(1).split(/\s+/);
   return { cmd: parts[0], args: parts.slice(1) };
 }
-var execAsync3, commands;
+var execAsync5, commands;
 var init_commands2 = __esm(() => {
   init_env();
-  execAsync3 = promisify3(exec3);
+  execAsync5 = promisify5(exec5);
   commands = new Map;
   registerCommand({
     name: "help",
@@ -26062,8 +26671,8 @@ ${lines.join(`
       if (args.length === 0)
         return "Usage: /commit <message>";
       const msg = args.join(" ");
-      await execAsync3("git add -A", { cwd: process.cwd() });
-      const { stdout, stderr } = await execAsync3('git commit -m "$COMMIT_MSG"', {
+      await execAsync5("git add -A", { cwd: process.cwd() });
+      const { stdout, stderr } = await execAsync5('git commit -m "$COMMIT_MSG"', {
         cwd: process.cwd(),
         env: { ...process.env, COMMIT_MSG: msg }
       });
@@ -26076,7 +26685,7 @@ ${lines.join(`
     aliases: ["d"],
     execute: async (args) => {
       const target = args[0] || "";
-      const { stdout } = await execAsync3("git diff -- " + (target ? `"${target.replace(/'/g, `'"'"'`)}"` : ""), { cwd: process.cwd() });
+      const { stdout } = await execAsync5("git diff -- " + (target ? `"${target.replace(/'/g, `'"'"'`)}"` : ""), { cwd: process.cwd() });
       return stdout || "No changes";
     }
   });
@@ -26085,7 +26694,7 @@ ${lines.join(`
     description: "Show git status",
     aliases: ["st"],
     execute: async () => {
-      const { stdout } = await execAsync3("git status --short", { cwd: process.cwd() });
+      const { stdout } = await execAsync5("git status --short", { cwd: process.cwd() });
       return stdout || "Clean working tree";
     }
   });
@@ -26095,7 +26704,7 @@ ${lines.join(`
     aliases: ["lg"],
     execute: async (args) => {
       const n7 = args[0] || "10";
-      const { stdout } = await execAsync3("git log --oneline -n " + String(n7), { cwd: process.cwd() });
+      const { stdout } = await execAsync5("git log --oneline -n " + String(n7), { cwd: process.cwd() });
       return stdout || "No commits";
     }
   });
@@ -26104,7 +26713,7 @@ ${lines.join(`
     description: "Show git branches",
     aliases: ["br"],
     execute: async () => {
-      const { stdout } = await execAsync3("git branch -v", { cwd: process.cwd() });
+      const { stdout } = await execAsync5("git branch -v", { cwd: process.cwd() });
       return stdout || "No branches";
     }
   });
@@ -26115,7 +26724,7 @@ ${lines.join(`
       if (args.length === 0)
         return "Usage: /checkout <branch|file>";
       try {
-        const { stdout, stderr } = await execAsync3("git checkout -- " + args.map((a) => `'${a.replace(/'/g, `'"'"'`)}'`).join(" "), { cwd: process.cwd() });
+        const { stdout, stderr } = await execAsync5("git checkout -- " + args.map((a) => `'${a.replace(/'/g, `'"'"'`)}'`).join(" "), { cwd: process.cwd() });
         return (stdout + stderr).trim() || `Checked out ${args[0]}`;
       } catch (e) {
         const err = e;
@@ -26130,7 +26739,7 @@ ${lines.join(`
       const port = args[0] || "";
       const cmd = port ? `lsof -i :${port}` : "lsof -i -P";
       try {
-        const { stdout } = await execAsync3(cmd);
+        const { stdout } = await execAsync5(cmd);
         return stdout || "No results";
       } catch {
         return "lsof not available";
@@ -26142,7 +26751,7 @@ ${lines.join(`
     description: "Show running processes",
     execute: async (args) => {
       const filter = args.join(" ") || "aux";
-      const { stdout } = await execAsync3(`ps ${filter} | head -20`);
+      const { stdout } = await execAsync5(`ps ${filter} | head -20`);
       return stdout || "No processes";
     }
   });
@@ -26177,10 +26786,10 @@ ${lines.join(`
     description: "Show estimated API usage for this session",
     execute: async (_args, ctx) => {
       const sessionFile = join22(homedir16(), ".nole-code", "sessions", `${ctx.sessionId}.json`);
-      if (!existsSync19(sessionFile))
+      if (!existsSync21(sessionFile))
         return "Session not found";
       try {
-        const session = JSON.parse(readFileSync19(sessionFile, "utf-8"));
+        const session = JSON.parse(readFileSync21(sessionFile, "utf-8"));
         const msgs = session.messages?.length || 0;
         return `Session: ${ctx.sessionId}
 Messages: ${msgs}
@@ -26198,7 +26807,7 @@ Note: Actual token usage available in provider dashboard.`;
       const checks4 = [
         ["Node.js", process.version],
         ["API Key", MINIMAX_API_KEY ? "✅ set" : "❌ missing"],
-        ["Session Dir", existsSync19(join22(homedir16(), ".nole-code")) ? "✅ exists" : "❌ missing"]
+        ["Session Dir", existsSync21(join22(homedir16(), ".nole-code")) ? "✅ exists" : "❌ missing"]
       ];
       return `\uD83E\uDD9E NOLE CODE — Health Check:
 
@@ -26346,14 +26955,14 @@ Use /plan approve to proceed step by step.`;
     aliases: ["save-chat"],
     execute: async (_args, ctx) => {
       const { loadSession: load, exportSession: exportSession2 } = await Promise.resolve().then(() => (init_manager(), exports_manager));
-      const { writeFileSync: writeFileSync9 } = __require("fs");
+      const { writeFileSync: writeFileSync10 } = __require("fs");
       const { join: join23 } = __require("path");
       const transcript = exportSession2(ctx.sessionId);
       if (!transcript)
         return "Session not found";
       const filename = `nole-session-${ctx.sessionId.slice(5, 15)}.md`;
       const outPath = join23(ctx.cwd, filename);
-      writeFileSync9(outPath, transcript, "utf-8");
+      writeFileSync10(outPath, transcript, "utf-8");
       return `Exported to ${filename} (${transcript.split(`
 `).length} lines)`;
     }
@@ -26591,11 +27200,11 @@ ${lines.join(`
     name: "plugins",
     description: "List installed plugins",
     execute: async () => {
-      const { existsSync: existsSync20, readdirSync: readdirSync7 } = __require("fs");
+      const { existsSync: existsSync22, readdirSync: readdirSync7 } = __require("fs");
       const { join: join23 } = __require("path");
       const { homedir: homedir17 } = __require("os");
       const dir = join23(homedir17(), ".nole-code", "plugins");
-      if (!existsSync20(dir)) {
+      if (!existsSync22(dir)) {
         return `No plugins directory.
 Create ~/.nole-code/plugins/ and add .js files.
 
@@ -26857,6 +27466,9 @@ Start one with /loop <goal>`;
     Promise.resolve().then(() => (init_read(), exports_read)).then((m) => m.registerReadCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_grep(), exports_grep)).then((m) => m.registerGrepCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_test(), exports_test)).then((m) => m.registerTestCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_debug(), exports_debug)).then((m) => m.registerDebugCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_multi(), exports_multi)).then((m) => m.registerMultiCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_mcp(), exports_mcp)).then((m) => m.registerMCPCommand(registerCommand)).catch(() => {});
   }, 0);
 });
 
@@ -26873,7 +27485,7 @@ __export(exports_session_memory, {
   extractMemoryFromConversation: () => extractMemoryFromConversation,
   addToWorklog: () => addToWorklog
 });
-import { existsSync as existsSync20, readFileSync as readFileSync20, writeFileSync as writeFileSync9, mkdirSync as mkdirSync9 } from "fs";
+import { existsSync as existsSync22, readFileSync as readFileSync22, writeFileSync as writeFileSync10, mkdirSync as mkdirSync9 } from "fs";
 import { join as join23 } from "path";
 import { homedir as homedir17 } from "os";
 function getMemoryPath(sessionId) {
@@ -26882,7 +27494,7 @@ function getMemoryPath(sessionId) {
 }
 function loadMemory(sessionId) {
   const path = getMemoryPath(sessionId);
-  if (!existsSync20(path)) {
+  if (!existsSync22(path)) {
     return {
       title: "",
       currentState: "",
@@ -26895,7 +27507,7 @@ function loadMemory(sessionId) {
       lastUpdated: new Date().toISOString()
     };
   }
-  const content = readFileSync20(path, "utf-8");
+  const content = readFileSync22(path, "utf-8");
   return parseMemoryContent(content);
 }
 function parseMemoryContent(content) {
@@ -26940,7 +27552,7 @@ function saveMemory(sessionId, memory) {
   const merged = { ...existing, ...memory, lastUpdated: new Date().toISOString() };
   const path = getMemoryPath(sessionId);
   const content = formatMemory(merged);
-  writeFileSync9(path, content, "utf-8");
+  writeFileSync10(path, content, "utf-8");
 }
 function formatMemory(memory) {
   return `# Session Title
@@ -27426,11 +28038,11 @@ var exports_loader = {};
 __export(exports_loader, {
   loadPlugins: () => loadPlugins
 });
-import { existsSync as existsSync21, readdirSync as readdirSync7 } from "fs";
+import { existsSync as existsSync23, readdirSync as readdirSync7 } from "fs";
 import { join as join24 } from "path";
 import { homedir as homedir18 } from "os";
 async function loadPlugins() {
-  if (!existsSync21(PLUGINS_DIR2))
+  if (!existsSync23(PLUGINS_DIR2))
     return [];
   const files = readdirSync7(PLUGINS_DIR2).filter((f) => f.endsWith(".js"));
   const loaded = [];
@@ -27473,7 +28085,7 @@ __export(exports_indexer, {
   indexProject: () => indexProject,
   formatIndexForPrompt: () => formatIndexForPrompt
 });
-import { readFileSync as readFileSync21, readdirSync as readdirSync8, statSync as statSync5 } from "fs";
+import { readFileSync as readFileSync23, readdirSync as readdirSync8, statSync as statSync5 } from "fs";
 import { join as join25, relative as relative3, extname as extname3 } from "path";
 function indexProject(root, maxFiles = 200) {
   const languages = {};
@@ -27508,7 +28120,7 @@ function indexProject(root, maxFiles = 200) {
           const lang = LANG_MAP[ext] || ext;
           languages[lang] = (languages[lang] || 0) + 1;
           try {
-            const content = readFileSync21(fullPath, "utf-8");
+            const content = readFileSync23(fullPath, "utf-8");
             const lines = content.split(`
 `).length;
             totalLines += lines;
@@ -27666,15 +28278,15 @@ __export(exports_src, {
   getMiniMaxToken: () => getMiniMaxToken,
   activeClient: () => activeClient
 });
-import { existsSync as existsSync23, readFileSync as readFileSync22, mkdirSync as mkdirSync10 } from "fs";
+import { existsSync as existsSync25, readFileSync as readFileSync24, mkdirSync as mkdirSync10 } from "fs";
 import { homedir as homedir19 } from "node:os";
 import { join as join26 } from "node:path";
-import * as readline2 from "readline";
+import * as readline3 from "readline";
 function _loadEnv(path) {
-  if (!existsSync23(path))
+  if (!existsSync25(path))
     return;
   try {
-    const content = readFileSync22(path, "utf-8");
+    const content = readFileSync24(path, "utf-8");
     for (const line of content.split(`
 `)) {
       const t = line.trim();
@@ -27716,8 +28328,8 @@ async function streamOutput(lines, maxLines, delayMs = 10) {
 function getMiniMaxToken() {
   try {
     const authPath = join26(homedir19(), ".openclaw", "agents", "main", "agent", "auth-profiles.json");
-    if (existsSync23(authPath)) {
-      const auth2 = JSON.parse(readFileSync22(authPath, "utf-8"));
+    if (existsSync25(authPath)) {
+      const auth2 = JSON.parse(readFileSync24(authPath, "utf-8"));
       return auth2.profiles?.["minimax-portal:default"]?.access || "";
     }
   } catch {}
@@ -27784,7 +28396,7 @@ ${dim("Or add keys to ~/.nole-code/.env:")}
 Then run ${bold("nole")} again.
 `);
     const configDir = join26(homedir19(), ".nole-code");
-    if (!existsSync23(configDir)) {
+    if (!existsSync25(configDir)) {
       mkdirSync10(configDir, { recursive: true });
       console.log(dim(`  Created ${configDir}/`));
     }
@@ -28011,7 +28623,7 @@ ${memorySummary}` : ""}${resumeContext}`;
     }
     return [[], line];
   };
-  const rl2 = readline2.createInterface({
+  const rl3 = readline3.createInterface({
     input: process.stdin,
     output: process.stdout,
     completer
@@ -28151,9 +28763,9 @@ ${c2.yellow("❓ Unknown command:")} /${parsed.cmd}`);
       for (const ref of fileRefs) {
         const filePath = ref.slice(1);
         const fullPath = resolve(opts.cwd || process.cwd(), filePath);
-        if (existsSync23(fullPath)) {
+        if (existsSync25(fullPath)) {
           try {
-            const content = readFileSync22(fullPath, "utf-8");
+            const content = readFileSync24(fullPath, "utf-8");
             const truncated = content.length > 5000 ? content.slice(0, 5000) + `
 ... (truncated)` : content;
             expandedInput = expandedInput.replace(ref, `
@@ -28411,7 +29023,7 @@ ${c2.yellow("⚠")} Reached maximum ${MAX_TURNS} turns in agentic loop.
     console.log("");
     prompt();
   };
-  rl2.on("line", async (line) => {
+  rl3.on("line", async (line) => {
     await processInput(line);
   });
   if (opts.message) {

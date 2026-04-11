@@ -922,4 +922,8 @@ setTimeout(() => {
   import('./read.js').then(m => m.registerReadCommand(registerCommand)).catch(() => {})
   import('./grep.js').then(m => m.registerGrepCommand(registerCommand)).catch(() => {})
   import('./test.js').then(m => m.registerTestCommand(registerCommand)).catch(() => {})
+  // New features: /debug, /multi, /mcp
+  import('./debug.js').then(m => m.registerDebugCommand(registerCommand)).catch(() => {})
+  import('./multi.js').then(m => m.registerMultiCommand(registerCommand)).catch(() => {})
+  import('./mcp.js').then(m => m.registerMCPCommand(registerCommand)).catch(() => {})
 }, 0)
