@@ -20161,7 +20161,6 @@ __export(exports_spawner2, {
   abortLoop: () => abortLoop
 });
 import { spawn as spawn3 } from "child_process";
-import { join as join13 } from "path";
 function getActiveLoop() {
   return activeLoop;
 }
@@ -20223,7 +20222,7 @@ function spawnLoop(goal, cwd) {
   if (activeLoop) {
     killLoop("new loop started");
   }
-  const agentPath = join13(process.cwd(), "dist", "loop", "agent.js");
+  const agentPath = "/home/tim/nole-code/dist/loop/agent.js";
   const child = spawn3("node", [agentPath, "--goal", goal], {
     cwd: cwd || process.cwd(),
     stdio: ["ignore", "pipe", "pipe"],
@@ -20250,13 +20249,15 @@ function spawnLoop(goal, cwd) {
             activeLoop.checkpointId = event.checkpointId;
           }
         }
-        if (event.type === "loop_complete" || event.type === "loop_paused" || event.type === "loop_aborted") {
-          if (activeLoop) {
-            activeLoop.onComplete?.({
-              success: event.type === "loop_complete",
-              errors: event.type === "loop_complete" ? 0 : activeLoop.child.exitCode !== 0 ? 1 : 0
-            });
-          }
+        if (event.type === "loop_complete") {
+          const cpId = activeLoop?.checkpointId || event.checkpointId;
+          notifyComplete(cpId, true, event.errors || 0).catch(() => {});
+          if (activeLoop)
+            activeLoop.onComplete?.({ success: true, errors: event.errors || 0 });
+          activeLoop = null;
+        } else if (event.type === "loop_paused" || event.type === "loop_aborted") {
+          const cpId = activeLoop?.checkpointId;
+          notifyComplete(cpId, false, 0).catch(() => {});
           activeLoop = null;
         }
       }
@@ -20284,7 +20285,7 @@ function resumeLoop(checkpointId) {
   if (activeLoop) {
     killLoop("resume new loop");
   }
-  const agentPath = join13(process.cwd(), "dist", "loop", "agent.js");
+  const agentPath = "/home/tim/nole-code/dist/loop/agent.js";
   const child = spawn3("node", [agentPath, "--resume", checkpointId], {
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe"],
@@ -20305,9 +20306,6 @@ function resumeLoop(checkpointId) {
       const event = parseIPC(line);
       if (event) {
         displayProgress(event);
-        if (event.type === "loop_complete" || event.type === "loop_paused" || event.type === "loop_aborted") {
-          activeLoop = null;
-        }
       }
     }
   });
@@ -20350,6 +20348,38 @@ Killing active loop: ${reason}`));
     activeLoop = null;
   }, 2000);
   return true;
+}
+async function notifyComplete(checkpointId, success, errors3) {
+  const fs = await import("fs");
+  const path = await import("path");
+  const { getMiniMaxToken } = await Promise.resolve().then(() => (init_src(), exports_src));
+  const { loadCheckpoint: loadCheckpoint2 } = await Promise.resolve().then(() => (init_checkpoint(), exports_checkpoint));
+  const cp = loadCheckpoint2(checkpointId);
+  if (!cp)
+    return;
+  const elapsed = ((Date.now() - new Date(cp.createdAt).getTime()) / 1000).toFixed(0);
+  const status = success ? "✓ COMPLETE" : "✗ FAILED";
+  const msg = `[Nole Loop] ${status} in ${elapsed}s
+Goal: ${cp.goal.slice(0, 80)}
+Steps: ${cp.steps.length} | Errors: ${errors3}`;
+  const logPath = path.join(process.env.HOME || "/home/tim", "LOOP_COMPLETE.md");
+  const entry = `
+## ${new Date().toISOString()} — ${status}
+
+Goal: ${cp.goal}
+Checkpoint: ${checkpointId}
+Steps: ${cp.steps.length} | Errors: ${errors3} | Duration: ${elapsed}s
+`;
+  try {
+    const existing = fs.existsSync(logPath) ? fs.readFileSync(logPath, "utf8") : "";
+    fs.writeFileSync(logPath, existing + entry);
+  } catch {}
+  const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+  const tgChat = process.env.TELEGRAM_CHAT_ID;
+  if (tgToken && tgChat) {
+    const url2 = `https://api.telegram.org/bot${tgToken}/sendMessage`;
+    fetch(`${url2}?chat_id=${tgChat}&text=${encodeURIComponent(msg)}`).catch(() => {});
+  }
 }
 var activeLoop = null, currentTotal = 0;
 var init_spawner2 = __esm(() => {
@@ -20709,7 +20739,7 @@ __export(exports_commands, {
 import { exec as exec2 } from "child_process";
 import { promisify as promisify2 } from "util";
 import { existsSync as existsSync12, readFileSync as readFileSync12 } from "fs";
-import { join as join14 } from "path";
+import { join as join13 } from "path";
 import { homedir as homedir12 } from "os";
 function getAge(dateStr) {
   const ms = Date.now() - new Date(dateStr).getTime();
@@ -20923,7 +20953,7 @@ ${lines.join(`
     name: "cost",
     description: "Show estimated API usage for this session",
     execute: async (_args, ctx) => {
-      const sessionFile = join14(homedir12(), ".nole-code", "sessions", `${ctx.sessionId}.json`);
+      const sessionFile = join13(homedir12(), ".nole-code", "sessions", `${ctx.sessionId}.json`);
       if (!existsSync12(sessionFile))
         return "Session not found";
       try {
@@ -20945,7 +20975,7 @@ Note: Actual token usage available in provider dashboard.`;
       const checks4 = [
         ["Node.js", process.version],
         ["API Key", MINIMAX_API_KEY ? "✅ set" : "❌ missing"],
-        ["Session Dir", existsSync12(join14(homedir12(), ".nole-code")) ? "✅ exists" : "❌ missing"]
+        ["Session Dir", existsSync12(join13(homedir12(), ".nole-code")) ? "✅ exists" : "❌ missing"]
       ];
       return `\uD83E\uDD9E NOLE CODE — Health Check:
 
@@ -21094,12 +21124,12 @@ Use /plan approve to proceed step by step.`;
     execute: async (_args, ctx) => {
       const { loadSession: load, exportSession: exportSession2 } = await Promise.resolve().then(() => (init_manager(), exports_manager));
       const { writeFileSync: writeFileSync8 } = __require("fs");
-      const { join: join15 } = __require("path");
+      const { join: join14 } = __require("path");
       const transcript = exportSession2(ctx.sessionId);
       if (!transcript)
         return "Session not found";
       const filename = `nole-session-${ctx.sessionId.slice(5, 15)}.md`;
-      const outPath = join15(ctx.cwd, filename);
+      const outPath = join14(ctx.cwd, filename);
       writeFileSync8(outPath, transcript, "utf-8");
       return `Exported to ${filename} (${transcript.split(`
 `).length} lines)`;
@@ -21339,9 +21369,9 @@ ${lines.join(`
     description: "List installed plugins",
     execute: async () => {
       const { existsSync: existsSync13, readdirSync: readdirSync4 } = __require("fs");
-      const { join: join15 } = __require("path");
+      const { join: join14 } = __require("path");
       const { homedir: homedir13 } = __require("os");
-      const dir = join15(homedir13(), ".nole-code", "plugins");
+      const dir = join14(homedir13(), ".nole-code", "plugins");
       if (!existsSync13(dir)) {
         return `No plugins directory.
 Create ~/.nole-code/plugins/ and add .js files.
@@ -21567,11 +21597,11 @@ __export(exports_session_memory, {
   addToWorklog: () => addToWorklog
 });
 import { existsSync as existsSync13, readFileSync as readFileSync13, writeFileSync as writeFileSync8, mkdirSync as mkdirSync8 } from "fs";
-import { join as join15 } from "path";
+import { join as join14 } from "path";
 import { homedir as homedir13 } from "os";
 function getMemoryPath(sessionId) {
   mkdirSync8(MEMORY_DIR, { recursive: true });
-  return join15(MEMORY_DIR, `${sessionId}.md`);
+  return join14(MEMORY_DIR, `${sessionId}.md`);
 }
 function loadMemory(sessionId) {
   const path = getMemoryPath(sessionId);
@@ -21738,7 +21768,7 @@ function getMemorySummary(sessionId) {
 }
 var MEMORY_DIR;
 var init_session_memory = __esm(() => {
-  MEMORY_DIR = join15(homedir13(), ".nole-code", "memory");
+  MEMORY_DIR = join14(homedir13(), ".nole-code", "memory");
 });
 
 // src/services/compact/index.ts
@@ -22120,7 +22150,7 @@ __export(exports_loader, {
   loadPlugins: () => loadPlugins
 });
 import { existsSync as existsSync14, readdirSync as readdirSync4 } from "fs";
-import { join as join16 } from "path";
+import { join as join15 } from "path";
 import { homedir as homedir14 } from "os";
 async function loadPlugins() {
   if (!existsSync14(PLUGINS_DIR))
@@ -22129,7 +22159,7 @@ async function loadPlugins() {
   const loaded = [];
   for (const file of files) {
     try {
-      const pluginPath = join16(PLUGINS_DIR, file);
+      const pluginPath = join15(PLUGINS_DIR, file);
       const plugin = __require(pluginPath);
       if (!plugin.name || !plugin.execute) {
         console.error(`Plugin ${file}: missing name or execute`);
@@ -22157,7 +22187,7 @@ async function loadPlugins() {
 var PLUGINS_DIR;
 var init_loader = __esm(() => {
   init_registry();
-  PLUGINS_DIR = join16(homedir14(), ".nole-code", "plugins");
+  PLUGINS_DIR = join15(homedir14(), ".nole-code", "plugins");
 });
 
 // src/services/indexer.ts
@@ -22167,7 +22197,7 @@ __export(exports_indexer, {
   formatIndexForPrompt: () => formatIndexForPrompt
 });
 import { readFileSync as readFileSync14, readdirSync as readdirSync5, statSync as statSync2 } from "fs";
-import { join as join17, relative as relative3, extname } from "path";
+import { join as join16, relative as relative3, extname } from "path";
 function indexProject(root, maxFiles = 200) {
   const languages = {};
   const keyFiles = [];
@@ -22186,7 +22216,7 @@ function indexProject(root, maxFiles = 200) {
     for (const entry of entries) {
       if (entry.startsWith(".") || IGNORE_DIRS.has(entry))
         continue;
-      const fullPath = join17(dir, entry);
+      const fullPath = join16(dir, entry);
       try {
         const stat = statSync2(fullPath);
         const rel = relative3(root, fullPath);
@@ -22361,7 +22391,7 @@ __export(exports_src, {
 });
 import { existsSync as existsSync16, readFileSync as readFileSync15, mkdirSync as mkdirSync9 } from "fs";
 import { homedir as homedir15 } from "node:os";
-import { join as join18 } from "node:path";
+import { join as join17 } from "node:path";
 import * as readline2 from "readline";
 async function streamOutput(lines, maxLines, delayMs = 10) {
   const shown = [];
@@ -22389,7 +22419,7 @@ async function streamOutput(lines, maxLines, delayMs = 10) {
 }
 function getMiniMaxToken() {
   try {
-    const authPath = join18(homedir15(), ".openclaw", "agents", "main", "agent", "auth-profiles.json");
+    const authPath = join17(homedir15(), ".openclaw", "agents", "main", "agent", "auth-profiles.json");
     if (existsSync16(authPath)) {
       const auth2 = JSON.parse(readFileSync15(authPath, "utf-8"));
       return auth2.profiles?.["minimax-portal:default"]?.access || "";
@@ -22457,7 +22487,7 @@ ${dim("Or add keys to ~/.nole-code/.env:")}
 
 Then run ${bold("nole")} again.
 `);
-    const configDir = join18(homedir15(), ".nole-code");
+    const configDir = join17(homedir15(), ".nole-code");
     if (!existsSync16(configDir)) {
       mkdirSync9(configDir, { recursive: true });
       console.log(dim(`  Created ${configDir}/`));

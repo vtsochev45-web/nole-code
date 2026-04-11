@@ -150,7 +150,7 @@ export function spawnLoop(goal: string, cwd?: string): string {
   }
   
   // Build path to dist (compiled) or src (dev)
-  const agentPath = join(process.cwd(), 'dist', 'loop', 'agent.js')
+  const agentPath = '/home/tim/nole-code/dist/loop/agent.js'
   
   // Spawn child process
   const child = spawn('node', [agentPath, '--goal', goal], {
@@ -186,15 +186,14 @@ export function spawnLoop(goal: string, cwd?: string): string {
         }
         
         // Handle completion
-        if (event.type === 'loop_complete' || event.type === 'loop_paused' || event.type === 'loop_aborted') {
-          if (activeLoop) {
-            activeLoop.onComplete?.({
-              success: event.type === 'loop_complete',
-              errors: event.type === 'loop_complete' 
-                ? 0 // Will be in the event
-                : activeLoop.child.exitCode !== 0 ? 1 : 0,
-            })
-          }
+        if (event.type === 'loop_complete') {
+          const cpId = activeLoop?.checkpointId || event.checkpointId
+          notifyComplete(cpId, true, event.errors || 0).catch(() => {})
+          if (activeLoop) activeLoop.onComplete?.({ success: true, errors: event.errors || 0 })
+          activeLoop = null
+        } else if (event.type === 'loop_paused' || event.type === 'loop_aborted') {
+          const cpId = activeLoop?.checkpointId
+          notifyComplete(cpId, false, 0).catch(() => {})
           activeLoop = null
         }
       }
@@ -230,7 +229,7 @@ export function resumeLoop(checkpointId: string): void {
     killLoop('resume new loop')
   }
   
-  const agentPath = join(process.cwd(), 'dist', 'loop', 'agent.js')
+  const agentPath = '/home/tim/nole-code/dist/loop/agent.js'
   
   const child = spawn('node', [agentPath, '--resume', checkpointId], {
     cwd: process.cwd(),
@@ -255,9 +254,7 @@ export function resumeLoop(checkpointId: string): void {
       if (event) {
         displayProgress(event)
         
-        if (event.type === 'loop_complete' || event.type === 'loop_paused' || event.type === 'loop_aborted') {
-          activeLoop = null
-        }
+
       }
     }
   })
@@ -309,4 +306,38 @@ export function killLoop(reason: string): boolean {
     activeLoop = null
   }, 2000)
   return true
+}
+
+// ============ Notification on Loop Complete ============
+
+async function notifyComplete(checkpointId: string, success: boolean, errors: number): Promise<void> {
+  const fs = await import('fs')
+  const path = await import('path')
+  const { getMiniMaxToken } = await import('../index.js')
+  const { loadCheckpoint } = await import('./checkpoint.js')
+  
+  const cp = loadCheckpoint(checkpointId)
+  if (!cp) return
+  
+  const elapsed = ((Date.now() - new Date(cp.createdAt).getTime()) / 1000).toFixed(0)
+  const status = success ? '✓ COMPLETE' : '✗ FAILED'
+  
+  const msg = `[Nole Loop] ${status} in ${elapsed}s\nGoal: ${cp.goal.slice(0, 80)}\nSteps: ${cp.steps.length} | Errors: ${errors}`
+  
+  // Write to LOOP_COMPLETE.md for grep
+  const logPath = path.join(process.env.HOME || '/home/tim', 'LOOP_COMPLETE.md')
+  const entry = `\n## ${new Date().toISOString()} — ${status}\n\nGoal: ${cp.goal}\nCheckpoint: ${checkpointId}\nSteps: ${cp.steps.length} | Errors: ${errors} | Duration: ${elapsed}s\n`
+  
+  try {
+    const existing = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : ''
+    fs.writeFileSync(logPath, existing + entry)
+  } catch {}
+  
+  // Send Telegram notification
+  const tgToken = process.env.TELEGRAM_BOT_TOKEN
+  const tgChat = process.env.TELEGRAM_CHAT_ID
+  if (tgToken && tgChat) {
+    const url = `https://api.telegram.org/bot${tgToken}/sendMessage`
+    fetch(`${url}?chat_id=${tgChat}&text=${encodeURIComponent(msg)}`).catch(() => {})
+  }
 }
