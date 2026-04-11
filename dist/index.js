@@ -20034,21 +20034,55 @@ function buildRetryContext(checkpoint, stepId) {
   const errors3 = checkpoint.context.errorsEncountered.filter((e) => e.step === stepId);
   if (errors3.length === 0)
     return "";
-  const lines = [
-    `
-<!-- Previous attempts on this step -->`,
-    `Previous attempts: ${step.retryCount}/${checkpoint.settings.maxRetries}`
-  ];
-  for (const err of errors3) {
-    lines.push(`Attempt ${errors3.indexOf(err) + 1}: ${err.error}`);
+  const lastError = errors3[errors3.length - 1].error;
+  const lines = [];
+  lines.push(`
+<!-- Retry ${step.retryCount + 1}/${checkpoint.settings.maxRetries} -->`);
+  lines.push(`
+Previous attempt failed:`);
+  lines.push(`  Error: ${lastError}`);
+  const hint = inferErrorHint(lastError);
+  if (hint) {
+    lines.push(`  Hint: ${hint}`);
   }
   lines.push(`
-Try a different approach. Consider:`);
-  lines.push(`- What specifically failed?`);
-  lines.push(`- Is there a simpler path to the same goal?`);
-  lines.push(`- Can you break this step into smaller steps?`);
+Try a DIFFERENT approach this time:`);
+  lines.push(`- Do NOT repeat the same command`);
+  lines.push(`- Consider: create parent directories first, check permissions, use different tool`);
+  lines.push(`- Goal: ${checkpoint.goal}`);
   return lines.join(`
 `);
+}
+function inferErrorHint(error2) {
+  const e = error2.toLowerCase();
+  if (e.includes("enoent") || e.includes("no such file")) {
+    if (e.includes("directory") || e.includes("/")) {
+      return "Parent directory may not exist. Try: mkdir -p first";
+    }
+    return "File does not exist. Verify path or create file first";
+  }
+  if (e.includes("permission denied")) {
+    return "Check file/directory permissions or run with elevated access";
+  }
+  if (e.includes("eacces")) {
+    return "Permission issue. Try chmod or different location";
+  }
+  if (e.includes("enospc")) {
+    return "Disk space may be full. Check: df -h";
+  }
+  if (e.includes("etimedout") || e.includes("timeout")) {
+    return "Connection timed out. Check network or retry with longer timeout";
+  }
+  if (e.includes("econnrefused")) {
+    return "Connection refused. Check service is running";
+  }
+  if (e.includes("command not found") || e.includes("not found")) {
+    return "Command/tool not available. Try alternative approach";
+  }
+  if (e.includes("parse error") || e.includes("syntax")) {
+    return "Parse/syntax error. Check input format";
+  }
+  return null;
 }
 var CHECKPOINT_DIR;
 var init_checkpoint = __esm(() => {
