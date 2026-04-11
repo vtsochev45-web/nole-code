@@ -857,6 +857,18 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
         mdStream.flush()
         console.log('')
 
+        // Fallback: parse XML tool calls from streamed text if no structured ones found
+        // MiniMax sometimes outputs <invoke name="Tool"> as text instead of tool_use blocks
+        if (toolCalls.length === 0 && responseText.includes('<invoke')) {
+          const { parseXmlToolCalls } = await import('./api/llm.js')
+          const xmlCalls = parseXmlToolCalls(responseText)
+          if (xmlCalls.length > 0) {
+            toolCalls.push(...xmlCalls)
+            // Clean the displayed text (XML was already shown, but tool will execute now)
+            responseText = responseText.replace(/<invoke[\s\S]*?<\/invoke>/g, '').replace(/<\/?minimax:tool_call>/g, '').trim()
+          }
+        }
+
         // Save assistant response with tool_calls if present
         const assistantMsg: any = {
           role: 'assistant',

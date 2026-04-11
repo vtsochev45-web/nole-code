@@ -159,6 +159,7 @@ var init_env = __esm(() => {
 // src/api/llm.ts
 var exports_llm = {};
 __export(exports_llm, {
+  parseXmlToolCalls: () => parseXmlToolCalls,
   LLMClient: () => LLMClient
 });
 function parseApiError(raw) {
@@ -195,6 +196,33 @@ async function fetchWithRetry(url, init, retries = MAX_RETRIES) {
     await new Promise((r) => setTimeout(r, delay));
   }
   return lastResponse;
+}
+function parseXmlToolCalls(text) {
+  const calls = [];
+  const invokeRegex = /<invoke\s+name="([^"]+)">([\s\S]*?)<\/invoke>/g;
+  let match;
+  while ((match = invokeRegex.exec(text)) !== null) {
+    const toolName = match[1];
+    const paramsBlock = match[2];
+    const input = {};
+    const paramRegex = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/g;
+    let paramMatch;
+    while ((paramMatch = paramRegex.exec(paramsBlock)) !== null) {
+      const key = paramMatch[1];
+      const value = paramMatch[2].trim();
+      try {
+        input[key] = JSON.parse(value);
+      } catch {
+        input[key] = value;
+      }
+    }
+    calls.push({
+      id: `xml_${Date.now()}_${calls.length}`,
+      name: toolName,
+      input
+    });
+  }
+  return calls;
 }
 
 class LLMClient {
@@ -378,6 +406,14 @@ class LLMClient {
             input: block.input || {}
           });
         }
+      }
+    }
+    if (toolCalls.length === 0 && content.includes("<invoke")) {
+      const xmlParsed = parseXmlToolCalls(content);
+      if (xmlParsed.length > 0) {
+        toolCalls.push(...xmlParsed);
+        content = content.replace(/<invoke[\s\S]*?<\/invoke>/g, "").trim();
+        content = content.replace(/<\/?minimax:tool_call>/g, "").trim();
       }
     }
     return {
@@ -30166,6 +30202,14 @@ ${divider()}
         }
         mdStream.flush();
         console.log("");
+        if (toolCalls.length === 0 && responseText.includes("<invoke")) {
+          const { parseXmlToolCalls: parseXmlToolCalls2 } = await Promise.resolve().then(() => (init_llm(), exports_llm));
+          const xmlCalls = parseXmlToolCalls2(responseText);
+          if (xmlCalls.length > 0) {
+            toolCalls.push(...xmlCalls);
+            responseText = responseText.replace(/<invoke[\s\S]*?<\/invoke>/g, "").replace(/<\/?minimax:tool_call>/g, "").trim();
+          }
+        }
         const assistantMsg = {
           role: "assistant",
           content: responseText,

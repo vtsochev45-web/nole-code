@@ -42,6 +42,41 @@ async function fetchWithRetry(url: string, init: RequestInit, retries = MAX_RETR
   return lastResponse!
 }
 
+// Parse XML-format tool calls that MiniMax sometimes outputs as text
+// Format: <invoke name="ToolName"><parameter name="key">value</parameter></invoke>
+export function parseXmlToolCalls(text: string): ToolCall[] {
+  const calls: ToolCall[] = []
+  const invokeRegex = /<invoke\s+name="([^"]+)">([\s\S]*?)<\/invoke>/g
+  let match: RegExpExecArray | null
+
+  while ((match = invokeRegex.exec(text)) !== null) {
+    const toolName = match[1]
+    const paramsBlock = match[2]
+    const input: Record<string, unknown> = {}
+
+    const paramRegex = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/g
+    let paramMatch: RegExpExecArray | null
+    while ((paramMatch = paramRegex.exec(paramsBlock)) !== null) {
+      const key = paramMatch[1]
+      const value = paramMatch[2].trim()
+      // Try to parse as JSON (numbers, booleans, objects), fallback to string
+      try {
+        input[key] = JSON.parse(value)
+      } catch {
+        input[key] = value
+      }
+    }
+
+    calls.push({
+      id: `xml_${Date.now()}_${calls.length}`,
+      name: toolName,
+      input,
+    })
+  }
+
+  return calls
+}
+
 export interface ToolDefinition {
   name: string
   description: string
@@ -291,6 +326,19 @@ export class LLMClient {
             input: block.input || {},
           })
         }
+      }
+    }
+
+    // Fallback: parse XML tool calls from text if no structured tool_use blocks found
+    // MiniMax sometimes outputs <invoke name="Tool"><parameter name="key">value</parameter></invoke>
+    if (toolCalls.length === 0 && content.includes('<invoke')) {
+      const xmlParsed = parseXmlToolCalls(content)
+      if (xmlParsed.length > 0) {
+        toolCalls.push(...xmlParsed)
+        // Remove the XML from the displayed content
+        content = content.replace(/<invoke[\s\S]*?<\/invoke>/g, '').trim()
+        // Also remove minimax:tool_call wrappers if present
+        content = content.replace(/<\/?minimax:tool_call>/g, '').trim()
       }
     }
 
