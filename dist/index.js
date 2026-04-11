@@ -17460,6 +17460,485 @@ var init_rules_engine = __esm(() => {
   permissionRules = [...DEFAULT_RULES];
 });
 
+// src/utils/count-tokens.ts
+var exports_count_tokens = {};
+__export(exports_count_tokens, {
+  roughTokenCount: () => roughTokenCount,
+  estimateTotalTokens: () => estimateTotalTokens,
+  estimateMessageTokens: () => estimateMessageTokens,
+  compactToTokenBudget: () => compactToTokenBudget
+});
+function roughTokenCount(text) {
+  if (!text)
+    return 0;
+  if (typeof text !== "string") {
+    return roughTokenCount(JSON.stringify(text));
+  }
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const wordTokens = words.length * 1.3;
+  const lineBreakTokens = (text.match(/\n/g) || []).length * 2;
+  const specialTokens = (text.match(/[^\w\s]/g) || []).length * 0.5;
+  return Math.ceil(wordTokens + lineBreakTokens + specialTokens);
+}
+function estimateMessageTokens(message) {
+  let tokens = 4;
+  if (message.name) {
+    tokens += roughTokenCount(message.name) + 2;
+  }
+  if (message.content) {
+    tokens += roughTokenCount(String(message.content));
+  }
+  if (message.tool_calls) {
+    for (const tc of message.tool_calls) {
+      tokens += roughTokenCount(tc.name) + roughTokenCount(tc.input) + 10;
+    }
+  }
+  return tokens;
+}
+function estimateTotalTokens(messages) {
+  return messages.reduce((sum, msg) => sum + estimateMessageTokens(msg), 0);
+}
+function compactToTokenBudget(text, maxTokens) {
+  const currentTokens = roughTokenCount(text);
+  if (currentTokens <= maxTokens)
+    return text;
+  let start = 0;
+  let end = text.length;
+  while (start < end) {
+    const mid = Math.floor((start + end) / 2);
+    const estimate = roughTokenCount(text.slice(0, mid));
+    if (estimate < maxTokens) {
+      start = mid + 1;
+    } else {
+      end = mid;
+    }
+  }
+  const truncated = text.slice(0, start);
+  return truncated + `
+
+[_compacted_]`;
+}
+
+// src/session-memory/index.ts
+var exports_session_memory = {};
+__export(exports_session_memory, {
+  updateMemorySection: () => updateMemorySection,
+  saveMemory: () => saveMemory,
+  parseMemoryContent: () => parseMemoryContent,
+  loadMemory: () => loadMemory,
+  getMemorySummary: () => getMemorySummary,
+  getMemoryPath: () => getMemoryPath,
+  formatMemory: () => formatMemory,
+  extractMemoryFromConversation: () => extractMemoryFromConversation,
+  addToWorklog: () => addToWorklog
+});
+import { existsSync as existsSync7, readFileSync as readFileSync7, writeFileSync as writeFileSync3, mkdirSync as mkdirSync3 } from "fs";
+import { join as join8 } from "path";
+import { homedir as homedir7 } from "os";
+function getMemoryPath(sessionId) {
+  mkdirSync3(MEMORY_DIR, { recursive: true });
+  return join8(MEMORY_DIR, `${sessionId}.md`);
+}
+function loadMemory(sessionId) {
+  const path = getMemoryPath(sessionId);
+  if (!existsSync7(path)) {
+    return {
+      title: "",
+      currentState: "",
+      taskSpec: "",
+      filesAndFunctions: "",
+      workflow: "",
+      errorsAndFixes: "",
+      keyResults: "",
+      worklog: "",
+      lastUpdated: new Date().toISOString()
+    };
+  }
+  const content = readFileSync7(path, "utf-8");
+  return parseMemoryContent(content);
+}
+function parseMemoryContent(content) {
+  const sections = {
+    title: extractSection(content, "Session Title"),
+    currentState: extractSection(content, "Current State"),
+    taskSpec: extractSection(content, "Task Specification"),
+    filesAndFunctions: extractSection(content, "Files and Functions"),
+    workflow: extractSection(content, "Workflow"),
+    errorsAndFixes: extractSection(content, "Errors & Fixes"),
+    keyResults: extractSection(content, "Key Results"),
+    worklog: extractSection(content, "Worklog")
+  };
+  return {
+    ...sections,
+    lastUpdated: new Date().toISOString()
+  };
+}
+function extractSection(content, sectionName) {
+  const lines = content.split(`
+`);
+  let inSection = false;
+  const sectionLines = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === `# ${sectionName}` || trimmed === `## ${sectionName}`) {
+      inSection = true;
+      continue;
+    }
+    if (inSection) {
+      if (line.startsWith("# ") || line.startsWith("## ")) {
+        break;
+      }
+      sectionLines.push(line);
+    }
+  }
+  return sectionLines.join(`
+`).trim();
+}
+function saveMemory(sessionId, memory) {
+  const existing = loadMemory(sessionId);
+  const merged = { ...existing, ...memory, lastUpdated: new Date().toISOString() };
+  const path = getMemoryPath(sessionId);
+  const content = formatMemory(merged);
+  writeFileSync3(path, content, "utf-8");
+}
+function formatMemory(memory) {
+  return `# Session Title
+${memory.title || "_Short descriptive title_"}
+
+# Current State
+${memory.currentState || "_What is being worked on_"}
+
+# Task Specification
+${memory.taskSpec || "_What was asked to build_"}
+
+# Files and Functions
+${memory.filesAndFunctions || "_Important files and their purpose_"}
+
+# Workflow
+${memory.workflow || "_Bash commands and their purpose_"}
+
+# Errors & Fixes
+${memory.errorsAndFixes || "_Errors encountered and solutions_"}
+
+# Key Results
+${memory.keyResults || "_Specific outputs created_"}
+
+# Worklog
+${memory.worklog || "_Step-by-step summary of actions_"}
+
+---
+_Last updated: ${memory.lastUpdated}_
+`;
+}
+function updateMemorySection(sessionId, section, content, append = false) {
+  const memory = loadMemory(sessionId);
+  const existing = memory[section] || "";
+  const newContent = append && existing ? `${existing}
+- ${content}` : content;
+  saveMemory(sessionId, { [section]: newContent });
+}
+function addToWorklog(sessionId, entry) {
+  const memory = loadMemory(sessionId);
+  const timestamp = new Date().toISOString().slice(11, 19);
+  const logEntry = `[${timestamp}] ${entry}`;
+  const existing = memory.worklog || "";
+  saveMemory(sessionId, {
+    worklog: existing ? `${existing}
+${logEntry}` : logEntry
+  });
+}
+async function extractMemoryFromConversation(messages, sessionId) {
+  const BLOCKED_PREFIXES = ["/dev/", "/tmp/", "/proc/", "/sys/", "/.ssh/"];
+  const filePatterns = [
+    /(?:Created|Wrote|Saved|Modified|Edited)\s+([^\s'"`\n]+)/gi,
+    /(?:File|Path):\s+([^\s'"`\n]+)/gi
+  ];
+  const files = new Set;
+  for (const msg of messages) {
+    const text = typeof msg.content === "string" ? msg.content : "";
+    for (const pattern of filePatterns) {
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        const file = match[1].trim();
+        if (file.length > 1 && !BLOCKED_PREFIXES.some((p) => file.startsWith(p)) && !file.startsWith("http") && !file.match(/^[0-9a-f]{8,}/i)) {
+          files.add(file);
+        }
+      }
+    }
+  }
+  const errorPattern = /(?:Error|error|failed|Failed|exception):\s*(.+)/gi;
+  const errors3 = [];
+  for (const msg of messages) {
+    const text = typeof msg.content === "string" ? msg.content : "";
+    let match;
+    while ((match = errorPattern.exec(text)) !== null) {
+      errors3.push(match[1].trim().slice(0, 100));
+    }
+  }
+  if (files.size > 0) {
+    updateMemorySection(sessionId, "filesAndFunctions", Array.from(files).join(", "), true);
+  }
+  if (errors3.length > 0) {
+    updateMemorySection(sessionId, "errorsAndFixes", errors3.slice(-5).join(" | "), true);
+  }
+}
+function getMemorySummary(sessionId) {
+  const memory = loadMemory(sessionId);
+  if (!memory.title && !memory.currentState && !memory.worklog) {
+    return "";
+  }
+  const parts = [];
+  if (memory.title) {
+    parts.push(`Session: ${memory.title}`);
+  }
+  if (memory.currentState) {
+    parts.push(`Current: ${memory.currentState}`);
+  }
+  if (memory.filesAndFunctions) {
+    parts.push(`Files: ${memory.filesAndFunctions}`);
+  }
+  if (memory.errorsAndFixes) {
+    parts.push(`Errors: ${memory.errorsAndFixes}`);
+  }
+  return parts.join(" | ");
+}
+var MEMORY_DIR;
+var init_session_memory = __esm(() => {
+  MEMORY_DIR = join8(homedir7(), ".nole-code", "memory");
+});
+
+// src/services/compact/index.ts
+var exports_compact = {};
+__export(exports_compact, {
+  resetCompactionState: () => resetCompactionState,
+  needsCompaction: () => needsCompaction,
+  maybeCompact: () => maybeCompact,
+  invalidateCache: () => invalidateCache,
+  getTokenBudget: () => getTokenBudget,
+  getCachedFile: () => getCachedFile,
+  getCacheStats: () => getCacheStats,
+  compactSession: () => compactSession,
+  clearFileCache: () => clearFileCache,
+  cacheFile: () => cacheFile
+});
+function getCachedFile(path) {
+  const cached2 = fileCache.get(path);
+  if (!cached2)
+    return null;
+  if (Date.now() - cached2.readAt > FILE_CACHE_TTL_MS) {
+    fileCache.delete(path);
+    return null;
+  }
+  return cached2.content;
+}
+function cacheFile(path, content) {
+  fileCache.set(path, { content, readAt: Date.now(), size: content.length });
+}
+function invalidateCache(path) {
+  fileCache.delete(path);
+}
+function clearFileCache() {
+  fileCache.clear();
+}
+function getCacheStats() {
+  let oldest = 0;
+  for (const c of fileCache.values()) {
+    if (oldest === 0 || c.readAt < oldest)
+      oldest = c.readAt;
+  }
+  return { entries: fileCache.size, oldestMs: oldest ? Date.now() - oldest : 0 };
+}
+function needsCompaction(messages) {
+  if (!feature("SESSION_COMPACT"))
+    return false;
+  const totalTokens = estimateTotalTokens(messages);
+  const now = Date.now();
+  if (lastCompactAt > 0 && now - lastCompactAt < COMPACT_COOLDOWN_MS) {
+    if (totalTokens < COMPACT_CONFIG.triggerPercent * 1e5 * 1.2) {
+      return false;
+    }
+  }
+  return totalTokens > COMPACT_CONFIG.triggerPercent * 1e5;
+}
+function getTokenBudget(messages) {
+  const used = estimateTotalTokens(messages);
+  const max = 1e5;
+  return {
+    used,
+    max,
+    percent: Math.round(used / max * 100),
+    needsCompact: needsCompaction(messages)
+  };
+}
+function compactSession(messages, sessionId) {
+  const originalTokens = estimateTotalTokens(messages);
+  const targetTokens = COMPACT_CONFIG.targetTokens;
+  if (originalTokens < targetTokens) {
+    return {
+      originalTokens,
+      compactedTokens: originalTokens,
+      messagesPruned: 0,
+      summary: "No compaction needed"
+    };
+  }
+  const systemMessages = messages.filter((m) => m.role === "system");
+  const recentCutoff = COMPACT_CONFIG.keepRecentMessages;
+  const recentMessages = messages.slice(-recentCutoff);
+  const olderMessages = messages.slice(0, -recentCutoff);
+  const summary = generateSessionSummary(olderMessages);
+  const compressedRecent = recentMessages.map((msg) => {
+    if (msg.role === "tool" && typeof msg.content === "string" && msg.content.length > 2000) {
+      return {
+        ...msg,
+        content: compressToolResult(msg.content)
+      };
+    }
+    return msg;
+  });
+  const compactedMessages = [
+    ...systemMessages,
+    {
+      role: "system",
+      content: `[Previous session context summarized]
+
+${summary}`,
+      timestamp: new Date().toISOString()
+    },
+    ...compressedRecent
+  ];
+  let compactedTokens = estimateTotalTokens(compactedMessages);
+  if (compactedTokens > targetTokens) {
+    for (let i = 0;i < compactedMessages.length; i++) {
+      const msg = compactedMessages[i];
+      if (msg.role === "tool" && typeof msg.content === "string" && msg.content.length > 500) {
+        compactedMessages[i] = { ...msg, content: compressToolResult(msg.content, 3) };
+      }
+    }
+    compactedTokens = estimateTotalTokens(compactedMessages);
+  }
+  while (compactedTokens > targetTokens && compactedMessages.length > systemMessages.length + 6) {
+    const idx = compactedMessages.findIndex((m) => m.role !== "system");
+    if (idx >= 0) {
+      compactedMessages.splice(idx, 1);
+      compactedTokens = estimateTotalTokens(compactedMessages);
+    } else
+      break;
+  }
+  const messagesPruned = messages.length - compactedMessages.length;
+  lastCompactTokens = compactedTokens;
+  lastCompactAt = Date.now();
+  messages.length = 0;
+  messages.push(...compactedMessages);
+  addToWorklog(sessionId, `Session compacted: ${originalTokens - compactedTokens} tokens saved`);
+  console.log(`
+\uD83D\uDCE6 Session compacted:`);
+  console.log(`   Before: ${originalTokens} tokens`);
+  console.log(`   After: ${compactedTokens} tokens`);
+  console.log(`   Pruned: ${messagesPruned} messages`);
+  return {
+    originalTokens,
+    compactedTokens,
+    messagesPruned,
+    summary
+  };
+}
+function generateSessionSummary(messages) {
+  if (messages.length === 0)
+    return "";
+  const toolResults = messages.filter((m) => m.role === "tool").map((m) => {
+    const text = typeof m.content === "string" ? m.content : "";
+    const firstLine = text.split(`
+`)[0] || "";
+    return firstLine.slice(0, 100);
+  }).slice(-10);
+  const filesCreated = extractFilesCreated(messages);
+  const errors3 = extractErrors(messages);
+  let summary = `Session had ${messages.length} messages. `;
+  if (filesCreated.length > 0) {
+    summary += `Files created/modified: ${filesCreated.join(", ")}. `;
+  }
+  if (toolResults.length > 0) {
+    summary += `Recent operations: ${toolResults.join(" | ")}. `;
+  }
+  if (errors3.length > 0) {
+    summary += `Errors encountered: ${errors3.slice(0, 3).join(", ")}. `;
+  }
+  return summary || "Coding session with various file operations and tool executions.";
+}
+function extractFilesCreated(messages) {
+  const BLOCKED_PREFIXES = ["/dev/", "/tmp/", "/proc/", "/sys/", "/.ssh/"];
+  const patterns = [
+    /(?:Created|Wrote|Saved|Modified|Edited)\s+([^\s'"`\n]+)/gi,
+    /(?:File|Path):\s+([^\s'"`\n]+)/gi
+  ];
+  const files = new Set;
+  for (const msg of messages) {
+    for (const pattern of patterns) {
+      let match;
+      while ((match = pattern.exec(msg.content)) !== null) {
+        const file = match[1].trim();
+        if (file.length > 1 && !BLOCKED_PREFIXES.some((p) => file.startsWith(p)) && !file.startsWith("http") && !file.match(/^[0-9a-f]{8,}/i)) {
+          files.add(file);
+        }
+      }
+    }
+  }
+  return Array.from(files).slice(0, 10);
+}
+function extractErrors(messages) {
+  const errors3 = [];
+  for (const msg of messages) {
+    const errText = typeof msg.content === "string" ? msg.content : "";
+    if (msg.isError || /error|failed|exception/i.test(errText)) {
+      const firstLine = errText.split(`
+`)[0] || "";
+      errors3.push(firstLine.slice(0, 80));
+    }
+  }
+  return errors3;
+}
+function compressToolResult(content) {
+  const lines = content.split(`
+`);
+  if (lines.length <= 20)
+    return content;
+  const keptLines = lines.slice(0, 5);
+  const droppedLines = lines.slice(5);
+  const lastLines = lines.slice(-3);
+  const summary = `[... ${droppedLines.length} lines omitted ...]
+` + `Last ${lastLines.length} lines: ${lastLines.join(" | ").slice(0, 150)}`;
+  return [...keptLines, summary].join(`
+`);
+}
+function maybeCompact(messages, sessionId) {
+  if (!feature("AUTO_COMPACT"))
+    return false;
+  if (!needsCompaction(messages))
+    return false;
+  const result = compactSession(messages, sessionId);
+  if (needsCompaction(messages)) {
+    console.warn(`[Compact] Warning: Still over threshold after compaction (${result.compactedTokens} tokens). Consider increasing keepRecentMessages or targetTokens.`);
+  }
+  return true;
+}
+function resetCompactionState() {
+  lastCompactTokens = 0;
+  lastCompactAt = 0;
+}
+var COMPACT_CONFIG, lastCompactTokens = 0, lastCompactAt = 0, COMPACT_COOLDOWN_MS = 30000, fileCache, FILE_CACHE_TTL_MS = 30000;
+var init_compact = __esm(() => {
+  init_session_memory();
+  init_feature_flags();
+  COMPACT_CONFIG = {
+    triggerPercent: 0.75,
+    targetTokens: 40000,
+    keepRecentMessages: 25,
+    systemPromptTokens: 2000,
+    minTokensBetweenCompacts: 15000
+  };
+  fileCache = new Map;
+});
+
 // src/tools/registry.ts
 var exports_registry = {};
 __export(exports_registry, {
@@ -17470,9 +17949,9 @@ __export(exports_registry, {
 });
 import { exec } from "child_process";
 import { promisify } from "util";
-import { readFileSync as readFileSync7, writeFileSync as writeFileSync3, existsSync as existsSync7, mkdirSync as mkdirSync3, readdirSync, statSync as statSync2 } from "fs";
-import { join as join8, relative as relative2, resolve as resolve3 } from "path";
-import { homedir as homedir7 } from "os";
+import { readFileSync as readFileSync8, writeFileSync as writeFileSync4, existsSync as existsSync8, mkdirSync as mkdirSync4, readdirSync, statSync as statSync2 } from "fs";
+import { join as join9, relative as relative2, resolve as resolve3 } from "path";
+import { homedir as homedir8 } from "os";
 async function promptPermission(toolName, input, reason) {
   if (!process.stdin.isTTY) {
     process.stderr.write(`\x1B[33m⚠ Auto-allowed (non-interactive): ${toolName}\x1B[0m
@@ -17718,19 +18197,19 @@ ${stderrClean}`;
 }
 function loadTasks() {
   try {
-    if (existsSync7(TASKS_FILE)) {
-      const data = JSON.parse(readFileSync7(TASKS_FILE, "utf-8"));
+    if (existsSync8(TASKS_FILE)) {
+      const data = JSON.parse(readFileSync8(TASKS_FILE, "utf-8"));
       return new Map(Object.entries(data));
     }
   } catch {}
   return new Map;
 }
 function saveTasks(tasks) {
-  const dir = join8(TASKS_FILE, "..");
-  if (!existsSync7(dir))
-    mkdirSync3(dir, { recursive: true });
+  const dir = join9(TASKS_FILE, "..");
+  if (!existsSync8(dir))
+    mkdirSync4(dir, { recursive: true });
   const obj = Object.fromEntries(tasks);
-  writeFileSync3(TASKS_FILE, JSON.stringify(obj, null, 2));
+  writeFileSync4(TASKS_FILE, JSON.stringify(obj, null, 2));
 }
 function formatSize(bytes) {
   if (bytes < 1024)
@@ -17823,13 +18302,20 @@ var init_registry = __esm(() => {
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
-      if (!existsSync7(path))
+      if (!existsSync8(path))
         return `File not found: ${path}`;
+      const { getCachedFileRead, cacheFileRead } = await Promise.resolve().then(() => (init_compact(), exports_compact));
+      if (!input.offset && !input.limit) {
+        const cached2 = getCachedFileRead(path);
+        if (cached2)
+          return cached2 + `
+[cached — same file read recently]`;
+      }
       const ext = path.split(".").pop()?.toLowerCase() || "";
       const imageExts = ["png", "jpg", "jpeg", "gif", "webp", "svg", "ico", "bmp"];
       if (imageExts.includes(ext)) {
         try {
-          const buf = readFileSync7(path);
+          const buf = readFileSync8(path);
           const size = statSync2(path).size;
           const base642 = buf.toString("base64").slice(0, 1000);
           return `[Image: ${ext.toUpperCase()}, ${formatSize(size)}]
@@ -17854,7 +18340,7 @@ ${pdfText}`;
         return `[Binary file: ${ext.toUpperCase()}, ${formatSize(size)}] — cannot display contents`;
       }
       try {
-        const raw = readFileSync7(path, "utf-8");
+        const raw = readFileSync8(path, "utf-8");
         const allLines = raw.split(`
 `);
         const offset = input.offset || 1;
@@ -17878,6 +18364,8 @@ ${content}`;
         if (content.length > 1e5)
           content = content.slice(0, 1e5) + `
 ... (truncated)`;
+        if (!input.offset && !input.limit)
+          cacheFileRead(path, content);
         return content;
       } catch (err) {
         return `Error reading ${path}: ${err}`;
@@ -17901,10 +18389,10 @@ ${content}`;
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
       try {
-        const dir = join8(path, "..");
-        if (!existsSync7(dir))
-          mkdirSync3(dir, { recursive: true });
-        writeFileSync3(path, input.content, "utf-8");
+        const dir = join9(path, "..");
+        if (!existsSync8(dir))
+          mkdirSync4(dir, { recursive: true });
+        writeFileSync4(path, input.content, "utf-8");
         return `Written ${input.content.length} chars to ${path}`;
       } catch (err) {
         return `Error writing ${path}: ${err}`;
@@ -17928,10 +18416,10 @@ ${content}`;
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
-      if (!existsSync7(path))
+      if (!existsSync8(path))
         return `File not found: ${path}`;
       try {
-        let content = readFileSync7(path, "utf-8");
+        let content = readFileSync8(path, "utf-8");
         const oldText = input.old_text;
         const newText = input.new_text;
         if (!content.includes(oldText)) {
@@ -17949,7 +18437,7 @@ ${content}`;
               if (endIdx >= 0) {
                 const actualOld = content.slice(lineIdx, endIdx + lastLine.length);
                 content = content.replace(actualOld, newText);
-                writeFileSync3(path, content, "utf-8");
+                writeFileSync4(path, content, "utf-8");
                 const relPath2 = relative2(process.cwd(), path) || path;
                 const diffLines2 = [`${relPath2} (fuzzy match — whitespace differences):`];
                 for (const l of actualOld.split(`
@@ -17980,7 +18468,7 @@ Tip: Use Read to check the exact content first.`;
           return hint;
         }
         content = content.replace(oldText, newText);
-        writeFileSync3(path, content, "utf-8");
+        writeFileSync4(path, content, "utf-8");
         const relPath = relative2(process.cwd(), path) || path;
         const oldLines = oldText.split(`
 `);
@@ -17991,7 +18479,7 @@ Tip: Use Read to check the exact content first.`;
           diffLines.push(`\x1B[31m- ${line}\x1B[0m`);
         for (const line of newLines)
           diffLines.push(`\x1B[32m+ ${line}\x1B[0m`);
-        const verify = readFileSync7(path, "utf-8");
+        const verify = readFileSync8(path, "utf-8");
         if (!verify.includes(newText)) {
           diffLines.push(`\x1B[31m⚠ VERIFICATION FAILED: new text not found after edit\x1B[0m`);
         }
@@ -18019,7 +18507,7 @@ Tip: Use Read to check the exact content first.`;
       const parts = pattern.split("/");
       const filePattern = parts[parts.length - 1] || "*";
       const dirParts = parts.slice(0, -1).filter((p) => p !== "**" && p !== "*");
-      const searchDir = dirParts.length > 0 ? join8(cwd, ...dirParts) : cwd;
+      const searchDir = dirParts.length > 0 ? join9(cwd, ...dirParts) : cwd;
       const isRecursive = pattern.includes("**");
       let cmd;
       if (isRecursive) {
@@ -18117,7 +18605,7 @@ Tip: Use Read to check the exact content first.`;
 `);
     }
   });
-  TASKS_FILE = join8(homedir7(), ".nole-code", "tasks.json");
+  TASKS_FILE = join9(homedir8(), ".nole-code", "tasks.json");
   registerTool({
     name: "TaskCreate",
     description: "Create a new background task and get a task ID.",
@@ -18337,17 +18825,17 @@ Manage with /team list or /team send`;
     },
     execute: async (input, _ctx) => {
       const path = resolve3(process.cwd(), input.path);
-      if (!existsSync7(path))
+      if (!existsSync8(path))
         return `Notebook not found: ${path}`;
       try {
-        const nb = JSON.parse(readFileSync7(path, "utf-8"));
+        const nb = JSON.parse(readFileSync8(path, "utf-8"));
         const idx = input.cell_index;
         if (!nb.cells || !nb.cells[idx])
           return `Cell ${idx} not found`;
         nb.cells[idx].source = input.new_text;
         if (input.cell_type)
           nb.cells[idx].cell_type = input.cell_type;
-        writeFileSync3(path, JSON.stringify(nb, null, 2));
+        writeFileSync4(path, JSON.stringify(nb, null, 2));
         return `Edited cell ${idx} in ${path}`;
       } catch (err) {
         return `Error: ${err}`;
@@ -18431,7 +18919,7 @@ Manage with /team list or /team send`;
     },
     execute: async (input, _ctx) => {
       const dir = resolve3(process.cwd(), input.path || ".");
-      if (!existsSync7(dir))
+      if (!existsSync8(dir))
         return `Directory not found: ${dir}`;
       try {
         const entries = readdirSync(dir);
@@ -18445,7 +18933,7 @@ Manage with /team list or /team send`;
 `);
         const lines = filtered.map((name) => {
           try {
-            const fullPath = join8(dir, name);
+            const fullPath = join9(dir, name);
             const stat = statSync2(fullPath);
             const isDir = stat.isDirectory();
             const size = isDir ? "-" : formatSize(stat.size);
@@ -18487,15 +18975,15 @@ Manage with /team list or /team send`;
           return;
         try {
           const entries = readdirSync(dir).filter((e) => !e.startsWith(".") && e !== "node_modules" && e !== ".git").sort((a, b) => {
-            const aIsDir = statSync2(join8(dir, a)).isDirectory();
-            const bIsDir = statSync2(join8(dir, b)).isDirectory();
+            const aIsDir = statSync2(join9(dir, a)).isDirectory();
+            const bIsDir = statSync2(join9(dir, b)).isDirectory();
             if (aIsDir !== bIsDir)
               return aIsDir ? -1 : 1;
             return a.localeCompare(b);
           });
           for (let i = 0;i < entries.length; i++) {
             const name = entries[i];
-            const fullPath = join8(dir, name);
+            const fullPath = join9(dir, name);
             const isLast = i === entries.length - 1;
             const connector = isLast ? "└── " : "├── ";
             const childPrefix = isLast ? "    " : "│   ";
@@ -18551,10 +19039,10 @@ ${dirCount} directories, ${fileCount} files`);
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
-      if (!existsSync7(filePath))
+      if (!existsSync8(filePath))
         return `File not found: ${filePath}`;
       const edits = input.edits;
-      let content = readFileSync7(filePath, "utf-8");
+      let content = readFileSync8(filePath, "utf-8");
       const diffs = [];
       let applied = 0;
       for (const edit of edits) {
@@ -18574,8 +19062,8 @@ ${dirCount} directories, ${fileCount} files`);
           diffs.push(`\x1B[32m+ ${l}\x1B[0m`);
         diffs.push("");
       }
-      writeFileSync3(filePath, content, "utf-8");
-      const verify = readFileSync7(filePath, "utf-8");
+      writeFileSync4(filePath, content, "utf-8");
+      const verify = readFileSync8(filePath, "utf-8");
       let verified = 0;
       for (const edit of edits) {
         if (verify.includes(edit.new_text))
@@ -18675,7 +19163,7 @@ ${responseBody}`;
       let totalMatches = 0;
       for (const file of files) {
         try {
-          const content = readFileSync7(file, "utf-8");
+          const content = readFileSync8(file, "utf-8");
           const regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
           const matches = content.match(regex);
           if (matches && matches.length > 0) {
@@ -18683,7 +19171,7 @@ ${responseBody}`;
             const relPath = relative2(process.cwd(), file);
             if (!dryRun) {
               const newContent = content.split(pattern).join(replacement);
-              writeFileSync3(file, newContent, "utf-8");
+              writeFileSync4(file, newContent, "utf-8");
             }
             changes.push(`  ${relPath}: ${matches.length} match${matches.length > 1 ? "es" : ""}`);
           }
@@ -18826,26 +19314,26 @@ ${staged.trim()}`;
       let cmd = input.command;
       if (!cmd) {
         const cwd = process.cwd();
-        if (existsSync7(join8(cwd, "package.json"))) {
-          const pkg = JSON.parse(readFileSync7(join8(cwd, "package.json"), "utf-8"));
+        if (existsSync8(join9(cwd, "package.json"))) {
+          const pkg = JSON.parse(readFileSync8(join9(cwd, "package.json"), "utf-8"));
           const scripts = pkg.scripts || {};
           if (scripts.test) {
             cmd = "npm test";
-          } else if (existsSync7(join8(cwd, "vitest.config.ts")) || existsSync7(join8(cwd, "vitest.config.js"))) {
+          } else if (existsSync8(join9(cwd, "vitest.config.ts")) || existsSync8(join9(cwd, "vitest.config.js"))) {
             cmd = "npx vitest run";
-          } else if (existsSync7(join8(cwd, "jest.config.ts")) || existsSync7(join8(cwd, "jest.config.js"))) {
+          } else if (existsSync8(join9(cwd, "jest.config.ts")) || existsSync8(join9(cwd, "jest.config.js"))) {
             cmd = "npx jest";
-          } else if (existsSync7(join8(cwd, "bun.lock")) || existsSync7(join8(cwd, "bunfig.toml"))) {
+          } else if (existsSync8(join9(cwd, "bun.lock")) || existsSync8(join9(cwd, "bunfig.toml"))) {
             cmd = "bun test";
           }
         }
-        if (existsSync7(join8(process.cwd(), "pytest.ini")) || existsSync7(join8(process.cwd(), "pyproject.toml"))) {
+        if (existsSync8(join9(process.cwd(), "pytest.ini")) || existsSync8(join9(process.cwd(), "pyproject.toml"))) {
           cmd = cmd || "python -m pytest -v";
         }
-        if (existsSync7(join8(process.cwd(), "Cargo.toml"))) {
+        if (existsSync8(join9(process.cwd(), "Cargo.toml"))) {
           cmd = cmd || "cargo test";
         }
-        if (existsSync7(join8(process.cwd(), "go.mod"))) {
+        if (existsSync8(join9(process.cwd(), "go.mod"))) {
           cmd = cmd || "go test ./...";
         }
         cmd = cmd || 'echo "No test framework detected. Use command parameter to specify."';
@@ -18913,9 +19401,9 @@ ${output.slice(0, 500) || "(no output yet)"}`;
     execute: async (input, _ctx) => {
       const f1 = resolve3(process.cwd(), input.file1);
       const f2 = resolve3(process.cwd(), input.file2);
-      if (!existsSync7(f1))
+      if (!existsSync8(f1))
         return `File not found: ${f1}`;
-      if (!existsSync7(f2))
+      if (!existsSync8(f2))
         return `File not found: ${f2}`;
       const result = await runBash(`diff --color=never -u "${f1}" "${f2}" 2>/dev/null`);
       if (!result.trim())
@@ -18948,9 +19436,9 @@ ${output.slice(0, 500) || "(no output yet)"}`;
     execute: async (input, _ctx) => {
       const from = resolve3(process.cwd(), input.from);
       const to = resolve3(process.cwd(), input.to);
-      if (!existsSync7(from))
+      if (!existsSync8(from))
         return `Not found: ${from}`;
-      if (existsSync7(to))
+      if (existsSync8(to))
         return `Target already exists: ${to}`;
       const { renameSync } = __require("fs");
       try {
@@ -18977,7 +19465,7 @@ ${output.slice(0, 500) || "(no output yet)"}`;
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
-      if (!existsSync7(targetPath))
+      if (!existsSync8(targetPath))
         return `Not found: ${targetPath}`;
       try {
         const stat = statSync2(targetPath);
@@ -19009,28 +19497,28 @@ __export(exports_manager, {
   exportSession: () => exportSession,
   deleteSession: () => deleteSession,
   createSession: () => createSession,
-  compactSession: () => compactSession
+  compactSession: () => compactSession2
 });
 import {
-  existsSync as existsSync8,
-  mkdirSync as mkdirSync4,
-  readFileSync as readFileSync8,
-  writeFileSync as writeFileSync4,
+  existsSync as existsSync9,
+  mkdirSync as mkdirSync5,
+  readFileSync as readFileSync9,
+  writeFileSync as writeFileSync5,
   readdirSync as readdirSync2,
   unlinkSync,
   renameSync
 } from "fs";
-import { join as join9 } from "path";
-import { homedir as homedir8 } from "os";
+import { join as join10 } from "path";
+import { homedir as homedir9 } from "os";
 function ensureSessionDir() {
-  mkdirSync4(SESSION_DIR, { recursive: true });
+  mkdirSync5(SESSION_DIR, { recursive: true });
 }
 function listSessions(limit = 20) {
   ensureSessionDir();
   const files = readdirSync2(SESSION_DIR).filter((f) => f.endsWith(".json"));
   const sessions = files.map((f) => {
     try {
-      return JSON.parse(readFileSync8(join9(SESSION_DIR, f), "utf-8"));
+      return JSON.parse(readFileSync9(join10(SESSION_DIR, f), "utf-8"));
     } catch {
       return null;
     }
@@ -19038,11 +19526,11 @@ function listSessions(limit = 20) {
   return sessions.slice(0, limit);
 }
 function loadSession(id) {
-  const file = join9(SESSION_DIR, `${id}.json`);
-  if (!existsSync8(file))
+  const file = join10(SESSION_DIR, `${id}.json`);
+  if (!existsSync9(file))
     return null;
   try {
-    return JSON.parse(readFileSync8(file, "utf-8"));
+    return JSON.parse(readFileSync9(file, "utf-8"));
   } catch {
     return null;
   }
@@ -19050,14 +19538,14 @@ function loadSession(id) {
 function saveSession(session) {
   ensureSessionDir();
   session.updatedAt = new Date().toISOString();
-  const file = join9(SESSION_DIR, `${session.id}.json`);
+  const file = join10(SESSION_DIR, `${session.id}.json`);
   const tmp = file + `.tmp.${Date.now()}`;
-  writeFileSync4(tmp, JSON.stringify(session, null, 2), "utf-8");
+  writeFileSync5(tmp, JSON.stringify(session, null, 2), "utf-8");
   renameSync(tmp, file);
 }
 function deleteSession(id) {
-  const file = join9(SESSION_DIR, `${id}.json`);
-  if (existsSync8(file)) {
+  const file = join10(SESSION_DIR, `${id}.json`);
+  if (existsSync9(file)) {
     unlinkSync(file);
     return true;
   }
@@ -19099,7 +19587,7 @@ function forkSession(parentId, reason) {
   saveSession(forked);
   return forked;
 }
-function compactSession(id, keepMessages = 10) {
+function compactSession2(id, keepMessages = 10) {
   const session = loadSession(id);
   if (!session)
     return null;
@@ -19166,7 +19654,7 @@ function exportSession(id) {
 }
 var SESSION_DIR;
 var init_manager = __esm(() => {
-  SESSION_DIR = join9(homedir8(), ".nole-code", "sessions");
+  SESSION_DIR = join10(homedir9(), ".nole-code", "sessions");
 });
 
 // src/project/onboarding.ts
@@ -19182,25 +19670,25 @@ __export(exports_onboarding, {
   createNoleMd: () => createNoleMd
 });
 import {
-  existsSync as existsSync9,
-  readFileSync as readFileSync9,
-  writeFileSync as writeFileSync5,
-  mkdirSync as mkdirSync5
+  existsSync as existsSync10,
+  readFileSync as readFileSync10,
+  writeFileSync as writeFileSync6,
+  mkdirSync as mkdirSync6
 } from "fs";
-import { join as join10 } from "path";
-import { homedir as homedir9 } from "os";
+import { join as join11 } from "path";
+import { homedir as homedir10 } from "os";
 function loadProjectConfig() {
-  mkdirSync5(CONFIG_DIR, { recursive: true });
-  if (existsSync9(PROJECT_CONFIG)) {
+  mkdirSync6(CONFIG_DIR, { recursive: true });
+  if (existsSync10(PROJECT_CONFIG)) {
     try {
-      return JSON.parse(readFileSync9(PROJECT_CONFIG, "utf-8"));
+      return JSON.parse(readFileSync10(PROJECT_CONFIG, "utf-8"));
     } catch {}
   }
   return {};
 }
 function saveProjectConfig(config2) {
-  mkdirSync5(CONFIG_DIR, { recursive: true });
-  writeFileSync5(PROJECT_CONFIG, JSON.stringify(config2, null, 2));
+  mkdirSync6(CONFIG_DIR, { recursive: true });
+  writeFileSync6(PROJECT_CONFIG, JSON.stringify(config2, null, 2));
 }
 function isDirEmpty(cwd) {
   try {
@@ -19212,7 +19700,7 @@ function isDirEmpty(cwd) {
   }
 }
 function getOnboardingSteps(cwd) {
-  const noleMdPath = join10(cwd, "NOLE.md");
+  const noleMdPath = join11(cwd, "NOLE.md");
   const empty = isDirEmpty(cwd);
   return [
     {
@@ -19225,14 +19713,14 @@ function getOnboardingSteps(cwd) {
     {
       key: "nolemd",
       text: "Run /init to create a NOLE.md file",
-      isComplete: existsSync9(noleMdPath),
+      isComplete: existsSync10(noleMdPath),
       isCompletable: true,
       isEnabled: !empty
     },
     {
       key: "context",
       text: "Add project context files",
-      isComplete: existsSync9(join10(cwd, ".nolecode")) || existsSync9(join10(cwd, "NOLE.md")),
+      isComplete: existsSync10(join11(cwd, ".nolecode")) || existsSync10(join11(cwd, "NOLE.md")),
       isCompletable: true,
       isEnabled: !empty
     }
@@ -19253,10 +19741,10 @@ function createNoleMd(cwd, projectName) {
   let techStack = "";
   let shellCmds = "";
   let description = "Brief description of what this project does.";
-  const pkgPath = join10(cwd, "package.json");
-  if (existsSync9(pkgPath)) {
+  const pkgPath = join11(cwd, "package.json");
+  if (existsSync10(pkgPath)) {
     try {
-      const pkg = JSON.parse(readFileSync9(pkgPath, "utf-8"));
+      const pkg = JSON.parse(readFileSync10(pkgPath, "utf-8"));
       if (pkg.description)
         description = pkg.description;
       const deps = Object.keys(pkg.dependencies || {});
@@ -19297,18 +19785,18 @@ function createNoleMd(cwd, projectName) {
 `) || "npm run dev";
     } catch {}
   }
-  if (existsSync9(join10(cwd, "pyproject.toml")) || existsSync9(join10(cwd, "setup.py"))) {
+  if (existsSync10(join11(cwd, "pyproject.toml")) || existsSync10(join11(cwd, "setup.py"))) {
     techStack = techStack || "Python";
     shellCmds = shellCmds || `python -m pytest
 python main.py`;
   }
-  if (existsSync9(join10(cwd, "Cargo.toml"))) {
+  if (existsSync10(join11(cwd, "Cargo.toml"))) {
     techStack = techStack || "Rust";
     shellCmds = shellCmds || `cargo build
 cargo test
 cargo run`;
   }
-  if (existsSync9(join10(cwd, "go.mod"))) {
+  if (existsSync10(join11(cwd, "go.mod"))) {
     techStack = techStack || "Go";
     shellCmds = shellCmds || `go build
 go test ./...
@@ -19344,23 +19832,23 @@ ${structure || "# Project directory structure"}
 ## Notes
 - Important things to know when working in this project
 `;
-  const path = join10(cwd, "NOLE.md");
-  writeFileSync5(path, template, "utf-8");
+  const path = join11(cwd, "NOLE.md");
+  writeFileSync6(path, template, "utf-8");
   return path;
 }
 function loadProjectContext(cwd) {
   const paths = [
-    join10(cwd, "NOLE.md"),
-    join10(cwd, ".nole.md"),
-    join10(cwd, ".nolecode"),
-    join10(cwd, "CONTEXT.md")
+    join11(cwd, "NOLE.md"),
+    join11(cwd, ".nole.md"),
+    join11(cwd, ".nolecode"),
+    join11(cwd, "CONTEXT.md")
   ];
   let content = null;
   let projectInstructions = "";
   for (const p of paths) {
-    if (existsSync9(p)) {
+    if (existsSync10(p)) {
       try {
-        content = readFileSync9(p, "utf-8");
+        content = readFileSync10(p, "utf-8");
         if (p.endsWith("NOLE.md") || p.endsWith(".nolecode") || p.endsWith(".nole.md")) {
           projectInstructions = content;
         }
@@ -19371,9 +19859,9 @@ function loadProjectContext(cwd) {
   return { content, projectInstructions };
 }
 function loadSettings() {
-  if (existsSync9(SETTINGS_FILE)) {
+  if (existsSync10(SETTINGS_FILE)) {
     try {
-      return JSON.parse(readFileSync9(SETTINGS_FILE, "utf-8"));
+      return JSON.parse(readFileSync10(SETTINGS_FILE, "utf-8"));
     } catch {}
   }
   return {
@@ -19390,14 +19878,14 @@ function loadSettings() {
 function saveSettings(settings) {
   const current = loadSettings();
   const updated = { ...current, ...settings };
-  writeFileSync5(SETTINGS_FILE, JSON.stringify(updated, null, 2));
+  writeFileSync6(SETTINGS_FILE, JSON.stringify(updated, null, 2));
   return updated;
 }
 var CONFIG_DIR, PROJECT_CONFIG, SETTINGS_FILE;
 var init_onboarding = __esm(() => {
-  CONFIG_DIR = join10(homedir9(), ".nole-code");
-  PROJECT_CONFIG = join10(CONFIG_DIR, "projects.json");
-  SETTINGS_FILE = join10(CONFIG_DIR, "settings.json");
+  CONFIG_DIR = join11(homedir10(), ".nole-code");
+  PROJECT_CONFIG = join11(CONFIG_DIR, "projects.json");
+  SETTINGS_FILE = join11(CONFIG_DIR, "settings.json");
 });
 
 // src/plan/index.ts
@@ -19680,65 +20168,6 @@ function cleanupPlanMode() {
 var currentPlan = null, rl = null;
 var init_plan = () => {};
 
-// src/utils/count-tokens.ts
-var exports_count_tokens = {};
-__export(exports_count_tokens, {
-  roughTokenCount: () => roughTokenCount,
-  estimateTotalTokens: () => estimateTotalTokens,
-  estimateMessageTokens: () => estimateMessageTokens,
-  compactToTokenBudget: () => compactToTokenBudget
-});
-function roughTokenCount(text) {
-  if (!text)
-    return 0;
-  if (typeof text !== "string") {
-    return roughTokenCount(JSON.stringify(text));
-  }
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  const wordTokens = words.length * 1.3;
-  const lineBreakTokens = (text.match(/\n/g) || []).length * 2;
-  const specialTokens = (text.match(/[^\w\s]/g) || []).length * 0.5;
-  return Math.ceil(wordTokens + lineBreakTokens + specialTokens);
-}
-function estimateMessageTokens(message) {
-  let tokens = 4;
-  if (message.name) {
-    tokens += roughTokenCount(message.name) + 2;
-  }
-  if (message.content) {
-    tokens += roughTokenCount(String(message.content));
-  }
-  if (message.tool_calls) {
-    for (const tc of message.tool_calls) {
-      tokens += roughTokenCount(tc.name) + roughTokenCount(tc.input) + 10;
-    }
-  }
-  return tokens;
-}
-function estimateTotalTokens(messages) {
-  return messages.reduce((sum, msg) => sum + estimateMessageTokens(msg), 0);
-}
-function compactToTokenBudget(text, maxTokens) {
-  const currentTokens = roughTokenCount(text);
-  if (currentTokens <= maxTokens)
-    return text;
-  let start = 0;
-  let end = text.length;
-  while (start < end) {
-    const mid = Math.floor((start + end) / 2);
-    const estimate = roughTokenCount(text.slice(0, mid));
-    if (estimate < maxTokens) {
-      start = mid + 1;
-    } else {
-      end = mid;
-    }
-  }
-  const truncated = text.slice(0, start);
-  return truncated + `
-
-[_compacted_]`;
-}
-
 // src/utils/cost.ts
 var exports_cost = {};
 __export(exports_cost, {
@@ -19749,9 +20178,9 @@ __export(exports_cost, {
   box: () => box,
   applyStyle: () => applyStyle
 });
-import { existsSync as existsSync10, readFileSync as readFileSync10, mkdirSync as mkdirSync6, appendFileSync as appendFileSync2 } from "fs";
-import { homedir as homedir10 } from "node:os";
-import { join as join11, dirname as dirname4 } from "node:path";
+import { existsSync as existsSync11, readFileSync as readFileSync11, mkdirSync as mkdirSync7, appendFileSync as appendFileSync2 } from "fs";
+import { homedir as homedir11 } from "node:os";
+import { join as join12, dirname as dirname4 } from "node:path";
 
 class CostTracker {
   sessionCosts = new Map;
@@ -19775,7 +20204,7 @@ class CostTracker {
       cost: this.calculateCost(model, inputTokens, outputTokens),
       requests: 1
     };
-    mkdirSync6(dirname4(COST_FILE), { recursive: true });
+    mkdirSync7(dirname4(COST_FILE), { recursive: true });
     appendFileSync2(COST_FILE, JSON.stringify(entry) + `
 `);
     if (this.currentSession) {
@@ -19802,9 +20231,9 @@ class CostTracker {
       totalOutputTokens: 0,
       byModel: {}
     };
-    if (!existsSync10(COST_FILE))
+    if (!existsSync11(COST_FILE))
       return summary;
-    const lines = readFileSync10(COST_FILE, "utf-8").trim().split(`
+    const lines = readFileSync11(COST_FILE, "utf-8").trim().split(`
 `);
     for (const line of lines) {
       try {
@@ -19844,7 +20273,7 @@ class CostTracker {
   clearHistory() {
     const { unlinkSync: unlinkSync2 } = __require("fs");
     try {
-      if (existsSync10(COST_FILE)) {
+      if (existsSync11(COST_FILE)) {
         unlinkSync2(COST_FILE);
       }
     } catch {}
@@ -19929,7 +20358,7 @@ var init_cost = __esm(() => {
     "MiniMax-M2.5": { input: 0.005, output: 0.005 },
     default: { input: 0.01, output: 0.01 }
   };
-  COST_FILE = join11(homedir10(), ".nole-code", "costs.jsonl");
+  COST_FILE = join12(homedir11(), ".nole-code", "costs.jsonl");
   costTracker = new CostTracker;
   STYLES = {
     user: { color: "#60A5FA" },
@@ -19991,18 +20420,18 @@ __export(exports_checkpoint, {
   abortCheckpoint: () => abortCheckpoint
 });
 import {
-  existsSync as existsSync11,
-  mkdirSync as mkdirSync7,
-  readFileSync as readFileSync11,
-  writeFileSync as writeFileSync7,
+  existsSync as existsSync12,
+  mkdirSync as mkdirSync8,
+  readFileSync as readFileSync12,
+  writeFileSync as writeFileSync8,
   readdirSync as readdirSync3,
   unlinkSync as unlinkSync2,
   renameSync as renameSync2
 } from "fs";
-import { join as join12 } from "path";
-import { homedir as homedir11 } from "os";
+import { join as join13 } from "path";
+import { homedir as homedir12 } from "os";
 function ensureCheckpointDir() {
-  mkdirSync7(CHECKPOINT_DIR, { recursive: true });
+  mkdirSync8(CHECKPOINT_DIR, { recursive: true });
 }
 function createCheckpoint(goal, cwd, settings) {
   ensureCheckpointDir();
@@ -20032,11 +20461,11 @@ function createCheckpoint(goal, cwd, settings) {
   return checkpoint;
 }
 function loadCheckpoint(id) {
-  const file = join12(CHECKPOINT_DIR, `${id}.json`);
-  if (!existsSync11(file))
+  const file = join13(CHECKPOINT_DIR, `${id}.json`);
+  if (!existsSync12(file))
     return null;
   try {
-    return JSON.parse(readFileSync11(file, "utf-8"));
+    return JSON.parse(readFileSync12(file, "utf-8"));
   } catch {
     return null;
   }
@@ -20052,14 +20481,14 @@ function loadLatestCheckpoint() {
 function saveCheckpoint(checkpoint) {
   ensureCheckpointDir();
   checkpoint.updatedAt = new Date().toISOString();
-  const file = join12(CHECKPOINT_DIR, `${checkpoint.id}.json`);
+  const file = join13(CHECKPOINT_DIR, `${checkpoint.id}.json`);
   const tmp = file + `.tmp.${Date.now()}`;
-  writeFileSync7(tmp, JSON.stringify(checkpoint, null, 2), "utf-8");
+  writeFileSync8(tmp, JSON.stringify(checkpoint, null, 2), "utf-8");
   renameSync2(tmp, file);
 }
 function deleteCheckpoint(id) {
-  const file = join12(CHECKPOINT_DIR, `${id}.json`);
-  if (existsSync11(file)) {
+  const file = join13(CHECKPOINT_DIR, `${id}.json`);
+  if (existsSync12(file)) {
     unlinkSync2(file);
     return true;
   }
@@ -20262,7 +20691,7 @@ function inferErrorHint(error2) {
 }
 var CHECKPOINT_DIR;
 var init_checkpoint = __esm(() => {
-  CHECKPOINT_DIR = join12(homedir11(), ".nole-code", "checkpoints");
+  CHECKPOINT_DIR = join13(homedir12(), ".nole-code", "checkpoints");
 });
 
 // src/ui/output/styles.ts
@@ -21059,7 +21488,7 @@ var init_LocalShellTask = __esm(() => {
 
 // src/tasks/LocalAgentTask/index.ts
 import { spawn as spawn5 } from "child_process";
-import { join as join13 } from "path";
+import { join as join14 } from "path";
 import { EventEmitter as EventEmitter4 } from "events";
 function createAgentTask(options) {
   return new LocalAgentTask(options);
@@ -21097,7 +21526,7 @@ var init_LocalAgentTask = __esm(() => {
       this.task.status = "running";
       this.task.startedAt = Date.now();
       const execPath = process.execPath;
-      const scriptPath = join13(process.cwd(), "dist/index.js");
+      const scriptPath = join14(process.cwd(), "dist/index.js");
       const args = [scriptPath, "--loop"];
       if (this.task.sessionId) {
         args.push("--session", this.task.sessionId);
@@ -21250,23 +21679,23 @@ var init_DreamTask = __esm(() => {
 });
 
 // src/tasks/manager.ts
-import { existsSync as existsSync12, readFileSync as readFileSync12, writeFileSync as writeFileSync8, mkdirSync as mkdirSync8 } from "fs";
-import { dirname as dirname5, join as join14 } from "path";
-import { homedir as homedir12 } from "os";
+import { existsSync as existsSync13, readFileSync as readFileSync13, writeFileSync as writeFileSync9, mkdirSync as mkdirSync9 } from "fs";
+import { dirname as dirname5, join as join15 } from "path";
+import { homedir as homedir13 } from "os";
 import { EventEmitter as EventEmitter6 } from "events";
 function ensureTasksFile() {
   const dir = dirname5(TASKS_FILE2);
-  if (!existsSync12(dir)) {
-    mkdirSync8(dir, { recursive: true });
+  if (!existsSync13(dir)) {
+    mkdirSync9(dir, { recursive: true });
   }
-  if (!existsSync12(TASKS_FILE2)) {
-    writeFileSync8(TASKS_FILE2, JSON.stringify({}, null, 2));
+  if (!existsSync13(TASKS_FILE2)) {
+    writeFileSync9(TASKS_FILE2, JSON.stringify({}, null, 2));
   }
 }
 function loadTasksFile() {
   try {
     ensureTasksFile();
-    const data = readFileSync12(TASKS_FILE2, "utf-8");
+    const data = readFileSync13(TASKS_FILE2, "utf-8");
     return JSON.parse(data);
   } catch {
     return {};
@@ -21274,14 +21703,14 @@ function loadTasksFile() {
 }
 function saveTasksFile(tasks) {
   ensureTasksFile();
-  writeFileSync8(TASKS_FILE2, JSON.stringify(tasks, null, 2));
+  writeFileSync9(TASKS_FILE2, JSON.stringify(tasks, null, 2));
 }
 var TASKS_FILE2, TaskManager, taskManager;
 var init_manager2 = __esm(() => {
   init_LocalShellTask();
   init_LocalAgentTask();
   init_DreamTask();
-  TASKS_FILE2 = join14(homedir12(), ".nole-code", "tasks.json");
+  TASKS_FILE2 = join15(homedir13(), ".nole-code", "tasks.json");
   TaskManager = class TaskManager extends EventEmitter6 {
     tasks = new Map;
     runners = new Map;
@@ -21450,16 +21879,16 @@ __export(exports_server, {
   registerServerCommand: () => registerServerCommand
 });
 import { spawn as spawn6 } from "child_process";
-import { join as join15 } from "path";
-import { homedir as homedir13 } from "os";
-import { existsSync as existsSync13, readFileSync as readFileSync13, unlinkSync as unlinkSync3 } from "fs";
+import { join as join16 } from "path";
+import { homedir as homedir14 } from "os";
+import { existsSync as existsSync14, readFileSync as readFileSync14, unlinkSync as unlinkSync3 } from "fs";
 function getPidFile() {
-  return join15(homedir13(), ".nole-code", "server.pid");
+  return join16(homedir14(), ".nole-code", "server.pid");
 }
 function readPidFile() {
   try {
-    if (existsSync13(getPidFile())) {
-      const pid = parseInt(readFileSync13(getPidFile(), "utf-8").trim(), 10);
+    if (existsSync14(getPidFile())) {
+      const pid = parseInt(readFileSync14(getPidFile(), "utf-8").trim(), 10);
       return isNaN(pid) ? null : pid;
     }
   } catch {}
@@ -21484,7 +21913,7 @@ function registerServerCommand(register) {
     aliases: ["srv"],
     execute: async (args, ctx) => {
       const action = args[0] || "status";
-      const noleCodeDir = join15(homedir13(), "nole-code");
+      const noleCodeDir = join16(homedir14(), "nole-code");
       switch (action) {
         case "start": {
           const { running } = checkServerStatus();
@@ -21688,15 +22117,15 @@ var init_companion = __esm(() => {
 });
 
 // src/buddy/config.ts
-import { existsSync as existsSync14, readFileSync as readFileSync14 } from "fs";
-import { join as join16 } from "path";
+import { existsSync as existsSync15, readFileSync as readFileSync15 } from "fs";
+import { join as join17 } from "path";
 function loadEnv() {
-  const envPath = join16(process.cwd(), ".env");
-  if (!existsSync14(envPath)) {
+  const envPath = join17(process.cwd(), ".env");
+  if (!existsSync15(envPath)) {
     return {};
   }
   try {
-    const content = readFileSync14(envPath, "utf-8");
+    const content = readFileSync15(envPath, "utf-8");
     const config2 = {};
     content.split(`
 `).forEach((line) => {
@@ -21866,12 +22295,12 @@ var init_registry2 = __esm(() => {
           return "Usage: /skill run code-review <file> [file...]";
         const prompts = [];
         for (const file of files) {
-          const { existsSync: existsSync15, readFileSync: readFileSync15 } = __require("fs");
-          if (!existsSync15(file)) {
+          const { existsSync: existsSync16, readFileSync: readFileSync16 } = __require("fs");
+          if (!existsSync16(file)) {
             prompts.push("File not found: " + file);
             continue;
           }
-          const content = readFileSync15(file, "utf-8").slice(0, 5000);
+          const content = readFileSync16(file, "utf-8").slice(0, 5000);
           prompts.push("## " + file + `
 
 ` + content);
@@ -21897,8 +22326,8 @@ Code to Review:
         let file = "";
         for (const p of parts) {
           if (!p.startsWith("-")) {
-            const { existsSync: existsSync15 } = __require("fs");
-            if (existsSync15(p)) {
+            const { existsSync: existsSync16 } = __require("fs");
+            if (existsSync16(p)) {
               file = p;
               break;
             }
@@ -21906,8 +22335,8 @@ Code to Review:
         }
         if (!file)
           return "Usage: /skill run refactor <file>";
-        const { readFileSync: readFileSync15 } = __require("fs");
-        const content = readFileSync15(file, "utf-8");
+        const { readFileSync: readFileSync16 } = __require("fs");
+        const content = readFileSync16(file, "utf-8");
         const prompt = `You are a code refactorer. Improve this code for readability and maintainability. Return: 1) Summary of changes, 2) Refactored code.
 
 Original Code (` + file + `):
@@ -21934,8 +22363,8 @@ Apply? (yes/no)`;
         let file = "";
         for (const p of parts) {
           if (!p.startsWith("-")) {
-            const { existsSync: existsSync15 } = __require("fs");
-            if (existsSync15(p)) {
+            const { existsSync: existsSync16 } = __require("fs");
+            if (existsSync16(p)) {
               file = p;
               break;
             }
@@ -21943,8 +22372,8 @@ Apply? (yes/no)`;
         }
         if (!file)
           return "Usage: /skill run explain <file>";
-        const { readFileSync: readFileSync15 } = __require("fs");
-        const content = readFileSync15(file, "utf-8").slice(0, 4000);
+        const { readFileSync: readFileSync16 } = __require("fs");
+        const content = readFileSync16(file, "utf-8").slice(0, 4000);
         const prompt = `Explain this code in simple terms. Cover: What it does, How it works, Key concepts.
 
 Code to Explain:
@@ -21963,8 +22392,8 @@ Code to Explain:
         let framework = "vitest";
         for (const p of parts) {
           if (!p.startsWith("-")) {
-            const { existsSync: existsSync15 } = __require("fs");
-            if (existsSync15(p)) {
+            const { existsSync: existsSync16 } = __require("fs");
+            if (existsSync16(p)) {
               file = p;
             }
           } else if (p === "--jest") {
@@ -21975,8 +22404,8 @@ Code to Explain:
         }
         if (!file)
           return "Usage: /skill run test-gen <file> [--framework=vitest]";
-        const { readFileSync: readFileSync15 } = __require("fs");
-        const content = readFileSync15(file, "utf-8").slice(0, 5000);
+        const { readFileSync: readFileSync16 } = __require("fs");
+        const content = readFileSync16(file, "utf-8").slice(0, 5000);
         const testFile = file.replace(/(\.[jt]s)x?$/, ".test.$1");
         const prompt = "Generate " + framework + ` tests for this code. Return only the test code.
 
@@ -21994,9 +22423,9 @@ Source Code:
 });
 
 // src/skills/loader.ts
-import { existsSync as existsSync15, readdirSync as readdirSync4, readFileSync as readFileSync15 } from "fs";
-import { join as join17 } from "path";
-import { homedir as homedir14 } from "os";
+import { existsSync as existsSync16, readdirSync as readdirSync4, readFileSync as readFileSync16 } from "fs";
+import { join as join18 } from "path";
+import { homedir as homedir15 } from "os";
 
 class SkillLoader {
   skills = [];
@@ -22007,10 +22436,10 @@ class SkillLoader {
     for (const skill of builtinSkills) {
       this.skills.push({ ...skill, source: "builtin" });
     }
-    if (existsSync15(SKILLS_DIR)) {
+    if (existsSync16(SKILLS_DIR)) {
       this.loadFromDirectory(SKILLS_DIR, "user");
     }
-    if (existsSync15(PLUGINS_DIR)) {
+    if (existsSync16(PLUGINS_DIR)) {
       this.loadFromDirectory(PLUGINS_DIR, "plugin");
     }
     this.loaded = true;
@@ -22020,7 +22449,7 @@ class SkillLoader {
     try {
       const entries = readdirSync4(dir);
       for (const entry of entries) {
-        const skillPath = join17(dir, entry);
+        const skillPath = join18(dir, entry);
         try {
           const { statSync: statSync3 } = __require("fs");
           if (!statSync3(skillPath).isDirectory())
@@ -22028,11 +22457,11 @@ class SkillLoader {
         } catch {
           continue;
         }
-        const skillMd = join17(skillPath, "skill.md");
-        if (!existsSync15(skillMd))
+        const skillMd = join18(skillPath, "skill.md");
+        if (!existsSync16(skillMd))
           continue;
         try {
-          const content = readFileSync15(skillMd, "utf-8");
+          const content = readFileSync16(skillMd, "utf-8");
           const skill = this.parseSkillMd(entry, content, source);
           if (skill) {
             skill.path = skillPath;
@@ -22146,8 +22575,8 @@ class SkillLoader {
 var SKILLS_DIR, PLUGINS_DIR, skillLoader;
 var init_loader = __esm(() => {
   init_registry2();
-  SKILLS_DIR = join17(homedir14(), ".nole-code", "skills");
-  PLUGINS_DIR = join17(homedir14(), ".nole-code", "plugins");
+  SKILLS_DIR = join18(homedir15(), ".nole-code", "skills");
+  PLUGINS_DIR = join18(homedir15(), ".nole-code", "plugins");
   skillLoader = new SkillLoader;
 });
 
@@ -22163,8 +22592,8 @@ __export(exports_skills, {
   skillLoader: () => skillLoader,
   registerSkillCommands: () => registerSkillCommands
 });
-import { join as join18 } from "path";
-import { homedir as homedir15 } from "os";
+import { join as join19 } from "path";
+import { homedir as homedir16 } from "os";
 function registerSkillCommands(registerCmd) {
   registerCmd({
     name: "skills",
@@ -22229,7 +22658,7 @@ var SKILLS_DIR2;
 var init_skills2 = __esm(() => {
   init_commands2();
   init_skills();
-  SKILLS_DIR2 = join18(homedir15(), ".nole-code", "skills");
+  SKILLS_DIR2 = join19(homedir16(), ".nole-code", "skills");
   registerCommand({
     name: "skills",
     description: "Manage skills. Usage: /skills [list|run|install] [args]",
@@ -25723,8 +26152,8 @@ var exports_read = {};
 __export(exports_read, {
   registerReadCommand: () => registerReadCommand
 });
-import { existsSync as existsSync16, readFileSync as readFileSync16, statSync as statSync3 } from "fs";
-import { join as join19, basename as basename2, extname } from "path";
+import { existsSync as existsSync17, readFileSync as readFileSync17, statSync as statSync3 } from "fs";
+import { join as join20, basename as basename2, extname } from "path";
 function getLanguage(ext) {
   const langMap = {
     ".ts": "TypeScript",
@@ -25773,7 +26202,7 @@ function highlightLine(line, ext) {
   return highlighted.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 }
 function readFile(filePath, options = {}) {
-  const content = readFileSync16(filePath, "utf-8");
+  const content = readFileSync17(filePath, "utf-8");
   const lines = content.split(`
 `);
   const start = options.offset ? Math.max(1, options.offset) - 1 : 0;
@@ -25825,7 +26254,7 @@ Examples:
 
 Supported: .ts, .js, .py, .sh, .json, .md, .yml, .html, .css, .sql, .go, .rs, .java, .c, .cpp`;
   }
-  const resolved = filePattern.startsWith("/") ? filePattern : join19(ctx.cwd, filePattern);
+  const resolved = filePattern.startsWith("/") ? filePattern : join20(ctx.cwd, filePattern);
   if (resolved.includes("*") || resolved.includes("?")) {
     try {
       const files = await Ze(resolved);
@@ -25847,7 +26276,7 @@ Supported: .ts, .js, .py, .sh, .json, .md, .yml, .html, .css, .sql, .go, .rs, .j
       return `Error reading files: ${e.message}`;
     }
   }
-  if (!existsSync16(resolved)) {
+  if (!existsSync17(resolved)) {
     return `File not found: ${filePattern}`;
   }
   try {
@@ -25885,8 +26314,8 @@ var exports_grep = {};
 __export(exports_grep, {
   registerGrepCommand: () => registerGrepCommand
 });
-import { readFileSync as readFileSync17, statSync as statSync4 } from "fs";
-import { join as join20 } from "path";
+import { readFileSync as readFileSync18, statSync as statSync4 } from "fs";
+import { join as join21 } from "path";
 async function execute2(args, ctx) {
   if (args.length === 0) {
     return `Usage: /grep <pattern> [file...]
@@ -25953,7 +26382,7 @@ Options:
   const results = [];
   const searchedFiles = [];
   for (const filePath of files) {
-    const resolved = filePath.startsWith("/") ? filePath : join20(ctx.cwd, filePath);
+    const resolved = filePath.startsWith("/") ? filePath : join21(ctx.cwd, filePath);
     const stat = statSync4(resolved);
     if (stat.isDirectory()) {
       const { glob } = await Promise.resolve().then(() => (init_index_min(), exports_index_min));
@@ -25967,7 +26396,7 @@ Options:
         if (results.length >= limit)
           break;
         try {
-          const content = readFileSync17(f, "utf-8");
+          const content = readFileSync18(f, "utf-8");
           const lines = content.split(`
 `);
           searchedFiles.push(f);
@@ -25985,7 +26414,7 @@ Options:
       }
     } else if (stat.isFile()) {
       try {
-        const content = readFileSync17(resolved, "utf-8");
+        const content = readFileSync18(resolved, "utf-8");
         const lines = content.split(`
 `);
         searchedFiles.push(resolved);
@@ -26042,15 +26471,15 @@ var exports_test = {};
 __export(exports_test, {
   registerTestCommand: () => registerTestCommand
 });
-import { existsSync as existsSync18, readFileSync as readFileSync18, statSync as statSync5 } from "fs";
-import { join as join21, basename as basename4 } from "path";
+import { existsSync as existsSync19, readFileSync as readFileSync19, statSync as statSync5 } from "fs";
+import { join as join22, basename as basename4 } from "path";
 import { exec as exec2 } from "child_process";
 import { promisify as promisify2 } from "util";
 async function detectTestFramework(cwd) {
-  const packageJsonPath = join21(cwd, "package.json");
-  if (existsSync18(packageJsonPath)) {
+  const packageJsonPath = join22(cwd, "package.json");
+  if (existsSync19(packageJsonPath)) {
     try {
-      const pkg = JSON.parse(readFileSync18(packageJsonPath, "utf-8"));
+      const pkg = JSON.parse(readFileSync19(packageJsonPath, "utf-8"));
       if (pkg.devDependencies?.jest || pkg.dependencies?.jest || pkg.scripts?.test?.includes("jest")) {
         return "jest";
       }
@@ -26071,9 +26500,9 @@ async function detectTestFramework(cwd) {
   }
   const pytestConfigs = ["pytest.ini", "setup.cfg", "pyproject.toml"];
   for (const config2 of pytestConfigs) {
-    if (existsSync18(join21(cwd, config2))) {
+    if (existsSync19(join22(cwd, config2))) {
       try {
-        const content = readFileSync18(join21(cwd, config2), "utf-8");
+        const content = readFileSync19(join22(cwd, config2), "utf-8");
         if (content.includes("[tool.pytest") || content.includes("[pytest]")) {
           return "pytest";
         }
@@ -26180,10 +26609,10 @@ async function execute3(args, ctx) {
     if (arg.startsWith("--")) {
       options.push(arg);
     } else if (!arg.startsWith("-")) {
-      target = arg.startsWith("/") ? arg : join21(ctx.cwd, arg);
+      target = arg.startsWith("/") ? arg : join22(ctx.cwd, arg);
     }
   }
-  if (!existsSync18(target)) {
+  if (!existsSync19(target)) {
     return `Target not found: ${target}`;
   }
   const stat = statSync5(target);
@@ -26244,7 +26673,7 @@ __export(exports_debug, {
 });
 import { exec as exec3 } from "child_process";
 import { promisify as promisify3 } from "util";
-import { existsSync as existsSync19, readFileSync as readFileSync19 } from "fs";
+import { existsSync as existsSync20, readFileSync as readFileSync20 } from "fs";
 async function getProcessInfo(pid) {
   try {
     process.kill(pid, 0);
@@ -26252,15 +26681,15 @@ async function getProcessInfo(pid) {
     return null;
   }
   const cmdlinePath = `/proc/${pid}/cmdline`;
-  if (!existsSync19(cmdlinePath)) {
+  if (!existsSync20(cmdlinePath)) {
     return { pid, language: "unknown", cmdline: [] };
   }
-  const cmdline = readFileSync19(cmdlinePath, "utf-8").split("\x00").filter(Boolean);
+  const cmdline = readFileSync20(cmdlinePath, "utf-8").split("\x00").filter(Boolean);
   const statusPath = `/proc/${pid}/status`;
   let memoryRss;
   let status;
-  if (existsSync19(statusPath)) {
-    const statusContent = readFileSync19(statusPath, "utf-8");
+  if (existsSync20(statusPath)) {
+    const statusContent = readFileSync20(statusPath, "utf-8");
     const rssMatch = statusContent.match(/VmRSS:\s+(\d+)\s+kB/);
     if (rssMatch) {
       memoryRss = `${Math.round(parseInt(rssMatch[1]) / 1024)} MB`;
@@ -26283,10 +26712,10 @@ async function getProcessInfo(pid) {
   }
   let uptime;
   try {
-    const statContent = readFileSync19("/proc/" + pid + "/stat", "utf-8");
+    const statContent = readFileSync20("/proc/" + pid + "/stat", "utf-8");
     const startTime = parseInt(statContent.split(" ")[21]);
     const clkTck = 100;
-    const bootTime = Date.now() / 1000 - parseInt(readFileSync19("/proc/uptime", "utf-8").split(" ")[0]);
+    const bootTime = Date.now() / 1000 - parseInt(readFileSync20("/proc/uptime", "utf-8").split(" ")[0]);
     uptime = Math.floor(bootTime + startTime / clkTck);
   } catch {}
   return { pid, language, cmdline, memoryRss, status, uptime };
@@ -26519,7 +26948,7 @@ __export(exports_mcp, {
 });
 import * as readline2 from "readline";
 import { exec as exec4 } from "child_process";
-import { existsSync as existsSync20, readFileSync as readFileSync20, writeFileSync as writeFileSync9 } from "fs";
+import { existsSync as existsSync21, readFileSync as readFileSync21, writeFileSync as writeFileSync10 } from "fs";
 import { promisify as promisify4 } from "util";
 function initializeServer() {
   return {
@@ -26550,10 +26979,10 @@ async function callTool(name, arguments_) {
     }
     case "read": {
       const { path, offset = 1, limit = 100 } = arguments_;
-      if (!existsSync20(path)) {
+      if (!existsSync21(path)) {
         return { error: `File not found: ${path}` };
       }
-      const content = readFileSync20(path, "utf-8");
+      const content = readFileSync21(path, "utf-8");
       const lines = content.split(`
 `);
       const start = Math.max(0, offset - 1);
@@ -26563,20 +26992,20 @@ async function callTool(name, arguments_) {
     }
     case "write": {
       const { path, content } = arguments_;
-      writeFileSync9(path, content, "utf-8");
+      writeFileSync10(path, content, "utf-8");
       return { success: true, path };
     }
     case "edit": {
       const { path, oldText, newText } = arguments_;
-      if (!existsSync20(path)) {
+      if (!existsSync21(path)) {
         return { error: `File not found: ${path}` };
       }
-      const content = readFileSync20(path, "utf-8");
+      const content = readFileSync21(path, "utf-8");
       if (!content.includes(oldText)) {
         return { error: "oldText not found in file" };
       }
       const newContent = content.replace(oldText, newText);
-      writeFileSync9(path, newContent, "utf-8");
+      writeFileSync10(path, newContent, "utf-8");
       return { success: true, path };
     }
     case "glob": {
@@ -26948,9 +27377,9 @@ var exports_context = {};
 __export(exports_context, {
   registerContextCommand: () => registerContextCommand
 });
-import { existsSync as existsSync21, readFileSync as readFileSync21 } from "fs";
+import { existsSync as existsSync22, readFileSync as readFileSync22 } from "fs";
 import { cwd } from "process";
-import { homedir as homedir16 } from "os";
+import { homedir as homedir17 } from "os";
 function getAge(dateStr) {
   const ms2 = Date.now() - new Date(dateStr).getTime();
   if (ms2 < 60000)
@@ -26963,10 +27392,10 @@ function getAge(dateStr) {
 }
 function loadSessionInfo(sessionId) {
   try {
-    const sessionPath = `${homedir16()}/.nole-code/sessions/${sessionId}.json`;
-    if (!existsSync21(sessionPath))
+    const sessionPath = `${homedir17()}/.nole-code/sessions/${sessionId}.json`;
+    if (!existsSync22(sessionPath))
       return null;
-    const data = readFileSync21(sessionPath, "utf-8");
+    const data = readFileSync22(sessionPath, "utf-8");
     return JSON.parse(data);
   } catch {
     return null;
@@ -26976,9 +27405,9 @@ function getGitBranch() {
   try {
     const cwdPath = cwd();
     const headPath = `${cwdPath}/.git/HEAD`;
-    if (!existsSync21(headPath))
+    if (!existsSync22(headPath))
       return "not a git repo";
-    const head = readFileSync21(headPath, "utf-8").trim();
+    const head = readFileSync22(headPath, "utf-8").trim();
     const match = head.match(/ref: refs\/heads\/(\S+)/);
     return match ? match[1] : "detached";
   } catch {
@@ -27009,8 +27438,8 @@ function registerContextCommand(registerCmd) {
       let loopStatus = "idle";
       try {
         const loopPath = "/tmp/.nole_loop_running";
-        if (existsSync21(loopPath)) {
-          const pid = readFileSync21(loopPath, "utf-8").trim();
+        if (existsSync22(loopPath)) {
+          const pid = readFileSync22(loopPath, "utf-8").trim();
           loopStatus = `running (PID: ${pid})`;
         }
       } catch {
@@ -27028,7 +27457,7 @@ function registerContextCommand(registerCmd) {
 
 \uD83D\uDCC1 DIRECTORY
 ━━━━━━━━━━━━━━━━━━━━
-  ${currentCwd.replace(homedir16(), "~")}
+  ${currentCwd.replace(homedir17(), "~")}
 `;
       return info.trim();
     }
@@ -27135,15 +27564,15 @@ var exports_send = {};
 __export(exports_send, {
   registerSendCommand: () => registerSendCommand
 });
-import { existsSync as existsSync22, readFileSync as readFileSync22 } from "fs";
-import { homedir as homedir17 } from "os";
+import { existsSync as existsSync23, readFileSync as readFileSync23 } from "fs";
+import { homedir as homedir18 } from "os";
 function getEnv(key) {
   if (process.env[key])
     return process.env[key];
   try {
-    const envPath = `${homedir17()}/.nole-code/.env`;
-    if (existsSync22(envPath)) {
-      const envContent = readFileSync22(envPath, "utf-8");
+    const envPath = `${homedir18()}/.nole-code/.env`;
+    if (existsSync23(envPath)) {
+      const envContent = readFileSync23(envPath, "utf-8");
       const match = envContent.match(new RegExp(`${key}=(.+)`));
       if (match)
         return match[1].trim();
@@ -27278,28 +27707,28 @@ var exports_alias = {};
 __export(exports_alias, {
   registerAliasCommand: () => registerAliasCommand
 });
-import { existsSync as existsSync23, readFileSync as readFileSync23, writeFileSync as writeFileSync10, mkdirSync as mkdirSync9 } from "fs";
-import { join as join22 } from "path";
-import { homedir as homedir18 } from "os";
+import { existsSync as existsSync24, readFileSync as readFileSync24, writeFileSync as writeFileSync11, mkdirSync as mkdirSync10 } from "fs";
+import { join as join23 } from "path";
+import { homedir as homedir19 } from "os";
 function ensureAliasDir() {
-  const dir = join22(homedir18(), ".nole-code");
-  if (!existsSync23(dir)) {
-    mkdirSync9(dir, { recursive: true });
+  const dir = join23(homedir19(), ".nole-code");
+  if (!existsSync24(dir)) {
+    mkdirSync10(dir, { recursive: true });
   }
 }
 function loadAliases() {
   ensureAliasDir();
-  if (!existsSync23(ALIAS_FILE))
+  if (!existsSync24(ALIAS_FILE))
     return {};
   try {
-    return JSON.parse(readFileSync23(ALIAS_FILE, "utf-8"));
+    return JSON.parse(readFileSync24(ALIAS_FILE, "utf-8"));
   } catch {
     return {};
   }
 }
 function saveAliases(aliases) {
   ensureAliasDir();
-  writeFileSync10(ALIAS_FILE, JSON.stringify(aliases, null, 2), "utf-8");
+  writeFileSync11(ALIAS_FILE, JSON.stringify(aliases, null, 2), "utf-8");
 }
 function registerAliasCommand(registerCommand2) {
   registerCommand2({
@@ -27354,7 +27783,7 @@ Usage: /alias <name> <cmd>  — create alias
 }
 var ALIAS_FILE;
 var init_alias = __esm(() => {
-  ALIAS_FILE = join22(homedir18(), ".nole-code", "aliases.json");
+  ALIAS_FILE = join23(homedir19(), ".nole-code", "aliases.json");
 });
 
 // src/commands/port.ts
@@ -27923,9 +28352,9 @@ __export(exports_commands2, {
 });
 import { exec as exec10 } from "child_process";
 import { promisify as promisify10 } from "util";
-import { existsSync as existsSync24, readFileSync as readFileSync24 } from "fs";
-import { join as join23 } from "path";
-import { homedir as homedir19 } from "os";
+import { existsSync as existsSync25, readFileSync as readFileSync25 } from "fs";
+import { join as join24 } from "path";
+import { homedir as homedir20 } from "os";
 function getAge2(dateStr) {
   const ms2 = Date.now() - new Date(dateStr).getTime();
   if (ms2 < 60000)
@@ -28138,11 +28567,11 @@ ${lines.join(`
     name: "cost",
     description: "Show estimated API usage for this session",
     execute: async (_args, ctx) => {
-      const sessionFile = join23(homedir19(), ".nole-code", "sessions", `${ctx.sessionId}.json`);
-      if (!existsSync24(sessionFile))
+      const sessionFile = join24(homedir20(), ".nole-code", "sessions", `${ctx.sessionId}.json`);
+      if (!existsSync25(sessionFile))
         return "Session not found";
       try {
-        const session = JSON.parse(readFileSync24(sessionFile, "utf-8"));
+        const session = JSON.parse(readFileSync25(sessionFile, "utf-8"));
         const msgs = session.messages?.length || 0;
         return `Session: ${ctx.sessionId}
 Messages: ${msgs}
@@ -28160,7 +28589,7 @@ Note: Actual token usage available in provider dashboard.`;
       const checks4 = [
         ["Node.js", process.version],
         ["API Key", MINIMAX_API_KEY ? "✅ set" : "❌ missing"],
-        ["Session Dir", existsSync24(join23(homedir19(), ".nole-code")) ? "✅ exists" : "❌ missing"]
+        ["Session Dir", existsSync25(join24(homedir20(), ".nole-code")) ? "✅ exists" : "❌ missing"]
       ];
       return `\uD83E\uDD9E NOLE CODE — Health Check:
 
@@ -28272,8 +28701,8 @@ Use /plan approve to proceed step by step.`;
     description: "Compact session to reduce token usage",
     aliases: ["compress"],
     execute: async (_args, ctx) => {
-      const { compactSession: compactSession2 } = await Promise.resolve().then(() => (init_manager(), exports_manager));
-      const compacted = compactSession2(ctx.sessionId, 5);
+      const { compactSession: compactSession3 } = await Promise.resolve().then(() => (init_manager(), exports_manager));
+      const compacted = compactSession3(ctx.sessionId, 5);
       if (compacted) {
         const before = compacted.messages.length;
         return `✅ Session compacted (kept last 5 tool results)`;
@@ -28308,14 +28737,14 @@ Use /plan approve to proceed step by step.`;
     aliases: ["save-chat"],
     execute: async (_args, ctx) => {
       const { loadSession: load, exportSession: exportSession2 } = await Promise.resolve().then(() => (init_manager(), exports_manager));
-      const { writeFileSync: writeFileSync11 } = __require("fs");
-      const { join: join24 } = __require("path");
+      const { writeFileSync: writeFileSync12 } = __require("fs");
+      const { join: join25 } = __require("path");
       const transcript = exportSession2(ctx.sessionId);
       if (!transcript)
         return "Session not found";
       const filename = `nole-session-${ctx.sessionId.slice(5, 15)}.md`;
-      const outPath = join24(ctx.cwd, filename);
-      writeFileSync11(outPath, transcript, "utf-8");
+      const outPath = join25(ctx.cwd, filename);
+      writeFileSync12(outPath, transcript, "utf-8");
       return `Exported to ${filename} (${transcript.split(`
 `).length} lines)`;
     }
@@ -28553,11 +28982,11 @@ ${lines.join(`
     name: "plugins",
     description: "List installed plugins",
     execute: async () => {
-      const { existsSync: existsSync25, readdirSync: readdirSync7 } = __require("fs");
-      const { join: join24 } = __require("path");
-      const { homedir: homedir20 } = __require("os");
-      const dir = join24(homedir20(), ".nole-code", "plugins");
-      if (!existsSync25(dir)) {
+      const { existsSync: existsSync26, readdirSync: readdirSync7 } = __require("fs");
+      const { join: join25 } = __require("path");
+      const { homedir: homedir21 } = __require("os");
+      const dir = join25(homedir21(), ".nole-code", "plugins");
+      if (!existsSync26(dir)) {
         return `No plugins directory.
 Create ~/.nole-code/plugins/ and add .js files.
 
@@ -28836,360 +29265,6 @@ Start one with /loop <goal>`;
     Promise.resolve().then(() => (init_retry(), exports_retry)).then((m) => m.registerRetryCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_recent(), exports_recent)).then((m) => m.registerRecentCommand(registerCommand)).catch(() => {});
   }, 0);
-});
-
-// src/session-memory/index.ts
-var exports_session_memory = {};
-__export(exports_session_memory, {
-  updateMemorySection: () => updateMemorySection,
-  saveMemory: () => saveMemory,
-  parseMemoryContent: () => parseMemoryContent,
-  loadMemory: () => loadMemory,
-  getMemorySummary: () => getMemorySummary,
-  getMemoryPath: () => getMemoryPath,
-  formatMemory: () => formatMemory,
-  extractMemoryFromConversation: () => extractMemoryFromConversation,
-  addToWorklog: () => addToWorklog
-});
-import { existsSync as existsSync25, readFileSync as readFileSync25, writeFileSync as writeFileSync11, mkdirSync as mkdirSync10 } from "fs";
-import { join as join24 } from "path";
-import { homedir as homedir20 } from "os";
-function getMemoryPath(sessionId) {
-  mkdirSync10(MEMORY_DIR, { recursive: true });
-  return join24(MEMORY_DIR, `${sessionId}.md`);
-}
-function loadMemory(sessionId) {
-  const path = getMemoryPath(sessionId);
-  if (!existsSync25(path)) {
-    return {
-      title: "",
-      currentState: "",
-      taskSpec: "",
-      filesAndFunctions: "",
-      workflow: "",
-      errorsAndFixes: "",
-      keyResults: "",
-      worklog: "",
-      lastUpdated: new Date().toISOString()
-    };
-  }
-  const content = readFileSync25(path, "utf-8");
-  return parseMemoryContent(content);
-}
-function parseMemoryContent(content) {
-  const sections = {
-    title: extractSection(content, "Session Title"),
-    currentState: extractSection(content, "Current State"),
-    taskSpec: extractSection(content, "Task Specification"),
-    filesAndFunctions: extractSection(content, "Files and Functions"),
-    workflow: extractSection(content, "Workflow"),
-    errorsAndFixes: extractSection(content, "Errors & Fixes"),
-    keyResults: extractSection(content, "Key Results"),
-    worklog: extractSection(content, "Worklog")
-  };
-  return {
-    ...sections,
-    lastUpdated: new Date().toISOString()
-  };
-}
-function extractSection(content, sectionName) {
-  const lines = content.split(`
-`);
-  let inSection = false;
-  const sectionLines = [];
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed === `# ${sectionName}` || trimmed === `## ${sectionName}`) {
-      inSection = true;
-      continue;
-    }
-    if (inSection) {
-      if (line.startsWith("# ") || line.startsWith("## ")) {
-        break;
-      }
-      sectionLines.push(line);
-    }
-  }
-  return sectionLines.join(`
-`).trim();
-}
-function saveMemory(sessionId, memory) {
-  const existing = loadMemory(sessionId);
-  const merged = { ...existing, ...memory, lastUpdated: new Date().toISOString() };
-  const path = getMemoryPath(sessionId);
-  const content = formatMemory(merged);
-  writeFileSync11(path, content, "utf-8");
-}
-function formatMemory(memory) {
-  return `# Session Title
-${memory.title || "_Short descriptive title_"}
-
-# Current State
-${memory.currentState || "_What is being worked on_"}
-
-# Task Specification
-${memory.taskSpec || "_What was asked to build_"}
-
-# Files and Functions
-${memory.filesAndFunctions || "_Important files and their purpose_"}
-
-# Workflow
-${memory.workflow || "_Bash commands and their purpose_"}
-
-# Errors & Fixes
-${memory.errorsAndFixes || "_Errors encountered and solutions_"}
-
-# Key Results
-${memory.keyResults || "_Specific outputs created_"}
-
-# Worklog
-${memory.worklog || "_Step-by-step summary of actions_"}
-
----
-_Last updated: ${memory.lastUpdated}_
-`;
-}
-function updateMemorySection(sessionId, section, content, append = false) {
-  const memory = loadMemory(sessionId);
-  const existing = memory[section] || "";
-  const newContent = append && existing ? `${existing}
-- ${content}` : content;
-  saveMemory(sessionId, { [section]: newContent });
-}
-function addToWorklog(sessionId, entry) {
-  const memory = loadMemory(sessionId);
-  const timestamp = new Date().toISOString().slice(11, 19);
-  const logEntry = `[${timestamp}] ${entry}`;
-  const existing = memory.worklog || "";
-  saveMemory(sessionId, {
-    worklog: existing ? `${existing}
-${logEntry}` : logEntry
-  });
-}
-async function extractMemoryFromConversation(messages, sessionId) {
-  const BLOCKED_PREFIXES = ["/dev/", "/tmp/", "/proc/", "/sys/", "/.ssh/"];
-  const filePatterns = [
-    /(?:Created|Wrote|Saved|Modified|Edited)\s+([^\s'"`\n]+)/gi,
-    /(?:File|Path):\s+([^\s'"`\n]+)/gi
-  ];
-  const files = new Set;
-  for (const msg of messages) {
-    const text = typeof msg.content === "string" ? msg.content : "";
-    for (const pattern of filePatterns) {
-      let match;
-      while ((match = pattern.exec(text)) !== null) {
-        const file = match[1].trim();
-        if (file.length > 1 && !BLOCKED_PREFIXES.some((p) => file.startsWith(p)) && !file.startsWith("http") && !file.match(/^[0-9a-f]{8,}/i)) {
-          files.add(file);
-        }
-      }
-    }
-  }
-  const errorPattern = /(?:Error|error|failed|Failed|exception):\s*(.+)/gi;
-  const errors3 = [];
-  for (const msg of messages) {
-    const text = typeof msg.content === "string" ? msg.content : "";
-    let match;
-    while ((match = errorPattern.exec(text)) !== null) {
-      errors3.push(match[1].trim().slice(0, 100));
-    }
-  }
-  if (files.size > 0) {
-    updateMemorySection(sessionId, "filesAndFunctions", Array.from(files).join(", "), true);
-  }
-  if (errors3.length > 0) {
-    updateMemorySection(sessionId, "errorsAndFixes", errors3.slice(-5).join(" | "), true);
-  }
-}
-function getMemorySummary(sessionId) {
-  const memory = loadMemory(sessionId);
-  if (!memory.title && !memory.currentState && !memory.worklog) {
-    return "";
-  }
-  const parts = [];
-  if (memory.title) {
-    parts.push(`Session: ${memory.title}`);
-  }
-  if (memory.currentState) {
-    parts.push(`Current: ${memory.currentState}`);
-  }
-  if (memory.filesAndFunctions) {
-    parts.push(`Files: ${memory.filesAndFunctions}`);
-  }
-  if (memory.errorsAndFixes) {
-    parts.push(`Errors: ${memory.errorsAndFixes}`);
-  }
-  return parts.join(" | ");
-}
-var MEMORY_DIR;
-var init_session_memory = __esm(() => {
-  MEMORY_DIR = join24(homedir20(), ".nole-code", "memory");
-});
-
-// src/services/compact/index.ts
-var exports_compact = {};
-__export(exports_compact, {
-  needsCompaction: () => needsCompaction,
-  maybeCompact: () => maybeCompact,
-  getTokenBudget: () => getTokenBudget,
-  compactSession: () => compactSession2
-});
-function needsCompaction(messages) {
-  if (!feature("SESSION_COMPACT"))
-    return false;
-  const totalTokens = estimateTotalTokens(messages);
-  return totalTokens > COMPACT_CONFIG.maxTokens * COMPACT_CONFIG.compactThreshold;
-}
-function getTokenBudget(messages) {
-  const used = estimateTotalTokens(messages);
-  const max = COMPACT_CONFIG.maxTokens;
-  return {
-    used,
-    max,
-    percent: Math.round(used / max * 100),
-    needsCompact: needsCompaction(messages)
-  };
-}
-function compactSession2(messages, sessionId) {
-  const originalTokens = estimateTotalTokens(messages);
-  if (originalTokens < COMPACT_CONFIG.maxTokens) {
-    return {
-      originalTokens,
-      compactedTokens: originalTokens,
-      messagesPruned: 0,
-      summary: "No compaction needed"
-    };
-  }
-  const systemMessages = messages.filter((m) => m.role === "system");
-  const recentCutoff = COMPACT_CONFIG.minMessages;
-  const recentMessages = messages.slice(-recentCutoff);
-  const olderMessages = messages.slice(0, -recentCutoff);
-  const summary = generateSessionSummary(olderMessages);
-  const compressedRecent = recentMessages.map((msg) => {
-    if (msg.role === "tool" && typeof msg.content === "string" && msg.content.length > 2000) {
-      return {
-        ...msg,
-        content: compressToolResult(msg.content)
-      };
-    }
-    return msg;
-  });
-  const compactedMessages = [
-    ...systemMessages,
-    {
-      role: "system",
-      content: `[Previous session context summarized]
-
-${summary}`,
-      timestamp: new Date().toISOString()
-    },
-    ...compressedRecent
-  ];
-  const compactedTokens = estimateTotalTokens(compactedMessages);
-  const messagesPruned = messages.length - compactedMessages.length;
-  messages.length = 0;
-  messages.push(...compactedMessages);
-  addToWorklog(sessionId, `Session compacted: ${originalTokens - compactedTokens} tokens saved`);
-  console.log(`
-\uD83D\uDCE6 Session compacted:`);
-  console.log(`   Before: ${originalTokens} tokens`);
-  console.log(`   After: ${compactedTokens} tokens`);
-  console.log(`   Pruned: ${messagesPruned} messages
-`);
-  return {
-    originalTokens,
-    compactedTokens,
-    messagesPruned,
-    summary
-  };
-}
-function generateSessionSummary(messages) {
-  if (messages.length === 0)
-    return "";
-  const toolResults = messages.filter((m) => m.role === "tool").map((m) => {
-    const text = typeof m.content === "string" ? m.content : "";
-    const firstLine = text.split(`
-`)[0] || "";
-    return firstLine.slice(0, 100);
-  }).slice(-10);
-  const filesCreated = extractFilesCreated(messages);
-  const errors3 = extractErrors(messages);
-  let summary = `Session had ${messages.length} messages. `;
-  if (filesCreated.length > 0) {
-    summary += `Files created/modified: ${filesCreated.join(", ")}. `;
-  }
-  if (toolResults.length > 0) {
-    summary += `Recent operations: ${toolResults.join(" | ")}. `;
-  }
-  if (errors3.length > 0) {
-    summary += `Errors encountered: ${errors3.slice(0, 3).join(", ")}. `;
-  }
-  return summary || "Coding session with various file operations and tool executions.";
-}
-function extractFilesCreated(messages) {
-  const BLOCKED_PREFIXES = ["/dev/", "/tmp/", "/proc/", "/sys/", "/.ssh/"];
-  const patterns = [
-    /(?:Created|Wrote|Saved|Modified|Edited)\s+([^\s'"`\n]+)/gi,
-    /(?:File|Path):\s+([^\s'"`\n]+)/gi
-  ];
-  const files = new Set;
-  for (const msg of messages) {
-    for (const pattern of patterns) {
-      let match;
-      while ((match = pattern.exec(msg.content)) !== null) {
-        const file = match[1].trim();
-        if (file.length > 1 && !BLOCKED_PREFIXES.some((p) => file.startsWith(p)) && !file.startsWith("http") && !file.match(/^[0-9a-f]{8,}/i)) {
-          files.add(file);
-        }
-      }
-    }
-  }
-  return Array.from(files).slice(0, 10);
-}
-function extractErrors(messages) {
-  const errors3 = [];
-  for (const msg of messages) {
-    const errText = typeof msg.content === "string" ? msg.content : "";
-    if (msg.isError || /error|failed|exception/i.test(errText)) {
-      const firstLine = errText.split(`
-`)[0] || "";
-      errors3.push(firstLine.slice(0, 80));
-    }
-  }
-  return errors3;
-}
-function compressToolResult(content) {
-  const lines = content.split(`
-`);
-  if (lines.length <= 20)
-    return content;
-  const keptLines = lines.slice(0, 5);
-  const droppedLines = lines.slice(5);
-  const lastLines = lines.slice(-3);
-  const summary = `[... ${droppedLines.length} lines omitted ...]
-` + `Last ${lastLines.length} lines: ${lastLines.join(" | ").slice(0, 150)}`;
-  return [...keptLines, summary].join(`
-`);
-}
-function maybeCompact(messages, sessionId) {
-  if (!feature("AUTO_COMPACT"))
-    return false;
-  if (!needsCompaction(messages))
-    return false;
-  compactSession2(messages, sessionId);
-  return true;
-}
-var COMPACT_CONFIG;
-var init_compact = __esm(() => {
-  init_session_memory();
-  init_feature_flags();
-  COMPACT_CONFIG = {
-    minTokens: 8000,
-    maxTokens: 1e5,
-    minMessages: 10,
-    systemPromptTokens: 2000,
-    compactThreshold: 0.8
-  };
 });
 
 // src/ui/output/verbose.ts

@@ -374,6 +374,13 @@ registerTool({
     if (!pathCheck.valid) return `Access denied: ${pathCheck.reason}`
     if (!existsSync(path)) return `File not found: ${path}`
 
+    // Dedup: if this exact file was read recently (same path, no offset/limit), return cached
+    const { getCachedFileRead, cacheFileRead } = await import('../services/compact/index.js')
+    if (!input.offset && !input.limit) {
+      const cached = getCachedFileRead(path)
+      if (cached) return cached + '\n[cached — same file read recently]'
+    }
+
     // Image files — return base64 + metadata
     const ext = path.split('.').pop()?.toLowerCase() || ''
     const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp']
@@ -423,6 +430,10 @@ registerTool({
       if (start > 0) content = `... (from line ${offset})\n${content}`
       if (end < allLines.length) content += `\n... (${allLines.length - end} more lines)`
       if (content.length > 100000) content = content.slice(0, 100000) + '\n... (truncated)'
+
+      // Cache full reads (no offset/limit) for dedup
+      if (!input.offset && !input.limit) cacheFileRead(path, content)
+
       return content
     } catch (err) {
       return `Error reading ${path}: ${err}`

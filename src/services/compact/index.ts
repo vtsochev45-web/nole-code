@@ -1,6 +1,7 @@
 /**
  * Session Compaction System
  * Token budget management + message pruning
+ * Fixed: smarter thresholds, deduplication, and compaction targeting
  */
 
 import { estimateTotalTokens, estimateMessageTokens } from '../../utils/count-tokens.js'
@@ -9,16 +10,75 @@ import { feature } from '../../feature-flags/index.js'
 
 // Token budget configuration
 const COMPACT_CONFIG = {
-  // Minimum tokens to preserve after compaction
-  minTokens: 8000,
-  // Maximum tokens in context before triggering compaction
-  maxTokens: 100000,
-  // Keep at least N most recent messages with content
-  minMessages: 10,
+  // Trigger compaction when context exceeds this percentage of 100k
+  triggerPercent: 0.75,        // 75% = 75k tokens
+  // Target tokens after compaction
+  targetTokens: 40000,          // Aggressive: aim for ~40k tokens
+  // Keep more messages for working context
+  keepRecentMessages: 25,         // Increased from 10
   // System prompt tokens (approximate)
   systemPromptTokens: 2000,
-  // Compact when at 80% of max
-  compactThreshold: 0.8,
+  // Minimum gap (in tokens) between compactions to avoid rapid re-triggering
+  minTokensBetweenCompacts: 15000,
+}
+
+// Track last compaction for cooldown
+let lastCompactTokens = 0
+let lastCompactAt = 0
+const COMPACT_COOLDOWN_MS = 30000 // 30 second cooldown
+
+// FIX: File read deduplication cache to avoid reading same file multiple times
+interface FileCache {
+  content: string
+  readAt: number
+  size: number
+}
+const fileCache = new Map<string, FileCache>()
+const FILE_CACHE_TTL_MS = 30_000 // 30 second deduplication window
+
+/**
+ * Get cached file content if still fresh
+ */
+export function getCachedFile(path: string): string | null {
+  const cached = fileCache.get(path)
+  if (!cached) return null
+  if (Date.now() - cached.readAt > FILE_CACHE_TTL_MS) {
+    fileCache.delete(path)
+    return null
+  }
+  return cached.content
+}
+
+/**
+ * Cache file content
+ */
+export function cacheFile(path: string, content: string): void {
+  fileCache.set(path, { content, readAt: Date.now(), size: content.length })
+}
+
+/**
+ * Invalidate cache for a specific file (call when file is written)
+ */
+export function invalidateCache(path: string): void {
+  fileCache.delete(path)
+}
+
+/**
+ * Clear all file cache
+ */
+export function clearFileCache(): void {
+  fileCache.clear()
+}
+
+/**
+ * Get cache statistics
+ */
+export function getCacheStats(): { entries: number; oldestMs: number } {
+  let oldest = 0
+  for (const c of fileCache.values()) {
+    if (oldest === 0 || c.readAt < oldest) oldest = c.readAt
+  }
+  return { entries: fileCache.size, oldestMs: oldest ? Date.now() - oldest : 0 }
 }
 
 export interface CompactResult {
@@ -30,25 +90,37 @@ export interface CompactResult {
 
 /**
  * Check if session needs compaction
+ * Now uses actual token count vs trigger threshold, with cooldown guard
  */
-export function needsCompaction(messages: Array<{ role: string, content: string }>): boolean {
+export function needsCompaction(messages: Array<{ role: string; content: string }>): boolean {
   if (!feature('SESSION_COMPACT')) return false
-  
+
   const totalTokens = estimateTotalTokens(messages)
-  return totalTokens > COMPACT_CONFIG.maxTokens * COMPACT_CONFIG.compactThreshold
+
+  // Don't re-trigger too soon after last compaction
+  const now = Date.now()
+  if (lastCompactAt > 0 && now - lastCompactAt < COMPACT_COOLDOWN_MS) {
+    // Within cooldown period - check if we REALLY need it (over 90%)
+    if (totalTokens < COMPACT_CONFIG.triggerPercent * 100000 * 1.2) {
+      return false
+    }
+  }
+
+  // Trigger when over triggerPercent (75% of 100k = 75k)
+  return totalTokens > COMPACT_CONFIG.triggerPercent * 100000
 }
 
 /**
  * Get token budget status
  */
-export function getTokenBudget(messages: Array<{ role: string, content: string }>): {
+export function getTokenBudget(messages: Array<{ role: string; content: string }>): {
   used: number
   max: number
   percent: number
   needsCompact: boolean
 } {
   const used = estimateTotalTokens(messages)
-  const max = COMPACT_CONFIG.maxTokens
+  const max = 100000 // hardcoded max for context window
   return {
     used,
     max,
@@ -60,9 +132,10 @@ export function getTokenBudget(messages: Array<{ role: string, content: string }
 /**
  * Compact session messages
  * Strategy:
- * 1. Keep recent N messages (don't touch working context)
+ * 1. Keep recent N messages (increased to 25 for better context)
  * 2. Summarize older messages into a single "session summary" message
  * 3. Compress long tool results
+ * 4. Target a specific token count rather than arbitrary pruning
  */
 export function compactSession(
   messages: Array<{
@@ -76,8 +149,12 @@ export function compactSession(
   sessionId: string
 ): CompactResult {
   const originalTokens = estimateTotalTokens(messages)
-  
-  if (originalTokens < COMPACT_CONFIG.maxTokens) {
+
+  // Target: reduce to ~40k tokens
+  const targetTokens = COMPACT_CONFIG.targetTokens
+
+  // If already under target, skip
+  if (originalTokens < targetTokens) {
     return {
       originalTokens,
       compactedTokens: originalTokens,
@@ -85,21 +162,20 @@ export function compactSession(
       summary: 'No compaction needed',
     }
   }
-  
+
   // Find the cutoff point
-  // Keep: recent messages + system prompt
-  // Summarize: older user/assistant/tool messages
-  
+  // Strategy: keep recent messages + system prompt
   const systemMessages = messages.filter(m => m.role === 'system')
-  const recentCutoff = COMPACT_CONFIG.minMessages
-  
+  const recentCutoff = COMPACT_CONFIG.keepRecentMessages
+
+  // Keep more messages if tokens are still high
   const recentMessages = messages.slice(-recentCutoff)
   const olderMessages = messages.slice(0, -recentCutoff)
-  
+
   // Generate summary of older messages
   const summary = generateSessionSummary(olderMessages)
-  
-  // Compress tool results
+
+  // Compress tool results in recent messages
   const compressedRecent = recentMessages.map(msg => {
     if (msg.role === 'tool' && typeof msg.content === 'string' && msg.content.length > 2000) {
       return {
@@ -109,7 +185,7 @@ export function compactSession(
     }
     return msg
   })
-  
+
   // Build new message list
   const compactedMessages = [
     ...systemMessages,
@@ -120,11 +196,36 @@ export function compactSession(
     },
     ...compressedRecent,
   ]
-  
-  const compactedTokens = estimateTotalTokens(compactedMessages)
+
+  let compactedTokens = estimateTotalTokens(compactedMessages)
+
+  // If still over target, compress recent tool results more aggressively
+  if (compactedTokens > targetTokens) {
+    for (let i = 0; i < compactedMessages.length; i++) {
+      const msg = compactedMessages[i]
+      if (msg.role === 'tool' && typeof msg.content === 'string' && msg.content.length > 500) {
+        compactedMessages[i] = { ...msg, content: compressToolResult(msg.content, 3) }
+      }
+    }
+    compactedTokens = estimateTotalTokens(compactedMessages)
+  }
+
+  // If STILL over target, drop oldest non-system messages
+  while (compactedTokens > targetTokens && compactedMessages.length > systemMessages.length + 6) {
+    const idx = compactedMessages.findIndex(m => m.role !== 'system')
+    if (idx >= 0) {
+      compactedMessages.splice(idx, 1)
+      compactedTokens = estimateTotalTokens(compactedMessages)
+    } else break
+  }
+
   const messagesPruned = messages.length - compactedMessages.length
 
-  // Actually replace the messages array contents
+  // Track compaction for cooldown
+  lastCompactTokens = compactedTokens
+  lastCompactAt = Date.now()
+
+  // Replace the messages array contents
   messages.length = 0
   messages.push(...compactedMessages)
 
@@ -134,7 +235,7 @@ export function compactSession(
   console.log(`\n📦 Session compacted:`)
   console.log(`   Before: ${originalTokens} tokens`)
   console.log(`   After: ${compactedTokens} tokens`)
-  console.log(`   Pruned: ${messagesPruned} messages\n`)
+  console.log(`   Pruned: ${messagesPruned} messages`)
 
   return {
     originalTokens,
@@ -153,7 +254,7 @@ function generateSessionSummary(messages: Array<{
   name?: string
 }>): string {
   if (messages.length === 0) return ''
-  
+
   // Extract key information
   const toolResults = messages
     .filter(m => m.role === 'tool')
@@ -166,21 +267,21 @@ function generateSessionSummary(messages: Array<{
 
   const filesCreated = extractFilesCreated(messages)
   const errors = extractErrors(messages)
-  
+
   let summary = `Session had ${messages.length} messages. `
-  
+
   if (filesCreated.length > 0) {
     summary += `Files created/modified: ${filesCreated.join(', ')}. `
   }
-  
+
   if (toolResults.length > 0) {
     summary += `Recent operations: ${toolResults.join(' | ')}. `
   }
-  
+
   if (errors.length > 0) {
     summary += `Errors encountered: ${errors.slice(0, 3).join(', ')}. `
   }
-  
+
   return summary || 'Coding session with various file operations and tool executions.'
 }
 
@@ -219,9 +320,9 @@ function extractFilesCreated(messages: Array<{ content: string }>): string[] {
 /**
  * Extract errors from messages
  */
-function extractErrors(messages: Array<{ content: string, isError?: boolean }>): string[] {
+function extractErrors(messages: Array<{ content: string; isError?: boolean }>): string[] {
   const errors: string[] = []
-  
+
   for (const msg of messages) {
     const errText = typeof msg.content === 'string' ? msg.content : ''
     if (msg.isError || /error|failed|exception/i.test(errText)) {
@@ -229,7 +330,7 @@ function extractErrors(messages: Array<{ content: string, isError?: boolean }>):
       errors.push(firstLine.slice(0, 80))
     }
   }
-  
+
   return errors
 }
 
@@ -249,8 +350,7 @@ function compressToolResult(content: string): string {
 
   // Build a concise summary of the truncated portion
   const lastLines = lines.slice(-3)
-  const summary = `[... ${droppedLines.length} lines omitted ...]
-` +
+  const summary = `[... ${droppedLines.length} lines omitted ...]\n` +
     `Last ${lastLines.length} lines: ${lastLines.join(' | ').slice(0, 150)}`
 
   return [...keptLines, summary].join('\n')
@@ -272,7 +372,21 @@ export function maybeCompact(
 ): boolean {
   if (!feature('AUTO_COMPACT')) return false
   if (!needsCompaction(messages)) return false
-  
-  compactSession(messages, sessionId)
+
+  const result = compactSession(messages, sessionId)
+
+  // If still needs compaction after this run, log warning
+  if (needsCompaction(messages)) {
+    console.warn(`[Compact] Warning: Still over threshold after compaction (${result.compactedTokens} tokens). Consider increasing keepRecentMessages or targetTokens.`)
+  }
+
   return true
+}
+
+/**
+ * Reset compaction state (call when starting fresh session)
+ */
+export function resetCompactionState(): void {
+  lastCompactTokens = 0
+  lastCompactAt = 0
 }
