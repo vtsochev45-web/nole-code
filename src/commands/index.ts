@@ -916,3 +916,7 @@ registerServerCommand(registerCommand)
 // Buddy commands
 import { registerBuddyCommands } from '../buddy/commands.js'
 registerBuddyCommands(registerCommand)
+
+// Skills commands
+import { registerSkillCommands } from './skills.js'
+registerSkillCommands(registerCommand)
