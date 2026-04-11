@@ -21,7 +21,7 @@ function getAge(dateStr: string): string {
 
 function loadSessionInfo(sessionId: string): SessionInfo | null {
   try {
-    const sessionPath = `/home/tim/.nole/sessions/${sessionId}.json`
+    const sessionPath = `${homedir()}/.nole-code/sessions/${sessionId}.json`
     if (!existsSync(sessionPath)) return null
     const data = readFileSync(sessionPath, 'utf-8')
     return JSON.parse(data)
@@ -84,7 +84,7 @@ export function registerContextCommand(registerCmd: (cmd: import('./index.js').C
 ━━━━━━━━━━━━━━━━━━━━
   Session: ${ctx.sessionId.slice(0, 12)}...
   Age: ${sessionAge}
-  Messages: ${userMsgs} user, ${session.messages.length - userMsgs} total
+  Messages: ${userMsgs} user, ${session ? session.messages.length - userMsgs : 0} total
   Est. Tokens: ~${tokenCount.toLocaleString()}
   Branch: ${branch}
   Loop: ${loopStatus}

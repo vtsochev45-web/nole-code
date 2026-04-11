@@ -1,19 +1,14 @@
 // Nole Code - /send command: Send notification to Telegram/Discord
 
-import { exec } from 'child_process'
-import { promisify } from 'util'
-
-const execAsync = promisify(exec)
+import { existsSync, readFileSync } from 'fs'
+import { homedir } from 'os'
 
 function getEnv(key: string): string | undefined {
-  // Try process.env first
   if (process.env[key]) return process.env[key]
-  // Try reading from ~/.nole/env
   try {
-    const { readFileSync, existsSync } = require('fs')
-    const envPath = require('os').homedir() + '/.nole/env'
+    const envPath = `${homedir()}/.nole-code/.env`
     if (existsSync(envPath)) {
-      const envContent = require('fs').readFileSync(envPath, 'utf-8')
+      const envContent = readFileSync(envPath, 'utf-8')
       const match = envContent.match(new RegExp(`${key}=(.+)`))
       if (match) return match[1].trim()
     }

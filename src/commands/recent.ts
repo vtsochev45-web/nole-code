@@ -1,5 +1,7 @@
 // /recent [n] — Show recently modified files
 import { exec } from 'child_process'
+import { statSync } from 'fs'
+import { resolve } from 'path'
 import { promisify } from 'util'
 import { Command, CommandContext, registerCommand } from './index.js'
 
@@ -37,7 +39,7 @@ export function registerRecentCommand(register: typeof registerCommand) {
         const sortedFiles = files
           .map(f => {
             try {
-              const stat = require('fs').statSync(require('path').resolve(ctx.cwd, f))
+              const stat = statSync(resolve(ctx.cwd, f))
               return {
                 path: f,
                 mtime: stat.mtime,

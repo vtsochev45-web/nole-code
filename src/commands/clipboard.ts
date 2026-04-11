@@ -2,15 +2,15 @@
  * Clipboard Command — Read/write system clipboard.
  */
 
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import { registerCommand } from '../commands/index.js'
 
 function readClipboard(): string {
   try {
     if (process.platform === 'darwin') {
-      return execSync('pbpaste', { encoding: 'utf-8' }).trim()
+      return execFileSync('pbpaste', [], { encoding: 'utf-8' }).trim()
     } else {
-      return execSync('xclip -selection clipboard -o', { encoding: 'utf-8' }).trim()
+      return execFileSync('xclip', ['-selection', 'clipboard', '-o'], { encoding: 'utf-8' }).trim()
     }
   } catch {
     throw new Error('Clipboard unavailable or empty')
@@ -18,10 +18,11 @@ function readClipboard(): string {
 }
 
 function writeClipboard(text: string): void {
+  // Use execFileSync with stdin pipe — no shell interpolation, no injection
   if (process.platform === 'darwin') {
-    execSync(`echo -n "${text.replace(/"/g, '\\"')}" | pbcopy`)
+    execFileSync('pbcopy', [], { input: text, encoding: 'utf-8' })
   } else {
-    execSync(`echo -n "${text.replace(/"/g, '\\"')}" | xclip -selection clipboard -i`)
+    execFileSync('xclip', ['-selection', 'clipboard', '-i'], { input: text, encoding: 'utf-8' })
   }
 }
 

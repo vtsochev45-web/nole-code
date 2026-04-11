@@ -6,28 +6,30 @@ import { promisify } from 'util'
 const execAsync = promisify(exec)
 
 function isPythonExpression(expr: string): boolean {
+  const trimmed = expr.trim()
   return (
-    expr.startsWith('print') ||
-    expr.startsWith('def ') ||
-    expr.startsWith('import ') ||
-    expr.startsWith('class ') ||
-    expr.includes('print(') ||
-    expr.includes('def ') ||
-    /\s+def\s+/.test(expr) ||
-    /\s+import\s+/.test(expr) ||
-    /\s+class\s+/.test(expr)
+    trimmed.startsWith('print(') ||
+    trimmed.startsWith('print ') ||
+    /^\s*def\s+/.test(trimmed) ||
+    /^\s*class\s+/.test(trimmed) ||
+    /^\s*from\s+\w+\s+import/.test(trimmed) ||
+    /^\s*import\s+\w/.test(trimmed)
   )
 }
 
 async function evalJs(expr: string): Promise<string> {
   try {
-    // Use eval in a worker-like context
-    const result = eval(expr)
-    if (result === undefined) return 'undefined'
-    if (result === null) return 'null'
-    return String(result)
+    // Run in isolated subprocess — no access to REPL process globals
+    const escaped = expr.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+    const { stdout, stderr } = await execAsync(
+      `node -e 'try { const r = (0, eval)(\`${escaped}\`); console.log(r === undefined ? "undefined" : String(r)) } catch(e) { console.error(e.message); process.exit(1) }'`,
+      { timeout: 5000 }
+    )
+    if (stderr) return `Error: ${stderr.trim()}`
+    return stdout.trim() || 'undefined'
   } catch (e: any) {
-    return `Error: ${e.message}`
+    const stderr = e.stderr?.trim()
+    return stderr ? `Error: ${stderr}` : `Error: ${e.message}`
   }
 }
 
@@ -60,33 +62,8 @@ export function registerExecCommand(registerCmd: (cmd: import('./index.js').Comm
         return await evalPython(expr)
       }
 
-      // Default to JS
-      // Wrap in parentheses if it's an expression
-      let js = expr
-      if (!expr.includes('=') && !expr.includes('return') && !expr.match(/^(if|for|while|function|class|import|export)/)) {
-        try {
-          // Try as expression first
-          const result = eval(js)
-          return `${result}`
-        } catch {
-          // Fall back to statement
-          js = `(function() { return ${expr} })()`
-          try {
-            const result = eval(js)
-            return `${result}`
-          } catch (e: any) {
-            return `Error: ${e.message}`
-          }
-        }
-      }
-
-      // For statements
-      try {
-        const result = eval(js)
-        return `${result}`
-      } catch (e: any) {
-        return `Error: ${e.message}`
-      }
+      // Default to JS — run in isolated subprocess
+      return await evalJs(expr)
     },
   })
 }
