@@ -567,6 +567,39 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
 
   const prompt = () => process.stdout.write(`${dim('❯')} `)
 
+  // Show command menu when user types '/' as first char (like Claude Code)
+  let commandMenuShown = false
+  if (process.stdin.isTTY) {
+    process.stdin.on('keypress', (_ch: string, key: any) => {
+      if (!key || isProcessing) return
+      // Get the current line from readline
+      const line = (rl as any).line || ''
+      if (line === '/' && !commandMenuShown) {
+        commandMenuShown = true
+        const { getAllCommands } = require('./commands/index.js')
+        const cmds = getAllCommands() as Array<{ name: string; description?: string; aliases?: string[] }>
+        // Sort alphabetically and show compact menu below the prompt
+        const sorted = cmds.sort((a: any, b: any) => a.name.localeCompare(b.name))
+        const colWidth = 18
+        const cols = Math.min(3, Math.floor((process.stdout.columns || 80) / (colWidth + 2)))
+        const rows: string[] = []
+        for (let i = 0; i < sorted.length; i += cols) {
+          const row = sorted.slice(i, i + cols).map((cmd: any) => {
+            const name = `/${cmd.name}`.padEnd(colWidth)
+            return `\x1b[38;5;205m${name}\x1b[0m`
+          }).join('')
+          rows.push('  ' + row)
+        }
+        // Print below current line without disrupting input
+        process.stdout.write('\n' + rows.join('\n') + '\n')
+        // Redraw the prompt with current input
+        ;(rl as any)._refreshLine()
+      } else if (line !== '/' && commandMenuShown) {
+        commandMenuShown = false
+      }
+    })
+  }
+
   let toolCallId = 0
 
   // Subscribe to agent messages

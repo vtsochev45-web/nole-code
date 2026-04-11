@@ -30121,6 +30121,37 @@ ${memorySummary}` : ""}${resumeContext}`;
     historySize: 0
   });
   const prompt = () => process.stdout.write(`${dim("❯")} `);
+  let commandMenuShown = false;
+  if (process.stdin.isTTY) {
+    process.stdin.on("keypress", (_ch, key) => {
+      if (!key || isProcessing)
+        return;
+      const line = rl3.line || "";
+      if (line === "/" && !commandMenuShown) {
+        commandMenuShown = true;
+        const { getAllCommands: getAllCommands2 } = (init_commands2(), __toCommonJS(exports_commands2));
+        const cmds = getAllCommands2();
+        const sorted = cmds.sort((a, b) => a.name.localeCompare(b.name));
+        const colWidth = 18;
+        const cols = Math.min(3, Math.floor((process.stdout.columns || 80) / (colWidth + 2)));
+        const rows = [];
+        for (let i = 0;i < sorted.length; i += cols) {
+          const row = sorted.slice(i, i + cols).map((cmd) => {
+            const name = `/${cmd.name}`.padEnd(colWidth);
+            return `\x1B[38;5;205m${name}\x1B[0m`;
+          }).join("");
+          rows.push("  " + row);
+        }
+        process.stdout.write(`
+` + rows.join(`
+`) + `
+`);
+        rl3._refreshLine();
+      } else if (line !== "/" && commandMenuShown) {
+        commandMenuShown = false;
+      }
+    });
+  }
   let toolCallId = 0;
   const unsubAgent = onAgentMessage((msg) => {
     if (msg.type === "output") {
