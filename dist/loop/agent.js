@@ -1,3 +1,4 @@
+console.error("DEBUG WP_USER:"+process.env.WP_USER+" WP_API_URL:"+process.env.WP_API_URL+" CWD:"+process.cwd())
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -290,10 +291,10 @@ function shouldContinue(checkpoint) {
   if (!currentStep) {
     return { continue: true };
   }
-  if (currentStep.retryCount >= checkpoint.settings.maxRetries) {
+  if (currentStep.retryCount >= (checkpoint.settings?.maxRetries ?? 2)) {
     return {
       continue: false,
-      reason: `Max retries (${checkpoint.settings.maxRetries}) exceeded on step ${checkpoint.currentStep}`
+      reason: `Max retries (${checkpoint.settings?.maxRetries ?? 2}) exceeded on step ${checkpoint.currentStep}`
     };
   }
   if (checkpoint.state === "aborted") {
@@ -311,7 +312,7 @@ function buildRetryContext(checkpoint, stepId) {
   const lastError = errors[errors.length - 1].error;
   const lines = [];
   lines.push(`
-<!-- Retry ${step.retryCount + 1}/${checkpoint.settings.maxRetries} -->`);
+<!-- Retry ${step.retryCount + 1}/${checkpoint.settings?.maxRetries ?? 2} -->`);
   lines.push(`
 Previous attempt failed:`);
   lines.push(`  Error: ${lastError}`);
@@ -369,6 +370,9 @@ __export(exports_env, {
   isEnvTruthy: () => isEnvTruthy,
   hasAnyProvider: () => hasAnyProvider,
   getProviders: () => getProviders,
+  WP_USER: () => WP_USER,
+  WP_APP_PASSWORD: () => WP_APP_PASSWORD,
+  WP_API_URL: () => WP_API_URL,
   OPENROUTER_API_KEY: () => OPENROUTER_API_KEY,
   OPENAI_API_KEY: () => OPENAI_API_KEY,
   MINIMAX_BASE_URL: () => MINIMAX_BASE_URL,
@@ -433,7 +437,7 @@ function getProviders() {
 function hasAnyProvider() {
   return !!(MINIMAX_API_KEY || OPENROUTER_API_KEY || OPENAI_API_KEY);
 }
-var MINIMAX_API_KEY, MINIMAX_BASE_URL, OPENROUTER_API_KEY, OPENAI_API_KEY;
+var MINIMAX_API_KEY, MINIMAX_BASE_URL, OPENROUTER_API_KEY, OPENAI_API_KEY, WP_USER, WP_APP_PASSWORD, WP_API_URL;
 var init_env = __esm(() => {
   loadEnvFile(join2(process.cwd(), ".env"));
   loadEnvFile(join2(homedir2(), ".nole-code", ".env"));
@@ -442,6 +446,9 @@ var init_env = __esm(() => {
   MINIMAX_BASE_URL = process.env.MINIMAX_BASE_URL || "https://api.minimax.chat/v1";
   OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
   OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+  WP_USER = process.env.WP_USER || "";
+  WP_APP_PASSWORD = process.env.WP_APP_PASSWORD || "";
+  WP_API_URL = process.env.WP_API_URL || "https://britfarmers.com/wp-json/wp/v2";
 });
 
 // src/api/llm.ts
@@ -17733,6 +17740,32 @@ function getToolDefinitions(context) {
   if (mcpTools.length > 0) {
     defs.push(...mcpTools);
   }
+  defs.push({
+    name: "WordPressPost",
+    description: "Create a new WordPress draft or published post via REST API. Reads credentials from .env (WP_USER, WP_APP_PASSWORD, WP_API_URL).",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Post title" },
+        content: { type: "string", description: "Post body content" },
+        status: { type: "string", description: "draft, publish, or private", default: "draft" }
+      },
+      required: ["title", "content"]
+    }
+  }, {
+    name: "WordPressUpdate",
+    description: "Update an existing WordPress post by ID. Reads credentials from .env.",
+    input_schema: {
+      type: "object",
+      properties: {
+        post_id: { type: "string", description: "WordPress post ID" },
+        title: { type: "string", description: "New post title" },
+        content: { type: "string", description: "New post content" },
+        status: { type: "string", description: "draft, publish, or private" }
+      },
+      required: ["post_id"]
+    }
+  });
   return defs;
 }
 async function executeTool(name, input, ctx) {
@@ -17783,6 +17816,51 @@ Dangerous patterns: ${security.dangerousPatterns?.join(", ") || "unknown"}`,
     } catch (err) {
       result = { content: `MCP error: ${err}`, isError: true };
     }
+  } else if (name === "WordPressPost" || name === "WordPressUpdate") {
+    const { WP_USER: WP_USER2, WP_APP_PASSWORD: WP_APP_PASSWORD2, WP_API_URL: WP_API_URL2 } = await Promise.resolve().then(() => (init_env(), exports_env));
+    if (!WP_USER2 || !WP_APP_PASSWORD2 || !WP_API_URL2) {
+      result = { content: "WordPress credentials not configured. Set WP_USER, WP_APP_PASSWORD, WP_API_URL in .env", isError: true };
+    } else {
+      const credentials = Buffer.from(`${WP_USER2}:${WP_APP_PASSWORD2}`).toString("base64");
+      try {
+        if (name === "WordPressPost") {
+          const { title, content, status = "draft" } = input;
+          const res = await fetch(`${WP_API_URL2}/posts`, {
+            method: "POST",
+            headers: { Authorization: `Basic ${credentials}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ title, content, status })
+          });
+          if (!res.ok) {
+            result = { content: `WP post failed: ${res.status} ${await res.text()}`, isError: true };
+          } else {
+            const post = await res.json();
+            result = { content: `Post created: ID=${post.id} | ${post.link}` };
+          }
+        } else {
+          const { post_id, title, content, status } = input;
+          const body = {};
+          if (title)
+            body.title = title;
+          if (content)
+            body.content = content;
+          if (status)
+            body.status = status;
+          const res = await fetch(`${WP_API_URL2}/posts/${post_id}`, {
+            method: "POST",
+            headers: { Authorization: `Basic ${credentials}`, "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+          });
+          if (!res.ok) {
+            result = { content: `WP update failed: ${res.status}`, isError: true };
+          } else {
+            const post = await res.json();
+            result = { content: `Post ${post.id} updated: ${post.link}` };
+          }
+        }
+      } catch (err) {
+        result = { content: `WP error: ${err}`, isError: true };
+      }
+    }
   } else {
     const tool = tools.get(name);
     if (!tool) {
@@ -17822,7 +17900,7 @@ async function runBash(command, timeout = 30000) {
       timeout,
       cwd: process.cwd(),
       shell: "/bin/bash",
-      maxBuffer: 10 * 1024 * 1024
+      maxBuffer: 10485760
     });
     let out = stdout;
     if (stderr) {
@@ -17868,11 +17946,11 @@ function saveTasks(tasks) {
 function formatSize(bytes) {
   if (bytes < 1024)
     return `${bytes}B`;
-  if (bytes < 1024 * 1024)
+  if (bytes < 1048576)
     return `${(bytes / 1024).toFixed(1)}K`;
-  if (bytes < 1024 * 1024 * 1024)
-    return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}G`;
+  if (bytes < 1073741824)
+    return `${(bytes / 1048576).toFixed(1)}M`;
+  return `${(bytes / 1073741824).toFixed(1)}G`;
 }
 var execAsync, tools, CORE_TOOLS, TOOL_KEYWORDS, TASKS_FILE;
 var init_registry = __esm(() => {
@@ -22103,6 +22181,25 @@ import { existsSync as existsSync16, readFileSync as readFileSync15, mkdirSync a
 import { homedir as homedir15 } from "node:os";
 import { join as join17 } from "node:path";
 import * as readline2 from "readline";
+function _loadEnv(path) {
+  if (!existsSync16(path))
+    return;
+  try {
+    const content = readFileSync15(path, "utf-8");
+    for (const line of content.split(`
+`)) {
+      const t = line.trim();
+      if (!t || t.startsWith("#"))
+        continue;
+      const eq = t.indexOf("=");
+      if (eq < 0)
+        continue;
+      const k = t.slice(0, eq).trim(), v = t.slice(eq + 1).trim();
+      if (!process.env[k])
+        process.env[k] = v;
+    }
+  } catch {}
+}
 async function streamOutput(lines, maxLines, delayMs = 10) {
   const shown = [];
   const truncated = lines.length > maxLines;
@@ -22936,6 +23033,9 @@ var init_src = __esm(() => {
   init_spinner();
   init_streaming();
   init_markdown();
+  _loadEnv(join17(homedir15(), "nole-code", ".env"));
+  _loadEnv(join17(homedir15(), ".nole-code", ".env"));
+  _loadEnv(join17(process.cwd(), ".env"));
   PLAN_INTENT_PATTERNS = [
     /^let['’]?s?\s+(make\s+a\s+plan|plan|break\s+this\s+down|walk\s+me\s+through)/i,
     /^plan\s+(this|it|that|out|for|our|the)/i,
@@ -23042,11 +23142,10 @@ async function planSteps(goal, client, cwd) {
 
 CRITICAL RULES:
 1. Each step must be ONE atomic action
-2. When user says "use curl", "run command", "execute", "bash" → plan ONLY Bash tool steps
-3. NEVER plan Glob, Read, or LS steps unless user explicitly asks for file discovery
-4. Do NOT plan a "check environment" or "find files" step before executing the actual task
+2. When user asks to "create a post", "make a curl call", "run a command" → plan a SINGLE Bash tool step that does EVERYTHING in one command (curl + redirect OR && echo)
+3. NEVER split into Glob + Bash + Read — one Bash command that does the full task
+4. For WordPress/REST API tasks: single curl command with -o or | tee or && echo to save output
 5. Maximum 8 steps, minimum 1 step
-6. Combine the entire task into one step if it can be done with a single Bash/Write command
 
 BAD examples:
 - User: "create a file" → Plan: "Glob to find location" + "Write file" (WRONG)
@@ -23227,7 +23326,7 @@ ${c.cyan("◉")} ${bold("Starting autonomous loop")}`);
     const { toolCalls, shouldContinue: stepShouldContinue } = await executeStep(step, checkpoint.context, cwd, sessionMessages, client, { verbose: options.verbose });
     const stepMs = Date.now() - stepStartTime;
     if (!stepShouldContinue) {
-      if (step.retryCount >= checkpoint.settings.maxRetries) {
+      if (step.retryCount >= (checkpoint.settings?.maxRetries ?? 2)) {
         failStep(checkpoint, currentStepId, step.error || "Max retries exceeded", toolCalls);
         printStepFailed(currentStepId, step, step.error || "Max retries exceeded");
         abortCheckpoint(checkpoint);

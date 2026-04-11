@@ -858,3 +858,53 @@ registerCommand({
     return `Aborted loop.\\nCheckpoint saved at: ${loop?.checkpointId}\\nResume with: /loop --resume ${loop?.checkpointId}`
   },
 })
+
+// ============ Task Commands ============
+
+registerCommand({
+  name: 'tasks',
+  description: 'List all background tasks',
+  aliases: ['task'],
+  execute: async () => {
+    const { taskManager } = await import('../tasks/index.js')
+    const tasks = taskManager.listTasks()
+    
+    if (tasks.length === 0) return 'No background tasks running.'
+    
+    const lines = ['Background Tasks:\n']
+    for (const t of tasks) {
+      const statusIcon = t.status === 'running' ? '🔄' : t.status === 'completed' ? '✅' : t.status === 'failed' ? '❌' : t.status === 'stopped' ? '⏹' : '○'
+      lines.push(`${statusIcon} ${t.id} [${t.type}] ${t.status}`)
+      lines.push(`    ${t.description}`)
+    }
+    return lines.join('\n')
+  },
+})
+
+registerCommand({
+  name: 'task',
+  description: 'Manage background tasks: stop <id>, log <id>',
+  aliases: [],
+  execute: async (args) => {
+    const { taskManager } = await import('../tasks/index.js')
+    const action = args[0]
+    const taskId = args[1]
+    
+    if (!action || !taskId) {
+      return 'Usage: /task <stop|log> <task-id>'
+    }
+    
+    if (action === 'stop') {
+      const result = taskManager.stopTask(taskId)
+      return result ? `Stopped task ${taskId}` : `Failed to stop task ${taskId}`
+    }
+    
+    if (action === 'log') {
+      const output = taskManager.getTaskOutput(taskId, 30)
+      if (output.length === 0) return `No output for task ${taskId}`
+      return `Task ${taskId} output (last ${output.length} lines):\n` + output.join('\n')
+    }
+    
+    return `Unknown action: ${action}. Use 'stop' or 'log'.`
+  },
+})

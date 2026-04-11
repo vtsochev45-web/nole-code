@@ -84,3 +84,7 @@ export function getProviders(): ProviderConfig[] {
 export function hasAnyProvider(): boolean {
   return !!(MINIMAX_API_KEY || OPENROUTER_API_KEY || OPENAI_API_KEY)
 }
+
+export const WP_USER = process.env.WP_USER || ''
+export const WP_APP_PASSWORD = process.env.WP_APP_PASSWORD || ''
+export const WP_API_URL = process.env.WP_API_URL || 'https://britfarmers.com/wp-json/wp/v2'

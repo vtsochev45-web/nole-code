@@ -378,10 +378,10 @@ export function shouldContinue(checkpoint: Checkpoint): { continue: boolean; rea
     return { continue: true } // No more steps
   }
   
-  if (currentStep.retryCount >= checkpoint.settings.maxRetries) {
+  if (currentStep.retryCount >= (checkpoint.settings?.maxRetries ?? 2)) {
     return { 
       continue: false, 
-      reason: `Max retries (${checkpoint.settings.maxRetries}) exceeded on step ${checkpoint.currentStep}` 
+      reason: `Max retries (${checkpoint.settings?.maxRetries ?? 2}) exceeded on step ${checkpoint.currentStep}` 
     }
   }
   
@@ -406,7 +406,7 @@ export function buildRetryContext(checkpoint: Checkpoint, stepId: number): strin
   const lastError = errors[errors.length - 1].error
   const lines: string[] = []
   
-  lines.push(`\n<!-- Retry ${step.retryCount + 1}/${checkpoint.settings.maxRetries} -->`)
+  lines.push(`\n<!-- Retry ${step.retryCount + 1}/${checkpoint.settings?.maxRetries ?? 2} -->`)
   lines.push(`\nPrevious attempt failed:`)
   lines.push(`  Error: ${lastError}`)
   

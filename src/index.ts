@@ -1,4 +1,27 @@
 #!/usr/bin/env node
+// Load .env before any modules that need it
+import { existsSync, readFileSync } from 'fs'
+import { join, dirname } from 'path'
+import { homedir } from 'os'
+function _loadEnv(path) {
+  if (!existsSync(path)) return
+  try {
+    const content = readFileSync(path, 'utf-8')
+    for (const line of content.split('\n')) {
+      const t = line.trim()
+      if (!t || t.startsWith('#')) continue
+      const eq = t.indexOf('=')
+      if (eq < 0) continue
+      const k = t.slice(0, eq).trim(), v = t.slice(eq+1).trim()
+      if (!process.env[k]) process.env[k] = v
+    }
+  } catch {}
+}
+// Load both locations first so other modules see the vars
+// Load .env from known locations — prefer ~/nole-code/.env
+_loadEnv(join(homedir(), 'nole-code', '.env'))  // ~/nole-code/.env (primary)
+_loadEnv(join(homedir(), '.nole-code', '.env'))  // ~/.nole-code/.env (fallback)
+_loadEnv(join(process.cwd(), '.env'))            // cwd/.env (override if exists)
 // Nole Code - Main Entry Point
 // Rich terminal UI inspired by Nole Code's REPL
 

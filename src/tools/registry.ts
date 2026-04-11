@@ -131,6 +131,34 @@ export function getToolDefinitions(context?: string): ToolDefinition[] {
     defs.push(...mcpTools)
   }
 
+  // WordPress tools - defined inline, read credentials from .env
+  defs.push({
+    name: 'WordPressPost',
+    description: 'Create a new WordPress draft or published post via REST API. Reads credentials from .env (WP_USER, WP_APP_PASSWORD, WP_API_URL).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Post title' },
+        content: { type: 'string', description: 'Post body content' },
+        status: { type: 'string', description: 'draft, publish, or private', default: 'draft' },
+      },
+      required: ['title', 'content'],
+    },
+  }, {
+    name: 'WordPressUpdate',
+    description: 'Update an existing WordPress post by ID. Reads credentials from .env.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        post_id: { type: 'string', description: 'WordPress post ID' },
+        title: { type: 'string', description: 'New post title' },
+        content: { type: 'string', description: 'New post content' },
+        status: { type: 'string', description: 'draft, publish, or private' },
+      },
+      required: ['post_id'],
+    },
+  })
+
   return defs
 }
 
@@ -194,6 +222,46 @@ export async function executeTool(
       result = { content }
     } catch (err) {
       result = { content: `MCP error: ${err}`, isError: true }
+    }
+  } else if (name === 'WordPressPost' || name === 'WordPressUpdate') {
+    const { WP_USER, WP_APP_PASSWORD, WP_API_URL } = await import('../utils/env.js')
+    if (!WP_USER || !WP_APP_PASSWORD || !WP_API_URL) {
+      result = { content: 'WordPress credentials not configured. Set WP_USER, WP_APP_PASSWORD, WP_API_URL in .env', isError: true }
+    } else {
+      const credentials = Buffer.from(`${WP_USER}:${WP_APP_PASSWORD}`).toString('base64')
+      try {
+        if (name === 'WordPressPost') {
+          const { title, content, status = 'draft' } = input as { title: string; content: string; status?: string }
+          const res = await fetch(`${WP_API_URL}/posts`, {
+            method: 'POST',
+            headers: { 'Authorization': `Basic ${credentials}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, content, status }),
+          })
+          if (!res.ok) { result = { content: `WP post failed: ${res.status} ${await res.text()}`, isError: true }; }
+          else {
+            const post = await res.json() as { id: number; link: string }
+            result = { content: `Post created: ID=${post.id} | ${post.link}` }
+          }
+        } else {
+          const { post_id, title, content, status } = input as { post_id: string; title?: string; content?: string; status?: string }
+          const body: Record<string, unknown> = {}
+          if (title) body.title = title
+          if (content) body.content = content
+          if (status) body.status = status
+          const res = await fetch(`${WP_API_URL}/posts/${post_id}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Basic ${credentials}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+          if (!res.ok) { result = { content: `WP update failed: ${res.status}`, isError: true }; }
+          else {
+            const post = await res.json() as { id: number; link: string }
+            result = { content: `Post ${post.id} updated: ${post.link}` }
+          }
+        }
+      } catch (err) {
+        result = { content: `WP error: ${err}`, isError: true }
+      }
     }
   } else {
     const tool = tools.get(name)

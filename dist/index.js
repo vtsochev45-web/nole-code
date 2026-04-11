@@ -71,6 +71,9 @@ __export(exports_env, {
   isEnvTruthy: () => isEnvTruthy,
   hasAnyProvider: () => hasAnyProvider,
   getProviders: () => getProviders,
+  WP_USER: () => WP_USER,
+  WP_APP_PASSWORD: () => WP_APP_PASSWORD,
+  WP_API_URL: () => WP_API_URL,
   OPENROUTER_API_KEY: () => OPENROUTER_API_KEY,
   OPENAI_API_KEY: () => OPENAI_API_KEY,
   MINIMAX_BASE_URL: () => MINIMAX_BASE_URL,
@@ -135,7 +138,7 @@ function getProviders() {
 function hasAnyProvider() {
   return !!(MINIMAX_API_KEY || OPENROUTER_API_KEY || OPENAI_API_KEY);
 }
-var MINIMAX_API_KEY, MINIMAX_BASE_URL, OPENROUTER_API_KEY, OPENAI_API_KEY;
+var MINIMAX_API_KEY, MINIMAX_BASE_URL, OPENROUTER_API_KEY, OPENAI_API_KEY, WP_USER, WP_APP_PASSWORD, WP_API_URL;
 var init_env = __esm(() => {
   loadEnvFile(join(process.cwd(), ".env"));
   loadEnvFile(join(homedir(), ".nole-code", ".env"));
@@ -144,6 +147,9 @@ var init_env = __esm(() => {
   MINIMAX_BASE_URL = process.env.MINIMAX_BASE_URL || "https://api.minimax.chat/v1";
   OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
   OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+  WP_USER = process.env.WP_USER || "";
+  WP_APP_PASSWORD = process.env.WP_APP_PASSWORD || "";
+  WP_API_URL = process.env.WP_API_URL || "https://britfarmers.com/wp-json/wp/v2";
 });
 
 // src/api/llm.ts
@@ -17430,6 +17436,32 @@ function getToolDefinitions(context) {
   if (mcpTools.length > 0) {
     defs.push(...mcpTools);
   }
+  defs.push({
+    name: "WordPressPost",
+    description: "Create a new WordPress draft or published post via REST API. Reads credentials from .env (WP_USER, WP_APP_PASSWORD, WP_API_URL).",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Post title" },
+        content: { type: "string", description: "Post body content" },
+        status: { type: "string", description: "draft, publish, or private", default: "draft" }
+      },
+      required: ["title", "content"]
+    }
+  }, {
+    name: "WordPressUpdate",
+    description: "Update an existing WordPress post by ID. Reads credentials from .env.",
+    input_schema: {
+      type: "object",
+      properties: {
+        post_id: { type: "string", description: "WordPress post ID" },
+        title: { type: "string", description: "New post title" },
+        content: { type: "string", description: "New post content" },
+        status: { type: "string", description: "draft, publish, or private" }
+      },
+      required: ["post_id"]
+    }
+  });
   return defs;
 }
 async function executeTool(name, input, ctx) {
@@ -17480,6 +17512,51 @@ Dangerous patterns: ${security.dangerousPatterns?.join(", ") || "unknown"}`,
     } catch (err) {
       result = { content: `MCP error: ${err}`, isError: true };
     }
+  } else if (name === "WordPressPost" || name === "WordPressUpdate") {
+    const { WP_USER: WP_USER2, WP_APP_PASSWORD: WP_APP_PASSWORD2, WP_API_URL: WP_API_URL2 } = await Promise.resolve().then(() => (init_env(), exports_env));
+    if (!WP_USER2 || !WP_APP_PASSWORD2 || !WP_API_URL2) {
+      result = { content: "WordPress credentials not configured. Set WP_USER, WP_APP_PASSWORD, WP_API_URL in .env", isError: true };
+    } else {
+      const credentials = Buffer.from(`${WP_USER2}:${WP_APP_PASSWORD2}`).toString("base64");
+      try {
+        if (name === "WordPressPost") {
+          const { title, content, status = "draft" } = input;
+          const res = await fetch(`${WP_API_URL2}/posts`, {
+            method: "POST",
+            headers: { Authorization: `Basic ${credentials}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ title, content, status })
+          });
+          if (!res.ok) {
+            result = { content: `WP post failed: ${res.status} ${await res.text()}`, isError: true };
+          } else {
+            const post = await res.json();
+            result = { content: `Post created: ID=${post.id} | ${post.link}` };
+          }
+        } else {
+          const { post_id, title, content, status } = input;
+          const body = {};
+          if (title)
+            body.title = title;
+          if (content)
+            body.content = content;
+          if (status)
+            body.status = status;
+          const res = await fetch(`${WP_API_URL2}/posts/${post_id}`, {
+            method: "POST",
+            headers: { Authorization: `Basic ${credentials}`, "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+          });
+          if (!res.ok) {
+            result = { content: `WP update failed: ${res.status}`, isError: true };
+          } else {
+            const post = await res.json();
+            result = { content: `Post ${post.id} updated: ${post.link}` };
+          }
+        }
+      } catch (err) {
+        result = { content: `WP error: ${err}`, isError: true };
+      }
+    }
   } else {
     const tool = tools.get(name);
     if (!tool) {
@@ -17519,7 +17596,7 @@ async function runBash(command, timeout = 30000) {
       timeout,
       cwd: process.cwd(),
       shell: "/bin/bash",
-      maxBuffer: 10 * 1024 * 1024
+      maxBuffer: 10485760
     });
     let out = stdout;
     if (stderr) {
@@ -17565,11 +17642,11 @@ function saveTasks(tasks) {
 function formatSize(bytes) {
   if (bytes < 1024)
     return `${bytes}B`;
-  if (bytes < 1024 * 1024)
+  if (bytes < 1048576)
     return `${(bytes / 1024).toFixed(1)}K`;
-  if (bytes < 1024 * 1024 * 1024)
-    return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}G`;
+  if (bytes < 1073741824)
+    return `${(bytes / 1048576).toFixed(1)}M`;
+  return `${(bytes / 1073741824).toFixed(1)}G`;
 }
 var execAsync, tools, CORE_TOOLS, TOOL_KEYWORDS, TASKS_FILE;
 var init_registry = __esm(() => {
@@ -20016,10 +20093,10 @@ function shouldContinue(checkpoint) {
   if (!currentStep) {
     return { continue: true };
   }
-  if (currentStep.retryCount >= checkpoint.settings.maxRetries) {
+  if (currentStep.retryCount >= (checkpoint.settings?.maxRetries ?? 2)) {
     return {
       continue: false,
-      reason: `Max retries (${checkpoint.settings.maxRetries}) exceeded on step ${checkpoint.currentStep}`
+      reason: `Max retries (${checkpoint.settings?.maxRetries ?? 2}) exceeded on step ${checkpoint.currentStep}`
     };
   }
   if (checkpoint.state === "aborted") {
@@ -20037,7 +20114,7 @@ function buildRetryContext(checkpoint, stepId) {
   const lastError = errors3[errors3.length - 1].error;
   const lines = [];
   lines.push(`
-<!-- Retry ${step.retryCount + 1}/${checkpoint.settings.maxRetries} -->`);
+<!-- Retry ${step.retryCount + 1}/${checkpoint.settings?.maxRetries ?? 2} -->`);
   lines.push(`
 Previous attempt failed:`);
   lines.push(`  Error: ${lastError}`);
@@ -20469,11 +20546,10 @@ async function planSteps(goal, client, cwd) {
 
 CRITICAL RULES:
 1. Each step must be ONE atomic action
-2. When user says "use curl", "run command", "execute", "bash" → plan ONLY Bash tool steps
-3. NEVER plan Glob, Read, or LS steps unless user explicitly asks for file discovery
-4. Do NOT plan a "check environment" or "find files" step before executing the actual task
+2. When user asks to "create a post", "make a curl call", "run a command" → plan a SINGLE Bash tool step that does EVERYTHING in one command (curl + redirect OR && echo)
+3. NEVER split into Glob + Bash + Read — one Bash command that does the full task
+4. For WordPress/REST API tasks: single curl command with -o or | tee or && echo to save output
 5. Maximum 8 steps, minimum 1 step
-6. Combine the entire task into one step if it can be done with a single Bash/Write command
 
 BAD examples:
 - User: "create a file" → Plan: "Glob to find location" + "Write file" (WRONG)
@@ -20654,7 +20730,7 @@ ${c2.cyan("◉")} ${bold("Starting autonomous loop")}`);
     const { toolCalls, shouldContinue: stepShouldContinue } = await executeStep(step, checkpoint.context, cwd, sessionMessages, client, { verbose: options.verbose });
     const stepMs = Date.now() - stepStartTime;
     if (!stepShouldContinue) {
-      if (step.retryCount >= checkpoint.settings.maxRetries) {
+      if (step.retryCount >= (checkpoint.settings?.maxRetries ?? 2)) {
         failStep(checkpoint, currentStepId, step.error || "Max retries exceeded", toolCalls);
         printStepFailed(currentStepId, step, step.error || "Max retries exceeded");
         abortCheckpoint(checkpoint);
@@ -20757,6 +20833,496 @@ var init_loop = __esm(() => {
   init_spawner2();
 });
 
+// src/tasks/LocalShellTask/index.ts
+import { spawn as spawn4 } from "child_process";
+import { EventEmitter as EventEmitter3 } from "events";
+function createShellTask(options) {
+  return new LocalShellTask(options);
+}
+var LocalShellTask;
+var init_LocalShellTask = __esm(() => {
+  LocalShellTask = class LocalShellTask extends EventEmitter3 {
+    task;
+    proc;
+    startTime;
+    constructor(options) {
+      super();
+      const id = `shell_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      this.task = {
+        id,
+        type: "LocalShellTask",
+        status: "pending",
+        description: options.description || options.command,
+        createdAt: Date.now(),
+        command: options.command,
+        cwd: options.cwd,
+        output: []
+      };
+    }
+    get id() {
+      return this.task.id;
+    }
+    get state() {
+      return { ...this.task };
+    }
+    start() {
+      if (this.task.status !== "pending" && this.task.status !== "stopped") {
+        throw new Error(`Cannot start task in status: ${this.task.status}`);
+      }
+      this.task.status = "running";
+      this.task.startedAt = Date.now();
+      this.startTime = Date.now();
+      const { command, cwd, env } = this.task;
+      const shell = process.platform === "win32" ? "cmd.exe" : "/bin/sh";
+      const shellArgs = process.platform === "win32" ? ["/c", command] : ["-c", command];
+      this.proc = spawn4(shell, shellArgs, {
+        cwd: cwd || process.cwd(),
+        env: { ...process.env, ...env },
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+      this.task.pid = this.proc.pid;
+      this.proc.stdout?.on("data", (data) => {
+        const line = data.toString().trim();
+        if (line) {
+          this.task.output.push(line);
+          this.emit("output", line);
+        }
+      });
+      this.proc.stderr?.on("data", (data) => {
+        const line = data.toString().trim();
+        if (line) {
+          this.task.output.push(`[stderr] ${line}`);
+          this.emit("error", line);
+        }
+      });
+      this.proc.on("close", (code) => {
+        if (code === 0) {
+          this.task.status = "completed";
+        } else if (this.task.status === "running") {
+          this.task.status = "failed";
+          this.task.error = `Process exited with code ${code}`;
+        }
+        this.task.completedAt = Date.now();
+        this.emit("close", code);
+      });
+      this.proc.on("error", (err) => {
+        this.task.status = "failed";
+        this.task.error = err.message;
+        this.task.completedAt = Date.now();
+        this.emit("error", err);
+      });
+    }
+    stop() {
+      if (!this.proc || this.task.status !== "running") {
+        return false;
+      }
+      if (process.platform === "win32") {
+        spawn4("taskkill", ["/pid", String(this.proc.pid), "/f", "/t"]);
+      } else {
+        this.proc.kill("SIGTERM");
+        setTimeout(() => {
+          if (this.proc && !this.proc.killed) {
+            this.proc.kill("SIGKILL");
+          }
+        }, 5000);
+      }
+      this.task.status = "stopped";
+      this.task.completedAt = Date.now();
+      return true;
+    }
+    getOutput(tail = 50) {
+      return this.task.output.slice(-tail);
+    }
+  };
+});
+
+// src/tasks/LocalAgentTask/index.ts
+import { spawn as spawn5 } from "child_process";
+import { join as join13 } from "path";
+import { EventEmitter as EventEmitter4 } from "events";
+function createAgentTask(options) {
+  return new LocalAgentTask(options);
+}
+var LocalAgentTask;
+var init_LocalAgentTask = __esm(() => {
+  LocalAgentTask = class LocalAgentTask extends EventEmitter4 {
+    task;
+    proc;
+    constructor(options) {
+      super();
+      const id = `agent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      this.task = {
+        id,
+        type: "LocalAgentTask",
+        status: "pending",
+        description: options.description || options.prompt?.slice(0, 100) || "Agent task",
+        createdAt: Date.now(),
+        sessionId: options.sessionId,
+        prompt: options.prompt,
+        runtime: options.runtime,
+        output: []
+      };
+    }
+    get id() {
+      return this.task.id;
+    }
+    get state() {
+      return { ...this.task };
+    }
+    start() {
+      if (this.task.status !== "pending" && this.task.status !== "stopped") {
+        throw new Error(`Cannot start task in status: ${this.task.status}`);
+      }
+      this.task.status = "running";
+      this.task.startedAt = Date.now();
+      const execPath = process.execPath;
+      const scriptPath = join13(process.cwd(), "dist/index.js");
+      const args = [scriptPath, "--loop"];
+      if (this.task.sessionId) {
+        args.push("--session", this.task.sessionId);
+      }
+      if (this.task.prompt) {
+        args.push("--prompt", this.task.prompt);
+      }
+      this.proc = spawn5(execPath, args, {
+        stdio: ["pipe", "pipe", "pipe"],
+        env: { ...process.env },
+        cwd: process.cwd()
+      });
+      this.task.pid = this.proc.pid;
+      this.proc.stdout?.on("data", (data) => {
+        const lines = data.toString().trim().split(`
+`).filter(Boolean);
+        lines.forEach((line) => {
+          this.task.output.push(line);
+          this.emit("output", line);
+        });
+      });
+      this.proc.stderr?.on("data", (data) => {
+        const line = data.toString().trim();
+        if (line) {
+          this.task.output.push(`[stderr] ${line}`);
+          this.emit("error", line);
+        }
+      });
+      this.proc.on("close", (code) => {
+        if (code === 0) {
+          this.task.status = "completed";
+        } else if (this.task.status === "running") {
+          this.task.status = "failed";
+          this.task.error = `Process exited with code ${code}`;
+        }
+        this.task.completedAt = Date.now();
+        this.emit("close", code);
+      });
+      this.proc.on("error", (err) => {
+        this.task.status = "failed";
+        this.task.error = err.message;
+        this.task.completedAt = Date.now();
+        this.emit("error", err);
+      });
+    }
+    stop() {
+      if (!this.proc || this.task.status !== "running") {
+        return false;
+      }
+      if (process.platform === "win32") {
+        spawn5("taskkill", ["/pid", String(this.proc.pid), "/f", "/t"]);
+      } else {
+        this.proc.kill("SIGTERM");
+        setTimeout(() => {
+          if (this.proc && !this.proc.killed) {
+            this.proc.kill("SIGKILL");
+          }
+        }, 5000);
+      }
+      this.task.status = "stopped";
+      this.task.completedAt = Date.now();
+      return true;
+    }
+    getOutput(tail = 50) {
+      return this.task.output.slice(-tail);
+    }
+  };
+});
+
+// src/tasks/DreamTask/index.ts
+import { EventEmitter as EventEmitter5 } from "events";
+function createDreamTask(options) {
+  return new DreamTask(options);
+}
+var DreamTask;
+var init_DreamTask = __esm(() => {
+  DreamTask = class DreamTask extends EventEmitter5 {
+    task;
+    running = false;
+    constructor(options) {
+      super();
+      const id = `dream_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      this.task = {
+        id,
+        type: "DreamTask",
+        status: "pending",
+        description: options.description || options.prompt.slice(0, 100),
+        createdAt: Date.now(),
+        prompt: options.prompt,
+        model: options.model,
+        output: []
+      };
+    }
+    get id() {
+      return this.task.id;
+    }
+    get state() {
+      return { ...this.task };
+    }
+    async start() {
+      if (this.task.status !== "pending" && this.task.status !== "stopped") {
+        throw new Error(`Cannot start task in status: ${this.task.status}`);
+      }
+      this.task.status = "running";
+      this.task.startedAt = Date.now();
+      this.running = true;
+      this.task.output.push(`[Dream] Starting dream task: ${this.task.prompt.slice(0, 50)}...`);
+      this.emit("output", this.task.output[this.task.output.length - 1]);
+      try {
+        const { chat } = await import("../api/llm.js");
+        const model = this.task.model || "MiniMax-M2.7";
+        this.task.output.push(`[Dream] Generating content with ${model}...`);
+        this.emit("output", this.task.output[this.task.output.length - 1]);
+        const result = await chat({
+          messages: [
+            { role: "system", content: "You are a creative assistant. Generate content based on the user prompt." },
+            { role: "user", content: this.task.prompt }
+          ],
+          model
+        });
+        this.task.generatedContent = result.content;
+        this.task.output.push(`[Dream] Generated ${result.content.length} chars`);
+        this.emit("output", this.task.output[this.task.output.length - 1]);
+        this.task.status = "completed";
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.task.status = "failed";
+        this.task.error = msg;
+        this.task.output.push(`[Dream] Error: ${msg}`);
+        this.emit("error", msg);
+      }
+      this.task.completedAt = Date.now();
+      this.running = false;
+      this.emit("close", this.task.status === "completed" ? 0 : 1);
+    }
+    stop() {
+      if (!this.running || this.task.status !== "running") {
+        return false;
+      }
+      this.task.status = "stopped";
+      this.task.completedAt = Date.now();
+      this.running = false;
+      this.emit("close", 130);
+      return true;
+    }
+    getOutput(tail = 50) {
+      return this.task.output.slice(-tail);
+    }
+  };
+});
+
+// src/tasks/manager.ts
+import { existsSync as existsSync12, readFileSync as readFileSync12, writeFileSync as writeFileSync8, mkdirSync as mkdirSync8 } from "fs";
+import { dirname as dirname5, join as join14 } from "path";
+import { homedir as homedir12 } from "os";
+import { EventEmitter as EventEmitter6 } from "events";
+function ensureTasksFile() {
+  const dir = dirname5(TASKS_FILE2);
+  if (!existsSync12(dir)) {
+    mkdirSync8(dir, { recursive: true });
+  }
+  if (!existsSync12(TASKS_FILE2)) {
+    writeFileSync8(TASKS_FILE2, JSON.stringify({}, null, 2));
+  }
+}
+function loadTasksFile() {
+  try {
+    ensureTasksFile();
+    const data = readFileSync12(TASKS_FILE2, "utf-8");
+    return JSON.parse(data);
+  } catch {
+    return {};
+  }
+}
+function saveTasksFile(tasks) {
+  ensureTasksFile();
+  writeFileSync8(TASKS_FILE2, JSON.stringify(tasks, null, 2));
+}
+var TASKS_FILE2, TaskManager, taskManager;
+var init_manager2 = __esm(() => {
+  init_LocalShellTask();
+  init_LocalAgentTask();
+  init_DreamTask();
+  TASKS_FILE2 = join14(homedir12(), ".nole-code", "tasks.json");
+  TaskManager = class TaskManager extends EventEmitter6 {
+    tasks = new Map;
+    runners = new Map;
+    fileData = {};
+    constructor() {
+      super();
+      this.loadFromDisk();
+    }
+    loadFromDisk() {
+      this.fileData = loadTasksFile();
+      for (const [id, entry] of Object.entries(this.fileData)) {
+        if (entry.task.status !== "running") {
+          this.tasks.set(id, entry.task);
+        }
+      }
+    }
+    saveToDisk() {
+      const data = {};
+      for (const [id, task] of this.tasks) {
+        const entry = this.fileData[id];
+        const type = entry?.type || this.inferType(task);
+        data[id] = { task, type };
+      }
+      saveTasksFile(data);
+      this.fileData = data;
+    }
+    inferType(task) {
+      switch (task.type) {
+        case "LocalShellTask":
+          return "shell";
+        case "LocalAgentTask":
+          return "agent";
+        case "DreamTask":
+          return "dream";
+        default:
+          return "shell";
+      }
+    }
+    addShellTask(command, cwd, description) {
+      const shellTask = createShellTask({ command, cwd, description });
+      const state = shellTask.state;
+      this.tasks.set(state.id, state);
+      this.runners.set(state.id, shellTask);
+      this.saveToDisk();
+      shellTask.on("output", (line) => this.emit("output", state.id, line));
+      shellTask.on("error", (line) => this.emit("error", state.id, line));
+      shellTask.on("close", (code) => {
+        this.updateTaskState(state.id);
+        this.emit("close", state.id, code);
+      });
+      shellTask.start();
+      this.updateTaskState(state.id);
+      return state.id;
+    }
+    addAgentTask(prompt, sessionId, runtime, description) {
+      const agentTask = createAgentTask({ prompt, sessionId, runtime, description });
+      const state = agentTask.state;
+      this.tasks.set(state.id, state);
+      this.runners.set(state.id, agentTask);
+      this.saveToDisk();
+      agentTask.on("output", (line) => this.emit("output", state.id, line));
+      agentTask.on("error", (line) => this.emit("error", state.id, line));
+      agentTask.on("close", (code) => {
+        this.updateTaskState(state.id);
+        this.emit("close", state.id, code);
+      });
+      agentTask.start();
+      this.updateTaskState(state.id);
+      return state.id;
+    }
+    async addDreamTask(prompt, model, description) {
+      const dreamTask = createDreamTask({ prompt, model, description });
+      const state = dreamTask.state;
+      this.tasks.set(state.id, state);
+      this.runners.set(state.id, dreamTask);
+      this.saveToDisk();
+      dreamTask.on("output", (line) => this.emit("output", state.id, line));
+      dreamTask.on("error", (line) => this.emit("error", state.id, line));
+      dreamTask.on("close", (code) => {
+        this.updateTaskState(state.id);
+        this.emit("close", state.id, code);
+      });
+      await dreamTask.start();
+      this.updateTaskState(state.id);
+      return state.id;
+    }
+    updateTaskState(id) {
+      const runner = this.runners.get(id);
+      const task = this.tasks.get(id);
+      if (runner && task) {
+        const state = runner.state;
+        task.status = state.status;
+        task.output = state.output;
+        task.error = state.error;
+        task.startedAt = state.startedAt;
+        task.completedAt = state.completedAt;
+        if ("generatedContent" in state) {
+          task.generatedContent = state.generatedContent;
+        }
+        this.saveToDisk();
+      }
+    }
+    getTask(id) {
+      return this.tasks.get(id);
+    }
+    listTasks() {
+      return Array.from(this.tasks.values()).map((t) => ({
+        id: t.id,
+        status: t.status,
+        description: t.description,
+        type: t.type
+      }));
+    }
+    stopTask(id) {
+      const runner = this.runners.get(id);
+      if (!runner)
+        return false;
+      const result = runner.stop();
+      this.updateTaskState(id);
+      return result;
+    }
+    removeTask(id) {
+      const existed = this.tasks.has(id);
+      this.tasks.delete(id);
+      this.runners.delete(id);
+      const data = loadTasksFile();
+      delete data[id];
+      saveTasksFile(data);
+      this.fileData = data;
+      return existed;
+    }
+    getTaskOutput(id, tail = 50) {
+      const runner = this.runners.get(id);
+      if (runner) {
+        return runner.getOutput(tail);
+      }
+      const task = this.tasks.get(id);
+      return task?.output.slice(-tail) || [];
+    }
+  };
+  taskManager = new TaskManager;
+});
+
+// src/tasks/index.ts
+var exports_tasks = {};
+__export(exports_tasks, {
+  taskManager: () => taskManager,
+  createShellTask: () => createShellTask,
+  createDreamTask: () => createDreamTask,
+  createAgentTask: () => createAgentTask,
+  TaskManager: () => TaskManager,
+  LocalShellTask: () => LocalShellTask,
+  LocalAgentTask: () => LocalAgentTask,
+  DreamTask: () => DreamTask
+});
+var init_tasks = __esm(() => {
+  init_manager2();
+  init_LocalShellTask();
+  init_LocalAgentTask();
+  init_DreamTask();
+});
+
 // src/commands/index.ts
 var exports_commands = {};
 __export(exports_commands, {
@@ -20767,9 +21333,9 @@ __export(exports_commands, {
 });
 import { exec as exec2 } from "child_process";
 import { promisify as promisify2 } from "util";
-import { existsSync as existsSync12, readFileSync as readFileSync12 } from "fs";
-import { join as join13 } from "path";
-import { homedir as homedir12 } from "os";
+import { existsSync as existsSync13, readFileSync as readFileSync13 } from "fs";
+import { join as join15 } from "path";
+import { homedir as homedir13 } from "os";
 function getAge(dateStr) {
   const ms = Date.now() - new Date(dateStr).getTime();
   if (ms < 60000)
@@ -20982,11 +21548,11 @@ ${lines.join(`
     name: "cost",
     description: "Show estimated API usage for this session",
     execute: async (_args, ctx) => {
-      const sessionFile = join13(homedir12(), ".nole-code", "sessions", `${ctx.sessionId}.json`);
-      if (!existsSync12(sessionFile))
+      const sessionFile = join15(homedir13(), ".nole-code", "sessions", `${ctx.sessionId}.json`);
+      if (!existsSync13(sessionFile))
         return "Session not found";
       try {
-        const session = JSON.parse(readFileSync12(sessionFile, "utf-8"));
+        const session = JSON.parse(readFileSync13(sessionFile, "utf-8"));
         const msgs = session.messages?.length || 0;
         return `Session: ${ctx.sessionId}
 Messages: ${msgs}
@@ -21004,7 +21570,7 @@ Note: Actual token usage available in provider dashboard.`;
       const checks4 = [
         ["Node.js", process.version],
         ["API Key", MINIMAX_API_KEY ? "✅ set" : "❌ missing"],
-        ["Session Dir", existsSync12(join13(homedir12(), ".nole-code")) ? "✅ exists" : "❌ missing"]
+        ["Session Dir", existsSync13(join15(homedir13(), ".nole-code")) ? "✅ exists" : "❌ missing"]
       ];
       return `\uD83E\uDD9E NOLE CODE — Health Check:
 
@@ -21152,14 +21718,14 @@ Use /plan approve to proceed step by step.`;
     aliases: ["save-chat"],
     execute: async (_args, ctx) => {
       const { loadSession: load, exportSession: exportSession2 } = await Promise.resolve().then(() => (init_manager(), exports_manager));
-      const { writeFileSync: writeFileSync8 } = __require("fs");
-      const { join: join14 } = __require("path");
+      const { writeFileSync: writeFileSync9 } = __require("fs");
+      const { join: join16 } = __require("path");
       const transcript = exportSession2(ctx.sessionId);
       if (!transcript)
         return "Session not found";
       const filename = `nole-session-${ctx.sessionId.slice(5, 15)}.md`;
-      const outPath = join14(ctx.cwd, filename);
-      writeFileSync8(outPath, transcript, "utf-8");
+      const outPath = join16(ctx.cwd, filename);
+      writeFileSync9(outPath, transcript, "utf-8");
       return `Exported to ${filename} (${transcript.split(`
 `).length} lines)`;
     }
@@ -21397,11 +21963,11 @@ ${lines.join(`
     name: "plugins",
     description: "List installed plugins",
     execute: async () => {
-      const { existsSync: existsSync13, readdirSync: readdirSync4 } = __require("fs");
-      const { join: join14 } = __require("path");
-      const { homedir: homedir13 } = __require("os");
-      const dir = join14(homedir13(), ".nole-code", "plugins");
-      if (!existsSync13(dir)) {
+      const { existsSync: existsSync14, readdirSync: readdirSync4 } = __require("fs");
+      const { join: join16 } = __require("path");
+      const { homedir: homedir14 } = __require("os");
+      const dir = join16(homedir14(), ".nole-code", "plugins");
+      if (!existsSync14(dir)) {
         return `No plugins directory.
 Create ~/.nole-code/plugins/ and add .js files.
 
@@ -21610,6 +22176,52 @@ Start one with /loop <goal>`;
       return `Aborted loop.\\nCheckpoint saved at: ${loop?.checkpointId}\\nResume with: /loop --resume ${loop?.checkpointId}`;
     }
   });
+  registerCommand({
+    name: "tasks",
+    description: "List all background tasks",
+    aliases: ["task"],
+    execute: async () => {
+      const { taskManager: taskManager2 } = await Promise.resolve().then(() => (init_tasks(), exports_tasks));
+      const tasks = taskManager2.listTasks();
+      if (tasks.length === 0)
+        return "No background tasks running.";
+      const lines = [`Background Tasks:
+`];
+      for (const t of tasks) {
+        const statusIcon = t.status === "running" ? "\uD83D\uDD04" : t.status === "completed" ? "✅" : t.status === "failed" ? "❌" : t.status === "stopped" ? "⏹" : "○";
+        lines.push(`${statusIcon} ${t.id} [${t.type}] ${t.status}`);
+        lines.push(`    ${t.description}`);
+      }
+      return lines.join(`
+`);
+    }
+  });
+  registerCommand({
+    name: "task",
+    description: "Manage background tasks: stop <id>, log <id>",
+    aliases: [],
+    execute: async (args) => {
+      const { taskManager: taskManager2 } = await Promise.resolve().then(() => (init_tasks(), exports_tasks));
+      const action = args[0];
+      const taskId = args[1];
+      if (!action || !taskId) {
+        return "Usage: /task <stop|log> <task-id>";
+      }
+      if (action === "stop") {
+        const result = taskManager2.stopTask(taskId);
+        return result ? `Stopped task ${taskId}` : `Failed to stop task ${taskId}`;
+      }
+      if (action === "log") {
+        const output = taskManager2.getTaskOutput(taskId, 30);
+        if (output.length === 0)
+          return `No output for task ${taskId}`;
+        return `Task ${taskId} output (last ${output.length} lines):
+` + output.join(`
+`);
+      }
+      return `Unknown action: ${action}. Use 'stop' or 'log'.`;
+    }
+  });
 });
 
 // src/session-memory/index.ts
@@ -21625,16 +22237,16 @@ __export(exports_session_memory, {
   extractMemoryFromConversation: () => extractMemoryFromConversation,
   addToWorklog: () => addToWorklog
 });
-import { existsSync as existsSync13, readFileSync as readFileSync13, writeFileSync as writeFileSync8, mkdirSync as mkdirSync8 } from "fs";
-import { join as join14 } from "path";
-import { homedir as homedir13 } from "os";
+import { existsSync as existsSync14, readFileSync as readFileSync14, writeFileSync as writeFileSync9, mkdirSync as mkdirSync9 } from "fs";
+import { join as join16 } from "path";
+import { homedir as homedir14 } from "os";
 function getMemoryPath(sessionId) {
-  mkdirSync8(MEMORY_DIR, { recursive: true });
-  return join14(MEMORY_DIR, `${sessionId}.md`);
+  mkdirSync9(MEMORY_DIR, { recursive: true });
+  return join16(MEMORY_DIR, `${sessionId}.md`);
 }
 function loadMemory(sessionId) {
   const path = getMemoryPath(sessionId);
-  if (!existsSync13(path)) {
+  if (!existsSync14(path)) {
     return {
       title: "",
       currentState: "",
@@ -21647,7 +22259,7 @@ function loadMemory(sessionId) {
       lastUpdated: new Date().toISOString()
     };
   }
-  const content = readFileSync13(path, "utf-8");
+  const content = readFileSync14(path, "utf-8");
   return parseMemoryContent(content);
 }
 function parseMemoryContent(content) {
@@ -21692,7 +22304,7 @@ function saveMemory(sessionId, memory) {
   const merged = { ...existing, ...memory, lastUpdated: new Date().toISOString() };
   const path = getMemoryPath(sessionId);
   const content = formatMemory(merged);
-  writeFileSync8(path, content, "utf-8");
+  writeFileSync9(path, content, "utf-8");
 }
 function formatMemory(memory) {
   return `# Session Title
@@ -21797,7 +22409,7 @@ function getMemorySummary(sessionId) {
 }
 var MEMORY_DIR;
 var init_session_memory = __esm(() => {
-  MEMORY_DIR = join14(homedir13(), ".nole-code", "memory");
+  MEMORY_DIR = join16(homedir14(), ".nole-code", "memory");
 });
 
 // src/services/compact/index.ts
@@ -22178,17 +22790,17 @@ var exports_loader = {};
 __export(exports_loader, {
   loadPlugins: () => loadPlugins
 });
-import { existsSync as existsSync14, readdirSync as readdirSync4 } from "fs";
-import { join as join15 } from "path";
-import { homedir as homedir14 } from "os";
+import { existsSync as existsSync15, readdirSync as readdirSync4 } from "fs";
+import { join as join17 } from "path";
+import { homedir as homedir15 } from "os";
 async function loadPlugins() {
-  if (!existsSync14(PLUGINS_DIR))
+  if (!existsSync15(PLUGINS_DIR))
     return [];
   const files = readdirSync4(PLUGINS_DIR).filter((f) => f.endsWith(".js"));
   const loaded = [];
   for (const file of files) {
     try {
-      const pluginPath = join15(PLUGINS_DIR, file);
+      const pluginPath = join17(PLUGINS_DIR, file);
       const plugin = __require(pluginPath);
       if (!plugin.name || !plugin.execute) {
         console.error(`Plugin ${file}: missing name or execute`);
@@ -22216,7 +22828,7 @@ async function loadPlugins() {
 var PLUGINS_DIR;
 var init_loader = __esm(() => {
   init_registry();
-  PLUGINS_DIR = join15(homedir14(), ".nole-code", "plugins");
+  PLUGINS_DIR = join17(homedir15(), ".nole-code", "plugins");
 });
 
 // src/services/indexer.ts
@@ -22225,8 +22837,8 @@ __export(exports_indexer, {
   indexProject: () => indexProject,
   formatIndexForPrompt: () => formatIndexForPrompt
 });
-import { readFileSync as readFileSync14, readdirSync as readdirSync5, statSync as statSync2 } from "fs";
-import { join as join16, relative as relative3, extname } from "path";
+import { readFileSync as readFileSync15, readdirSync as readdirSync5, statSync as statSync2 } from "fs";
+import { join as join18, relative as relative3, extname } from "path";
 function indexProject(root, maxFiles = 200) {
   const languages = {};
   const keyFiles = [];
@@ -22245,7 +22857,7 @@ function indexProject(root, maxFiles = 200) {
     for (const entry of entries) {
       if (entry.startsWith(".") || IGNORE_DIRS.has(entry))
         continue;
-      const fullPath = join16(dir, entry);
+      const fullPath = join18(dir, entry);
       try {
         const stat = statSync2(fullPath);
         const rel = relative3(root, fullPath);
@@ -22260,7 +22872,7 @@ function indexProject(root, maxFiles = 200) {
           const lang = LANG_MAP[ext] || ext;
           languages[lang] = (languages[lang] || 0) + 1;
           try {
-            const content = readFileSync14(fullPath, "utf-8");
+            const content = readFileSync15(fullPath, "utf-8");
             const lines = content.split(`
 `).length;
             totalLines += lines;
@@ -22418,10 +23030,29 @@ __export(exports_src, {
   getMiniMaxToken: () => getMiniMaxToken,
   activeClient: () => activeClient
 });
-import { existsSync as existsSync16, readFileSync as readFileSync15, mkdirSync as mkdirSync9 } from "fs";
-import { homedir as homedir15 } from "node:os";
-import { join as join17 } from "node:path";
+import { existsSync as existsSync17, readFileSync as readFileSync16, mkdirSync as mkdirSync10 } from "fs";
+import { homedir as homedir16 } from "node:os";
+import { join as join19 } from "node:path";
 import * as readline2 from "readline";
+function _loadEnv(path) {
+  if (!existsSync17(path))
+    return;
+  try {
+    const content = readFileSync16(path, "utf-8");
+    for (const line of content.split(`
+`)) {
+      const t = line.trim();
+      if (!t || t.startsWith("#"))
+        continue;
+      const eq = t.indexOf("=");
+      if (eq < 0)
+        continue;
+      const k = t.slice(0, eq).trim(), v = t.slice(eq + 1).trim();
+      if (!process.env[k])
+        process.env[k] = v;
+    }
+  } catch {}
+}
 async function streamOutput(lines, maxLines, delayMs = 10) {
   const shown = [];
   const truncated = lines.length > maxLines;
@@ -22448,9 +23079,9 @@ async function streamOutput(lines, maxLines, delayMs = 10) {
 }
 function getMiniMaxToken() {
   try {
-    const authPath = join17(homedir15(), ".openclaw", "agents", "main", "agent", "auth-profiles.json");
-    if (existsSync16(authPath)) {
-      const auth2 = JSON.parse(readFileSync15(authPath, "utf-8"));
+    const authPath = join19(homedir16(), ".openclaw", "agents", "main", "agent", "auth-profiles.json");
+    if (existsSync17(authPath)) {
+      const auth2 = JSON.parse(readFileSync16(authPath, "utf-8"));
       return auth2.profiles?.["minimax-portal:default"]?.access || "";
     }
   } catch {}
@@ -22516,9 +23147,9 @@ ${dim("Or add keys to ~/.nole-code/.env:")}
 
 Then run ${bold("nole")} again.
 `);
-    const configDir = join17(homedir15(), ".nole-code");
-    if (!existsSync16(configDir)) {
-      mkdirSync9(configDir, { recursive: true });
+    const configDir = join19(homedir16(), ".nole-code");
+    if (!existsSync17(configDir)) {
+      mkdirSync10(configDir, { recursive: true });
       console.log(dim(`  Created ${configDir}/`));
     }
     process.exit(0);
@@ -22882,9 +23513,9 @@ ${c2.yellow("❓ Unknown command:")} /${parsed.cmd}`);
       for (const ref of fileRefs) {
         const filePath = ref.slice(1);
         const fullPath = resolve(opts.cwd || process.cwd(), filePath);
-        if (existsSync16(fullPath)) {
+        if (existsSync17(fullPath)) {
           try {
-            const content = readFileSync15(fullPath, "utf-8");
+            const content = readFileSync16(fullPath, "utf-8");
             const truncated = content.length > 5000 ? content.slice(0, 5000) + `
 ... (truncated)` : content;
             expandedInput = expandedInput.replace(ref, `
@@ -23255,6 +23886,9 @@ var init_src = __esm(() => {
   init_spinner();
   init_streaming();
   init_markdown();
+  _loadEnv(join19(homedir16(), "nole-code", ".env"));
+  _loadEnv(join19(homedir16(), ".nole-code", ".env"));
+  _loadEnv(join19(process.cwd(), ".env"));
   PLAN_INTENT_PATTERNS = [
     /^let['’]?s?\s+(make\s+a\s+plan|plan|break\s+this\s+down|walk\s+me\s+through)/i,
     /^plan\s+(this|it|that|out|for|our|the)/i,

@@ -165,11 +165,10 @@ export async function planSteps(goal: string, client: LLMClient, cwd: string): P
 
 CRITICAL RULES:
 1. Each step must be ONE atomic action
-2. When user says "use curl", "run command", "execute", "bash" → plan ONLY Bash tool steps
-3. NEVER plan Glob, Read, or LS steps unless user explicitly asks for file discovery
-4. Do NOT plan a "check environment" or "find files" step before executing the actual task
+2. When user asks to "create a post", "make a curl call", "run a command" → plan a SINGLE Bash tool step that does EVERYTHING in one command (curl + redirect OR && echo)
+3. NEVER split into Glob + Bash + Read — one Bash command that does the full task
+4. For WordPress/REST API tasks: single curl command with -o or | tee or && echo to save output
 5. Maximum 8 steps, minimum 1 step
-6. Combine the entire task into one step if it can be done with a single Bash/Write command
 
 BAD examples:
 - User: "create a file" → Plan: "Glob to find location" + "Write file" (WRONG)
@@ -415,7 +414,7 @@ export async function runLoop(options: ExecutorOptions): Promise<ExecutionResult
     // Handle step result
     if (!stepShouldContinue) {
       // Check retry count
-      if (step.retryCount >= checkpoint.settings.maxRetries) {
+      if (step.retryCount >= (checkpoint.settings?.maxRetries ?? 2)) {
         failStep(checkpoint, currentStepId, step.error || 'Max retries exceeded', toolCalls)
         printStepFailed(currentStepId, step, step.error || 'Max retries exceeded')
         abortCheckpoint(checkpoint)

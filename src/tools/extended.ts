@@ -373,18 +373,18 @@ export async function executeWordPressTool(
   input: Record<string, unknown>,
   ctx: ToolContext,
 ): Promise<{ content: string; isError?: boolean }> {
-  const { WP_SITE, WP_USERNAME, WP_APP_PASSWORD } = await import('../utils/env.js')
+  const { WP_USER, WP_APP_PASSWORD, WP_API_URL } = await import('../utils/env.js')
   
-  if (!WP_SITE || !WP_USERNAME || !WP_APP_PASSWORD) {
-    return { content: 'WordPress credentials not configured. Set WP_SITE, WP_USERNAME, WP_APP_PASSWORD in .env', isError: true }
+  if (!WP_USER || !WP_APP_PASSWORD || !WP_API_URL) {
+    return { content: 'WordPress credentials not configured. Set WP_USER, WP_APP_PASSWORD, WP_API_URL in .env', isError: true }
   }
   
-  const credentials = Buffer.from(`${WP_USERNAME}:${WP_APP_PASSWORD}`).toString('base64')
+  const credentials = Buffer.from(`${WP_USER}:${WP_APP_PASSWORD}`).toString('base64')
   
   if (name === 'WordPressPost') {
     const { title, content, status = 'draft' } = input as { title: string; content: string; status?: string }
     
-    const response = await fetch(`${WP_SITE}/wp-json/wp/v2/posts`, {
+    const response = await fetch(`${WP_API_URL}/posts`, {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${credentials}`,
@@ -410,7 +410,7 @@ export async function executeWordPressTool(
     if (content) body.content = content
     if (status) body.status = status
     
-    const response = await fetch(`${WP_SITE}/wp-json/wp/v2/posts/${post_id}`, {
+    const response = await fetch(`${WP_API_URL}/posts/${post_id}`, {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${credentials}`,
