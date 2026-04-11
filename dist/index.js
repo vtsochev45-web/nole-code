@@ -20320,12 +20320,20 @@ function resumeLoop(checkpointId) {
 function pauseLoop() {
   if (!activeLoop)
     return false;
-  activeLoop.child.kill("SIGTERM");
+  try {
+    process.kill(-activeLoop.child.pid, "SIGTERM");
+  } catch (e) {
+    activeLoop.child.kill("SIGTERM");
+  }
   setTimeout(() => {
     if (activeLoop && !activeLoop.child.killed) {
-      activeLoop.child.kill("SIGKILL");
+      try {
+        process.kill(-activeLoop.child.pid, "SIGKILL");
+      } catch {
+        activeLoop.child.kill("SIGKILL");
+      }
     }
-  }, 2000);
+  }, 5000);
   return true;
 }
 function abortLoop() {
@@ -20346,7 +20354,7 @@ Killing active loop: ${reason}`));
       activeLoop.child.kill("SIGKILL");
     }
     activeLoop = null;
-  }, 2000);
+  }, 5000);
   return true;
 }
 async function notifyComplete(checkpointId, success, errors3) {
@@ -20537,13 +20545,14 @@ What tools should I use to complete this step? Respond with specific tool calls.
         }
         try {
           const execResult = await executeTool(tc.name, tc.input, { cwd, sessionId: "loop" });
+          const isErrorResult = execResult.isError || /^(ENOENT|EPERM|EACCES|EEXIST|ECONNREFUSED|ETIMEDOUT|No such file|Permission denied|Command failed|non-zero|exit code [1-9])/m.test(execResult.content);
           toolCalls.push({
             name: tc.name,
             input: tc.input,
             result: execResult.content,
-            success: !execResult.isError
+            success: !isErrorResult
           });
-          if (execResult.isError) {
+          if (isErrorResult) {
             context.errorsEncountered.push({
               step: step.id,
               error: execResult.content,

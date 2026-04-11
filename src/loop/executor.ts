@@ -242,14 +242,19 @@ ${step.retryCount > 0 ? buildRetryContext({ steps: [step], context } as Checkpoi
         try {
           const execResult = await executeTool(tc.name, tc.input, { cwd, sessionId: 'loop' })
           
+          // Detect errors from exit codes and error patterns
+          const isErrorResult = execResult.isError || 
+            /^(ENOENT|EPERM|EACCES|EEXIST|ECONNREFUSED|ETIMEDOUT|No such file|Permission denied|Command failed|non-zero|exit code [1-9])/m
+              .test(execResult.content)
+          
           toolCalls.push({
             name: tc.name,
             input: tc.input,
             result: execResult.content,
-            success: !execResult.isError,
+            success: !isErrorResult,
           })
           
-          if (execResult.isError) {
+          if (isErrorResult) {
             context.errorsEncountered.push({
               step: step.id,
               error: execResult.content,

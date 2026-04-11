@@ -275,15 +275,25 @@ export function resumeLoop(checkpointId: string): void {
 export function pauseLoop(): boolean {
   if (!activeLoop) return false
   
-  // SIGTERM gives child 2 seconds to checkpoint, then we SIGKILL
-  activeLoop.child.kill('SIGTERM')
+  // Send SIGTERM to process group (child + detached grandchild)
+  // -pid sends to entire group, catching the detached loop-agent
+  try {
+    process.kill(-activeLoop.child.pid, 'SIGTERM')
+  } catch (e) {
+    // Fallback to direct kill if group kill fails
+    activeLoop.child.kill('SIGTERM')
+  }
   
-  // If still alive after 2s, SIGKILL
+  // If still alive after 5s, SIGKILL
   setTimeout(() => {
     if (activeLoop && !activeLoop.child.killed) {
-      activeLoop.child.kill('SIGKILL')
+      try {
+        process.kill(-activeLoop.child.pid, 'SIGKILL')
+      } catch {
+        activeLoop.child.kill('SIGKILL')
+      }
     }
-  }, 2000)
+  }, 5000)
   
   return true
 }
@@ -304,7 +314,7 @@ export function killLoop(reason: string): boolean {
       activeLoop.child.kill('SIGKILL')
     }
     activeLoop = null
-  }, 2000)
+  }, 5000)
   return true
 }
 

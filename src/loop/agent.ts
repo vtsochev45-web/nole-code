@@ -142,32 +142,39 @@ function setupSignalHandlers(checkpointId: string): void {
   const { pauseCheckpoint, saveCheckpoint, loadCheckpoint } = require('./checkpoint.js')
   
   // SIGTERM - checkpoint and exit gracefully
-  process.on('SIGTERM', () => {
+  process.on('SIGTERM', async () => {
     cleanup()
+    const { loadCheckpoint, saveCheckpoint } = await import('./checkpoint.js')
     const cp = loadCheckpoint(checkpointId)
     if (cp) {
-      saveCheckpoint({ ...cp, state: 'paused' })
+      const updated = { ...cp, state: 'paused' as const }
+      saveCheckpoint(updated)
       emit({
         type: 'loop_paused',
         reason: 'SIGTERM received',
         checkpointId: cp.id,
       })
     }
+    // Give time for emit to flush before exit
+    await new Promise(r => setTimeout(r, 500))
     process.exit(0)
   })
   
   // SIGINT - same as SIGTERM
-  process.on('SIGINT', () => {
+  process.on('SIGINT', async () => {
     cleanup()
+    const { loadCheckpoint, saveCheckpoint } = await import('./checkpoint.js')
     const cp = loadCheckpoint(checkpointId)
     if (cp) {
-      saveCheckpoint({ ...cp, state: 'paused' })
+      const updated = { ...cp, state: 'paused' as const }
+      saveCheckpoint(updated)
       emit({
         type: 'loop_paused',
         reason: 'SIGINT received',
         checkpointId: cp.id,
       })
     }
+    await new Promise(r => setTimeout(r, 500))
     process.exit(0)
   })
 }
