@@ -6,6 +6,12 @@ import { EventEmitter } from 'events'
 import { Readline } from 'readline'
 import { c } from './output/styles.js'
 
+// Vim mode imports
+import { createInitialVimState, type VimState, type CommandState } from '../vim/types.js'
+import { transition, type TransitionContext, type TransitionResult } from '../vim/transitions.js'
+import { Cursor } from '../utils/Cursor.js'
+import type { FindType, Operator, RecordedChange, TextObjScope } from '../vim/types.js'
+
 export interface MessageBlock {
   id: string
   type: 'user' | 'nole' | 'tool' | 'system'
@@ -34,6 +40,14 @@ class TerminalUI extends EventEmitter {
   private isLoading = false
   private loadingMessage = ''
 
+  // Vim state
+  private vimState: VimState = createInitialVimState()
+  private vimText = ''
+  private vimRegister = ''
+  private vimRegisterLinewise = false
+  private vimLastFind: { type: FindType; char: string } | null = null
+  private vimLastChange: RecordedChange | null = null
+
   constructor() {
     super()
     this.registerDefaultShortcuts()
@@ -49,6 +63,105 @@ class TerminalUI extends EventEmitter {
     this.shortcuts.set('up', () => this.historyUp())
     this.shortcuts.set('down', () => this.historyDown())
     this.shortcuts.set('tab', () => this.cycleBlock())
+    // Vim mode shortcuts
+    this.shortcuts.set('esc', () => this.vimEnterNormal())
+    this.shortcuts.set('i', () => this.vimEnterInsert())
+    this.shortcuts.set('v', () => this.vimEnterVisual())
+  }
+
+  // ============ Vim Mode ============
+
+  /**
+   * Process a key through vim mode.
+   * Returns true if the key was handled by vim, false to pass through.
+   */
+  processVimKey(key: string): boolean {
+    // Handle ESC explicitly
+    if (key === '\x1b') {
+      this.vimEnterNormal()
+      return true
+    }
+
+    const cmdState =
+      this.vimState.mode === 'NORMAL'
+        ? this.vimState.command
+        : null
+
+    if (cmdState) {
+      const ctx = this.createVimContext()
+      const result = transition(cmdState, key, ctx)
+
+      if (result.execute) {
+        result.execute()
+      }
+
+      if (result.next) {
+        this.vimState = { mode: 'NORMAL', command: result.next }
+      } else if (!result.next && !result.execute) {
+        // Input didn't transition - check if it's a motion or other handled key
+        // Stay in current state
+      }
+
+      return true // Always handle in NORMAL mode
+    }
+
+    // In INSERT mode, only ESC is handled specially
+    if (this.vimState.mode === 'INSERT' && key === '\x1b') {
+      this.vimEnterNormal()
+      return true
+    }
+
+    return false // Pass to normal input handling
+  }
+
+  private createVimContext(): TransitionContext {
+    const cursor = new Cursor(this.vimText, 0)
+    let currentOffset = 0
+
+    return {
+      cursor,
+      text: this.vimText,
+      setText: (text: string) => {
+        this.vimText = text
+      },
+      setOffset: (offset: number) => {
+        currentOffset = offset
+      },
+      enterInsert: (offset: number) => {
+        this.vimState = { mode: 'INSERT', insertedText: '' }
+        currentOffset = offset
+      },
+      getRegister: () => this.vimRegister,
+      setRegister: (content: string, linewise: boolean) => {
+        this.vimRegister = content
+        this.vimRegisterLinewise = linewise
+      },
+      getLastFind: () => this.vimLastFind,
+      setLastFind: (type: FindType, char: string) => {
+        this.vimLastFind = { type, char }
+      },
+      recordChange: (change: RecordedChange) => {
+        this.vimLastChange = change
+      },
+    }
+  }
+
+  private vimEnterNormal(): void {
+    this.vimState = { mode: 'NORMAL', command: { type: 'idle' } }
+  }
+
+  private vimEnterInsert(): void {
+    this.vimState = { mode: 'INSERT', insertedText: '' }
+  }
+
+  private vimEnterVisual(): void {
+    // Visual mode - future enhancement
+    this.vimState = { mode: 'NORMAL', command: { type: 'idle' } }
+  }
+
+  /** Get current vim mode for display */
+  getVimMode(): string {
+    return this.vimState.mode
   }
 
   // ============ Message Rendering ============

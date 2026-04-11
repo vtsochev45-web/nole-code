@@ -18905,6 +18905,309 @@ ${output.slice(0, 500) || "(no output yet)"}`;
   });
 });
 
+// src/buddy/sprites.ts
+var sprites;
+var init_sprites = __esm(() => {
+  sprites = {
+    cat: `  /\\___/\\
+ (  o o  )
+ (  =^=  )
+  (--m-m--)`,
+    owl: `  ___0___
+ /       \\
+|  @   @  |
+ \\  ---  /
+  ~~~~~~~`,
+    ghost: `  .-.
+ (o o)
+ | O |
+ |   |
+  ===
+ ~~~~~`,
+    frog: `  (_/)
+ ( o.o )
+  > ^ <`,
+    crab: `  ~~/~~\\
+ (_/)
+ /|  |\\
+  |  |`,
+    astronaut: `  .--.
+ (    )
+ |    |
+  \\__/
+ /____\\`
+  };
+});
+
+// src/buddy/companion.ts
+class Companion {
+  config;
+  currentMood;
+  constructor(config2) {
+    this.config = {
+      name: config2?.name || "Buddy",
+      sprite: config2?.sprite || "cat",
+      mood: config2?.mood || "happy",
+      messages: config2?.messages || []
+    };
+    this.currentMood = this.config.mood;
+  }
+  get name() {
+    return this.config.name;
+  }
+  get sprite() {
+    return this.config.sprite;
+  }
+  get mood() {
+    return this.currentMood;
+  }
+  get spriteArt() {
+    return sprites[this.config.sprite];
+  }
+  get isEnabled() {
+    return this.config.name !== "" && this.config.name.toLowerCase() !== "off";
+  }
+  react(event) {
+    if (!this.isEnabled)
+      return "";
+    const reaction = reactions[event];
+    const message = reaction.messages[Math.floor(Math.random() * reaction.messages.length)];
+    return `${moodEmojis[this.currentMood]} ${this.config.name}: ${message}`;
+  }
+  celebrate() {
+    if (!this.isEnabled)
+      return "";
+    const message = celebrateMessages[Math.floor(Math.random() * celebrateMessages.length)];
+    return `${message} ${this.spriteArt}`;
+  }
+  introduce() {
+    if (!this.isEnabled)
+      return "";
+    return `${moodEmojis[this.currentMood]} ${this.config.name} here! ${this.spriteArt}`;
+  }
+  setMood(mood) {
+    this.currentMood = mood;
+  }
+  setName(name) {
+    this.config.name = name;
+  }
+  setSprite(sprite) {
+    this.config.sprite = sprite;
+  }
+  getConfig() {
+    return { ...this.config };
+  }
+}
+var moodEmojis, reactions, celebrateMessages;
+var init_companion = __esm(() => {
+  init_sprites();
+  moodEmojis = {
+    happy: "✨",
+    thinking: "\uD83E\uDD14",
+    sleeping: "\uD83D\uDCA4",
+    excited: "\uD83C\uDF89",
+    sad: "\uD83D\uDE22"
+  };
+  reactions = {
+    thinking: {
+      emoji: "\uD83E\uDD14",
+      messages: [
+        "Hmm, let me think about this...",
+        "Working on it...",
+        "Pondering the options...",
+        "Computing..."
+      ]
+    },
+    done: {
+      emoji: "✅",
+      messages: [
+        "All done!",
+        "Finished!",
+        "Completed!",
+        "There we go!"
+      ]
+    },
+    error: {
+      emoji: "❌",
+      messages: [
+        "Oops! Something went wrong.",
+        "That didn't work...",
+        "Let me try again!",
+        "We'll get it next time."
+      ]
+    },
+    waiting: {
+      emoji: "⏳",
+      messages: [
+        "Waiting...",
+        "Patience...",
+        "Almost there...",
+        "Hold on..."
+      ]
+    }
+  };
+  celebrateMessages = [
+    "\uD83C\uDF89 Woohoo! We did it!",
+    "\uD83C\uDF1F Amazing work!",
+    "\uD83D\uDE80 Mission accomplished!",
+    "\uD83D\uDCAF Perfect!",
+    "\uD83C\uDFC6 Champion!"
+  ];
+});
+
+// src/buddy/config.ts
+import { existsSync as existsSync8, readFileSync as readFileSync8 } from "fs";
+import { join as join9 } from "path";
+function loadEnv() {
+  const envPath = join9(process.cwd(), ".env");
+  if (!existsSync8(envPath)) {
+    return {};
+  }
+  try {
+    const content = readFileSync8(envPath, "utf-8");
+    const config2 = {};
+    content.split(`
+`).forEach((line) => {
+      const match = line.match(/^(BUDDY|BUDDY_SPRITE)=(.*)$/);
+      if (match) {
+        const [, key, value] = match;
+        if (key === "BUDDY") {
+          config2.BUDDY = value.trim();
+        } else if (key === "BUDDY_SPRITE") {
+          config2.BUDDY_SPRITE = value.trim();
+        }
+      }
+    });
+    return config2;
+  } catch {
+    return {};
+  }
+}
+function getSpriteFromEnv(sprite) {
+  const validSprites = ["cat", "owl", "ghost", "frog", "crab", "astronaut"];
+  if (sprite && validSprites.includes(sprite)) {
+    return sprite;
+  }
+  return "cat";
+}
+function getMoodFromEnv(mood) {
+  const validMoods = ["happy", "thinking", "sleeping", "excited", "sad"];
+  if (mood && validMoods.includes(mood)) {
+    return mood;
+  }
+  return "happy";
+}
+function getCompanion() {
+  if (!companionInstance) {
+    const env = loadEnv();
+    if (env.BUDDY && env.BUDDY.trim() !== "" && env.BUDDY.toLowerCase() !== "off") {
+      companionInstance = new Companion({
+        name: env.BUDDY.trim(),
+        sprite: getSpriteFromEnv(env.BUDDY_SPRITE),
+        mood: getMoodFromEnv()
+      });
+    } else {
+      companionInstance = new Companion({ name: "" });
+    }
+  }
+  return companionInstance;
+}
+function reloadCompanion() {
+  companionInstance = null;
+  return getCompanion();
+}
+var companionInstance = null, validSprites, validMoods;
+var init_config = __esm(() => {
+  init_companion();
+  validSprites = ["cat", "owl", "ghost", "frog", "crab", "astronaut"];
+  validMoods = ["happy", "thinking", "sleeping", "excited", "sad"];
+});
+
+// src/buddy/index.ts
+var init_buddy = __esm(() => {
+  init_sprites();
+  init_companion();
+  init_config();
+});
+
+// src/buddy/commands.ts
+function registerBuddyCommands(registerCmd) {
+  const companion = getCompanion();
+  registerCmd({
+    name: "buddy",
+    description: "Show or control your buddy companion",
+    aliases: ["buddy"],
+    execute: async (args, _ctx) => {
+      const subcommand = args[0];
+      if (!subcommand || subcommand === "show") {
+        const comp = getCompanion();
+        if (!comp.isEnabled) {
+          return `\uD83D\uDC3E Buddy is disabled. Set BUDDY=name in .env to enable.`;
+        }
+        return `\uD83D\uDC3E ${comp.name} (${comp.mood})
+${comp.spriteArt}`;
+      }
+      if (subcommand === "set") {
+        const newName = args.slice(1).join(" ");
+        if (!newName) {
+          return "Usage: /buddy set <name>";
+        }
+        const comp = getCompanion();
+        comp.setName(newName);
+        return `✨ Buddy renamed to "${newName}"`;
+      }
+      if (subcommand === "sprite") {
+        const newSprite = args[1];
+        if (!newSprite) {
+          return `Available sprites: ${validSprites.join(", ")}`;
+        }
+        if (!validSprites.includes(newSprite)) {
+          return `Invalid sprite. Choose from: ${validSprites.join(", ")}`;
+        }
+        const comp = getCompanion();
+        comp.setSprite(newSprite);
+        return `\uD83C\uDFA8 Sprite changed to ${newSprite}
+${comp.spriteArt}`;
+      }
+      if (subcommand === "mood") {
+        const newMood = args[1];
+        if (!newMood) {
+          return `Available moods: ${validMoods.join(", ")}`;
+        }
+        if (!validMoods.includes(newMood)) {
+          return `Invalid mood. Choose from: ${validMoods.join(", ")}`;
+        }
+        const comp = getCompanion();
+        comp.setMood(newMood);
+        return `\uD83C\uDFAD Mood set to ${newMood}`;
+      }
+      if (subcommand === "off") {
+        const comp = getCompanion();
+        comp.setName("");
+        return "\uD83D\uDC4B Buddy disabled.";
+      }
+      if (subcommand === "reload") {
+        reloadCompanion();
+        const comp = getCompanion();
+        if (!comp.isEnabled) {
+          return "\uD83D\uDD04 Reloaded. Buddy is disabled (no BUDDY=name in .env)";
+        }
+        return `\uD83D\uDD04 Reloaded! ${comp.name} is back!`;
+      }
+      return `Usage:
+  /buddy           - Show buddy
+  /buddy set <name> - Rename buddy
+  /buddy sprite <type> - Change sprite (${validSprites.join(", ")})
+  /buddy mood <mood> - Change mood (${validMoods.join(", ")})
+  /buddy off       - Disable buddy
+  /buddy reload    - Reload from .env`;
+    }
+  });
+}
+var init_commands = __esm(() => {
+  init_buddy();
+});
+
 // src/session/manager.ts
 var exports_manager = {};
 __export(exports_manager, {
@@ -18919,15 +19222,15 @@ __export(exports_manager, {
   compactSession: () => compactSession
 });
 import {
-  existsSync as existsSync8,
+  existsSync as existsSync9,
   mkdirSync as mkdirSync4,
-  readFileSync as readFileSync8,
+  readFileSync as readFileSync9,
   writeFileSync as writeFileSync4,
   readdirSync as readdirSync2,
   unlinkSync,
   renameSync
 } from "fs";
-import { join as join9 } from "path";
+import { join as join10 } from "path";
 import { homedir as homedir8 } from "os";
 function ensureSessionDir() {
   mkdirSync4(SESSION_DIR, { recursive: true });
@@ -18937,7 +19240,7 @@ function listSessions(limit = 20) {
   const files = readdirSync2(SESSION_DIR).filter((f) => f.endsWith(".json"));
   const sessions = files.map((f) => {
     try {
-      return JSON.parse(readFileSync8(join9(SESSION_DIR, f), "utf-8"));
+      return JSON.parse(readFileSync9(join10(SESSION_DIR, f), "utf-8"));
     } catch {
       return null;
     }
@@ -18945,11 +19248,11 @@ function listSessions(limit = 20) {
   return sessions.slice(0, limit);
 }
 function loadSession(id) {
-  const file = join9(SESSION_DIR, `${id}.json`);
-  if (!existsSync8(file))
+  const file = join10(SESSION_DIR, `${id}.json`);
+  if (!existsSync9(file))
     return null;
   try {
-    return JSON.parse(readFileSync8(file, "utf-8"));
+    return JSON.parse(readFileSync9(file, "utf-8"));
   } catch {
     return null;
   }
@@ -18957,14 +19260,14 @@ function loadSession(id) {
 function saveSession(session) {
   ensureSessionDir();
   session.updatedAt = new Date().toISOString();
-  const file = join9(SESSION_DIR, `${session.id}.json`);
+  const file = join10(SESSION_DIR, `${session.id}.json`);
   const tmp = file + `.tmp.${Date.now()}`;
   writeFileSync4(tmp, JSON.stringify(session, null, 2), "utf-8");
   renameSync(tmp, file);
 }
 function deleteSession(id) {
-  const file = join9(SESSION_DIR, `${id}.json`);
-  if (existsSync8(file)) {
+  const file = join10(SESSION_DIR, `${id}.json`);
+  if (existsSync9(file)) {
     unlinkSync(file);
     return true;
   }
@@ -19073,7 +19376,7 @@ function exportSession(id) {
 }
 var SESSION_DIR;
 var init_manager = __esm(() => {
-  SESSION_DIR = join9(homedir8(), ".nole-code", "sessions");
+  SESSION_DIR = join10(homedir8(), ".nole-code", "sessions");
 });
 
 // src/project/onboarding.ts
@@ -19089,18 +19392,18 @@ __export(exports_onboarding, {
   createNoleMd: () => createNoleMd
 });
 import {
-  existsSync as existsSync9,
-  readFileSync as readFileSync9,
+  existsSync as existsSync10,
+  readFileSync as readFileSync10,
   writeFileSync as writeFileSync5,
   mkdirSync as mkdirSync5
 } from "fs";
-import { join as join10 } from "path";
+import { join as join11 } from "path";
 import { homedir as homedir9 } from "os";
 function loadProjectConfig() {
   mkdirSync5(CONFIG_DIR, { recursive: true });
-  if (existsSync9(PROJECT_CONFIG)) {
+  if (existsSync10(PROJECT_CONFIG)) {
     try {
-      return JSON.parse(readFileSync9(PROJECT_CONFIG, "utf-8"));
+      return JSON.parse(readFileSync10(PROJECT_CONFIG, "utf-8"));
     } catch {}
   }
   return {};
@@ -19119,7 +19422,7 @@ function isDirEmpty(cwd) {
   }
 }
 function getOnboardingSteps(cwd) {
-  const noleMdPath = join10(cwd, "NOLE.md");
+  const noleMdPath = join11(cwd, "NOLE.md");
   const empty = isDirEmpty(cwd);
   return [
     {
@@ -19132,14 +19435,14 @@ function getOnboardingSteps(cwd) {
     {
       key: "nolemd",
       text: "Run /init to create a NOLE.md file",
-      isComplete: existsSync9(noleMdPath),
+      isComplete: existsSync10(noleMdPath),
       isCompletable: true,
       isEnabled: !empty
     },
     {
       key: "context",
       text: "Add project context files",
-      isComplete: existsSync9(join10(cwd, ".nolecode")) || existsSync9(join10(cwd, "NOLE.md")),
+      isComplete: existsSync10(join11(cwd, ".nolecode")) || existsSync10(join11(cwd, "NOLE.md")),
       isCompletable: true,
       isEnabled: !empty
     }
@@ -19160,10 +19463,10 @@ function createNoleMd(cwd, projectName) {
   let techStack = "";
   let commands = "";
   let description = "Brief description of what this project does.";
-  const pkgPath = join10(cwd, "package.json");
-  if (existsSync9(pkgPath)) {
+  const pkgPath = join11(cwd, "package.json");
+  if (existsSync10(pkgPath)) {
     try {
-      const pkg = JSON.parse(readFileSync9(pkgPath, "utf-8"));
+      const pkg = JSON.parse(readFileSync10(pkgPath, "utf-8"));
       if (pkg.description)
         description = pkg.description;
       const deps = Object.keys(pkg.dependencies || {});
@@ -19204,18 +19507,18 @@ function createNoleMd(cwd, projectName) {
 `) || "npm run dev";
     } catch {}
   }
-  if (existsSync9(join10(cwd, "pyproject.toml")) || existsSync9(join10(cwd, "setup.py"))) {
+  if (existsSync10(join11(cwd, "pyproject.toml")) || existsSync10(join11(cwd, "setup.py"))) {
     techStack = techStack || "Python";
     commands = commands || `python -m pytest
 python main.py`;
   }
-  if (existsSync9(join10(cwd, "Cargo.toml"))) {
+  if (existsSync10(join11(cwd, "Cargo.toml"))) {
     techStack = techStack || "Rust";
     commands = commands || `cargo build
 cargo test
 cargo run`;
   }
-  if (existsSync9(join10(cwd, "go.mod"))) {
+  if (existsSync10(join11(cwd, "go.mod"))) {
     techStack = techStack || "Go";
     commands = commands || `go build
 go test ./...
@@ -19251,30 +19554,30 @@ ${structure || "# Project directory structure"}
 ## Notes
 - Important things to know when working in this project
 `;
-  const path = join10(cwd, "NOLE.md");
+  const path = join11(cwd, "NOLE.md");
   writeFileSync5(path, template, "utf-8");
   return path;
 }
 function loadProjectContext(cwd) {
   const paths = [
-    join10(cwd, "NOLE.md"),
-    join10(cwd, ".nole.md"),
-    join10(cwd, ".nolecode"),
-    join10(cwd, "CONTEXT.md")
+    join11(cwd, "NOLE.md"),
+    join11(cwd, ".nole.md"),
+    join11(cwd, ".nolecode"),
+    join11(cwd, "CONTEXT.md")
   ];
   for (const p of paths) {
-    if (existsSync9(p)) {
+    if (existsSync10(p)) {
       try {
-        return readFileSync9(p, "utf-8");
+        return readFileSync10(p, "utf-8");
       } catch {}
     }
   }
   return null;
 }
 function loadSettings() {
-  if (existsSync9(SETTINGS_FILE)) {
+  if (existsSync10(SETTINGS_FILE)) {
     try {
-      return JSON.parse(readFileSync9(SETTINGS_FILE, "utf-8"));
+      return JSON.parse(readFileSync10(SETTINGS_FILE, "utf-8"));
     } catch {}
   }
   return {
@@ -19296,9 +19599,9 @@ function saveSettings(settings) {
 }
 var CONFIG_DIR, PROJECT_CONFIG, SETTINGS_FILE;
 var init_onboarding = __esm(() => {
-  CONFIG_DIR = join10(homedir9(), ".nole-code");
-  PROJECT_CONFIG = join10(CONFIG_DIR, "projects.json");
-  SETTINGS_FILE = join10(CONFIG_DIR, "settings.json");
+  CONFIG_DIR = join11(homedir9(), ".nole-code");
+  PROJECT_CONFIG = join11(CONFIG_DIR, "projects.json");
+  SETTINGS_FILE = join11(CONFIG_DIR, "settings.json");
 });
 
 // src/plan/index.ts
@@ -19650,9 +19953,9 @@ __export(exports_cost, {
   box: () => box,
   applyStyle: () => applyStyle
 });
-import { existsSync as existsSync10, readFileSync as readFileSync10, mkdirSync as mkdirSync6, appendFileSync as appendFileSync2 } from "fs";
+import { existsSync as existsSync11, readFileSync as readFileSync11, mkdirSync as mkdirSync6, appendFileSync as appendFileSync2 } from "fs";
 import { homedir as homedir10 } from "node:os";
-import { join as join11, dirname as dirname4 } from "node:path";
+import { join as join12, dirname as dirname4 } from "node:path";
 
 class CostTracker {
   sessionCosts = new Map;
@@ -19703,9 +20006,9 @@ class CostTracker {
       totalOutputTokens: 0,
       byModel: {}
     };
-    if (!existsSync10(COST_FILE))
+    if (!existsSync11(COST_FILE))
       return summary;
-    const lines = readFileSync10(COST_FILE, "utf-8").trim().split(`
+    const lines = readFileSync11(COST_FILE, "utf-8").trim().split(`
 `);
     for (const line of lines) {
       try {
@@ -19745,7 +20048,7 @@ class CostTracker {
   clearHistory() {
     const { unlinkSync: unlinkSync2 } = __require("fs");
     try {
-      if (existsSync10(COST_FILE)) {
+      if (existsSync11(COST_FILE)) {
         unlinkSync2(COST_FILE);
       }
     } catch {}
@@ -19830,7 +20133,7 @@ var init_cost = __esm(() => {
     "MiniMax-M2.5": { input: 0.005, output: 0.005 },
     default: { input: 0.01, output: 0.01 }
   };
-  COST_FILE = join11(homedir10(), ".nole-code", "costs.jsonl");
+  COST_FILE = join12(homedir10(), ".nole-code", "costs.jsonl");
   costTracker = new CostTracker;
   STYLES = {
     user: { color: "#60A5FA" },
@@ -19892,15 +20195,15 @@ __export(exports_checkpoint, {
   abortCheckpoint: () => abortCheckpoint
 });
 import {
-  existsSync as existsSync11,
+  existsSync as existsSync12,
   mkdirSync as mkdirSync7,
-  readFileSync as readFileSync11,
+  readFileSync as readFileSync12,
   writeFileSync as writeFileSync7,
   readdirSync as readdirSync3,
   unlinkSync as unlinkSync2,
   renameSync as renameSync2
 } from "fs";
-import { join as join12 } from "path";
+import { join as join13 } from "path";
 import { homedir as homedir11 } from "os";
 function ensureCheckpointDir() {
   mkdirSync7(CHECKPOINT_DIR, { recursive: true });
@@ -19933,11 +20236,11 @@ function createCheckpoint(goal, cwd, settings) {
   return checkpoint;
 }
 function loadCheckpoint(id) {
-  const file = join12(CHECKPOINT_DIR, `${id}.json`);
-  if (!existsSync11(file))
+  const file = join13(CHECKPOINT_DIR, `${id}.json`);
+  if (!existsSync12(file))
     return null;
   try {
-    return JSON.parse(readFileSync11(file, "utf-8"));
+    return JSON.parse(readFileSync12(file, "utf-8"));
   } catch {
     return null;
   }
@@ -19953,14 +20256,14 @@ function loadLatestCheckpoint() {
 function saveCheckpoint(checkpoint) {
   ensureCheckpointDir();
   checkpoint.updatedAt = new Date().toISOString();
-  const file = join12(CHECKPOINT_DIR, `${checkpoint.id}.json`);
+  const file = join13(CHECKPOINT_DIR, `${checkpoint.id}.json`);
   const tmp = file + `.tmp.${Date.now()}`;
   writeFileSync7(tmp, JSON.stringify(checkpoint, null, 2), "utf-8");
   renameSync2(tmp, file);
 }
 function deleteCheckpoint(id) {
-  const file = join12(CHECKPOINT_DIR, `${id}.json`);
-  if (existsSync11(file)) {
+  const file = join13(CHECKPOINT_DIR, `${id}.json`);
+  if (existsSync12(file)) {
     unlinkSync2(file);
     return true;
   }
@@ -20163,7 +20466,7 @@ function inferErrorHint(error2) {
 }
 var CHECKPOINT_DIR;
 var init_checkpoint = __esm(() => {
-  CHECKPOINT_DIR = join12(homedir11(), ".nole-code", "checkpoints");
+  CHECKPOINT_DIR = join13(homedir11(), ".nole-code", "checkpoints");
 });
 
 // src/ui/output/styles.ts
@@ -20938,7 +21241,7 @@ var init_LocalShellTask = __esm(() => {
 
 // src/tasks/LocalAgentTask/index.ts
 import { spawn as spawn5 } from "child_process";
-import { join as join13 } from "path";
+import { join as join14 } from "path";
 import { EventEmitter as EventEmitter4 } from "events";
 function createAgentTask(options) {
   return new LocalAgentTask(options);
@@ -20976,7 +21279,7 @@ var init_LocalAgentTask = __esm(() => {
       this.task.status = "running";
       this.task.startedAt = Date.now();
       const execPath = process.execPath;
-      const scriptPath = join13(process.cwd(), "dist/index.js");
+      const scriptPath = join14(process.cwd(), "dist/index.js");
       const args = [scriptPath, "--loop"];
       if (this.task.sessionId) {
         args.push("--session", this.task.sessionId);
@@ -21129,23 +21432,23 @@ var init_DreamTask = __esm(() => {
 });
 
 // src/tasks/manager.ts
-import { existsSync as existsSync12, readFileSync as readFileSync12, writeFileSync as writeFileSync8, mkdirSync as mkdirSync8 } from "fs";
-import { dirname as dirname5, join as join14 } from "path";
+import { existsSync as existsSync13, readFileSync as readFileSync13, writeFileSync as writeFileSync8, mkdirSync as mkdirSync8 } from "fs";
+import { dirname as dirname5, join as join15 } from "path";
 import { homedir as homedir12 } from "os";
 import { EventEmitter as EventEmitter6 } from "events";
 function ensureTasksFile() {
   const dir = dirname5(TASKS_FILE2);
-  if (!existsSync12(dir)) {
+  if (!existsSync13(dir)) {
     mkdirSync8(dir, { recursive: true });
   }
-  if (!existsSync12(TASKS_FILE2)) {
+  if (!existsSync13(TASKS_FILE2)) {
     writeFileSync8(TASKS_FILE2, JSON.stringify({}, null, 2));
   }
 }
 function loadTasksFile() {
   try {
     ensureTasksFile();
-    const data = readFileSync12(TASKS_FILE2, "utf-8");
+    const data = readFileSync13(TASKS_FILE2, "utf-8");
     return JSON.parse(data);
   } catch {
     return {};
@@ -21160,7 +21463,7 @@ var init_manager2 = __esm(() => {
   init_LocalShellTask();
   init_LocalAgentTask();
   init_DreamTask();
-  TASKS_FILE2 = join14(homedir12(), ".nole-code", "tasks.json");
+  TASKS_FILE2 = join15(homedir12(), ".nole-code", "tasks.json");
   TaskManager = class TaskManager extends EventEmitter6 {
     tasks = new Map;
     runners = new Map;
@@ -21333,8 +21636,8 @@ __export(exports_commands, {
 });
 import { exec as exec2 } from "child_process";
 import { promisify as promisify2 } from "util";
-import { existsSync as existsSync13, readFileSync as readFileSync13 } from "fs";
-import { join as join15 } from "path";
+import { existsSync as existsSync14, readFileSync as readFileSync14 } from "fs";
+import { join as join16 } from "path";
 import { homedir as homedir13 } from "os";
 function getAge(dateStr) {
   const ms = Date.now() - new Date(dateStr).getTime();
@@ -21363,8 +21666,9 @@ function parseCommand(input) {
   return { cmd: parts[0], args: parts.slice(1) };
 }
 var execAsync2, commands;
-var init_commands = __esm(() => {
+var init_commands2 = __esm(() => {
   init_env();
+  init_commands();
   execAsync2 = promisify2(exec2);
   commands = new Map;
   registerCommand({
@@ -21548,11 +21852,11 @@ ${lines.join(`
     name: "cost",
     description: "Show estimated API usage for this session",
     execute: async (_args, ctx) => {
-      const sessionFile = join15(homedir13(), ".nole-code", "sessions", `${ctx.sessionId}.json`);
-      if (!existsSync13(sessionFile))
+      const sessionFile = join16(homedir13(), ".nole-code", "sessions", `${ctx.sessionId}.json`);
+      if (!existsSync14(sessionFile))
         return "Session not found";
       try {
-        const session = JSON.parse(readFileSync13(sessionFile, "utf-8"));
+        const session = JSON.parse(readFileSync14(sessionFile, "utf-8"));
         const msgs = session.messages?.length || 0;
         return `Session: ${ctx.sessionId}
 Messages: ${msgs}
@@ -21570,7 +21874,7 @@ Note: Actual token usage available in provider dashboard.`;
       const checks4 = [
         ["Node.js", process.version],
         ["API Key", MINIMAX_API_KEY ? "✅ set" : "❌ missing"],
-        ["Session Dir", existsSync13(join15(homedir13(), ".nole-code")) ? "✅ exists" : "❌ missing"]
+        ["Session Dir", existsSync14(join16(homedir13(), ".nole-code")) ? "✅ exists" : "❌ missing"]
       ];
       return `\uD83E\uDD9E NOLE CODE — Health Check:
 
@@ -21719,12 +22023,12 @@ Use /plan approve to proceed step by step.`;
     execute: async (_args, ctx) => {
       const { loadSession: load, exportSession: exportSession2 } = await Promise.resolve().then(() => (init_manager(), exports_manager));
       const { writeFileSync: writeFileSync9 } = __require("fs");
-      const { join: join16 } = __require("path");
+      const { join: join17 } = __require("path");
       const transcript = exportSession2(ctx.sessionId);
       if (!transcript)
         return "Session not found";
       const filename = `nole-session-${ctx.sessionId.slice(5, 15)}.md`;
-      const outPath = join16(ctx.cwd, filename);
+      const outPath = join17(ctx.cwd, filename);
       writeFileSync9(outPath, transcript, "utf-8");
       return `Exported to ${filename} (${transcript.split(`
 `).length} lines)`;
@@ -21963,11 +22267,11 @@ ${lines.join(`
     name: "plugins",
     description: "List installed plugins",
     execute: async () => {
-      const { existsSync: existsSync14, readdirSync: readdirSync4 } = __require("fs");
-      const { join: join16 } = __require("path");
+      const { existsSync: existsSync15, readdirSync: readdirSync4 } = __require("fs");
+      const { join: join17 } = __require("path");
       const { homedir: homedir14 } = __require("os");
-      const dir = join16(homedir14(), ".nole-code", "plugins");
-      if (!existsSync14(dir)) {
+      const dir = join17(homedir14(), ".nole-code", "plugins");
+      if (!existsSync15(dir)) {
         return `No plugins directory.
 Create ~/.nole-code/plugins/ and add .js files.
 
@@ -22222,6 +22526,7 @@ Start one with /loop <goal>`;
       return `Unknown action: ${action}. Use 'stop' or 'log'.`;
     }
   });
+  registerBuddyCommands(registerCommand);
 });
 
 // src/session-memory/index.ts
@@ -22237,16 +22542,16 @@ __export(exports_session_memory, {
   extractMemoryFromConversation: () => extractMemoryFromConversation,
   addToWorklog: () => addToWorklog
 });
-import { existsSync as existsSync14, readFileSync as readFileSync14, writeFileSync as writeFileSync9, mkdirSync as mkdirSync9 } from "fs";
-import { join as join16 } from "path";
+import { existsSync as existsSync15, readFileSync as readFileSync15, writeFileSync as writeFileSync9, mkdirSync as mkdirSync9 } from "fs";
+import { join as join17 } from "path";
 import { homedir as homedir14 } from "os";
 function getMemoryPath(sessionId) {
   mkdirSync9(MEMORY_DIR, { recursive: true });
-  return join16(MEMORY_DIR, `${sessionId}.md`);
+  return join17(MEMORY_DIR, `${sessionId}.md`);
 }
 function loadMemory(sessionId) {
   const path = getMemoryPath(sessionId);
-  if (!existsSync14(path)) {
+  if (!existsSync15(path)) {
     return {
       title: "",
       currentState: "",
@@ -22259,7 +22564,7 @@ function loadMemory(sessionId) {
       lastUpdated: new Date().toISOString()
     };
   }
-  const content = readFileSync14(path, "utf-8");
+  const content = readFileSync15(path, "utf-8");
   return parseMemoryContent(content);
 }
 function parseMemoryContent(content) {
@@ -22409,7 +22714,7 @@ function getMemorySummary(sessionId) {
 }
 var MEMORY_DIR;
 var init_session_memory = __esm(() => {
-  MEMORY_DIR = join16(homedir14(), ".nole-code", "memory");
+  MEMORY_DIR = join17(homedir14(), ".nole-code", "memory");
 });
 
 // src/services/compact/index.ts
@@ -22790,17 +23095,17 @@ var exports_loader = {};
 __export(exports_loader, {
   loadPlugins: () => loadPlugins
 });
-import { existsSync as existsSync15, readdirSync as readdirSync4 } from "fs";
-import { join as join17 } from "path";
+import { existsSync as existsSync16, readdirSync as readdirSync4 } from "fs";
+import { join as join18 } from "path";
 import { homedir as homedir15 } from "os";
 async function loadPlugins() {
-  if (!existsSync15(PLUGINS_DIR))
+  if (!existsSync16(PLUGINS_DIR))
     return [];
   const files = readdirSync4(PLUGINS_DIR).filter((f) => f.endsWith(".js"));
   const loaded = [];
   for (const file of files) {
     try {
-      const pluginPath = join17(PLUGINS_DIR, file);
+      const pluginPath = join18(PLUGINS_DIR, file);
       const plugin = __require(pluginPath);
       if (!plugin.name || !plugin.execute) {
         console.error(`Plugin ${file}: missing name or execute`);
@@ -22828,7 +23133,7 @@ async function loadPlugins() {
 var PLUGINS_DIR;
 var init_loader = __esm(() => {
   init_registry();
-  PLUGINS_DIR = join17(homedir15(), ".nole-code", "plugins");
+  PLUGINS_DIR = join18(homedir15(), ".nole-code", "plugins");
 });
 
 // src/services/indexer.ts
@@ -22837,8 +23142,8 @@ __export(exports_indexer, {
   indexProject: () => indexProject,
   formatIndexForPrompt: () => formatIndexForPrompt
 });
-import { readFileSync as readFileSync15, readdirSync as readdirSync5, statSync as statSync2 } from "fs";
-import { join as join18, relative as relative3, extname } from "path";
+import { readFileSync as readFileSync16, readdirSync as readdirSync5, statSync as statSync2 } from "fs";
+import { join as join19, relative as relative3, extname } from "path";
 function indexProject(root, maxFiles = 200) {
   const languages = {};
   const keyFiles = [];
@@ -22857,7 +23162,7 @@ function indexProject(root, maxFiles = 200) {
     for (const entry of entries) {
       if (entry.startsWith(".") || IGNORE_DIRS.has(entry))
         continue;
-      const fullPath = join18(dir, entry);
+      const fullPath = join19(dir, entry);
       try {
         const stat = statSync2(fullPath);
         const rel = relative3(root, fullPath);
@@ -22872,7 +23177,7 @@ function indexProject(root, maxFiles = 200) {
           const lang = LANG_MAP[ext] || ext;
           languages[lang] = (languages[lang] || 0) + 1;
           try {
-            const content = readFileSync15(fullPath, "utf-8");
+            const content = readFileSync16(fullPath, "utf-8");
             const lines = content.split(`
 `).length;
             totalLines += lines;
@@ -23030,15 +23335,15 @@ __export(exports_src, {
   getMiniMaxToken: () => getMiniMaxToken,
   activeClient: () => activeClient
 });
-import { existsSync as existsSync17, readFileSync as readFileSync16, mkdirSync as mkdirSync10 } from "fs";
+import { existsSync as existsSync18, readFileSync as readFileSync17, mkdirSync as mkdirSync10 } from "fs";
 import { homedir as homedir16 } from "node:os";
-import { join as join19 } from "node:path";
+import { join as join20 } from "node:path";
 import * as readline2 from "readline";
 function _loadEnv(path) {
-  if (!existsSync17(path))
+  if (!existsSync18(path))
     return;
   try {
-    const content = readFileSync16(path, "utf-8");
+    const content = readFileSync17(path, "utf-8");
     for (const line of content.split(`
 `)) {
       const t = line.trim();
@@ -23079,9 +23384,9 @@ async function streamOutput(lines, maxLines, delayMs = 10) {
 }
 function getMiniMaxToken() {
   try {
-    const authPath = join19(homedir16(), ".openclaw", "agents", "main", "agent", "auth-profiles.json");
-    if (existsSync17(authPath)) {
-      const auth2 = JSON.parse(readFileSync16(authPath, "utf-8"));
+    const authPath = join20(homedir16(), ".openclaw", "agents", "main", "agent", "auth-profiles.json");
+    if (existsSync18(authPath)) {
+      const auth2 = JSON.parse(readFileSync17(authPath, "utf-8"));
       return auth2.profiles?.["minimax-portal:default"]?.access || "";
     }
   } catch {}
@@ -23147,8 +23452,8 @@ ${dim("Or add keys to ~/.nole-code/.env:")}
 
 Then run ${bold("nole")} again.
 `);
-    const configDir = join19(homedir16(), ".nole-code");
-    if (!existsSync17(configDir)) {
+    const configDir = join20(homedir16(), ".nole-code");
+    if (!existsSync18(configDir)) {
       mkdirSync10(configDir, { recursive: true });
       console.log(dim(`  Created ${configDir}/`));
     }
@@ -23343,7 +23648,7 @@ ${memorySummary}` : ""}${resumeContext}`;
   }
   const completer = (line) => {
     if (line.startsWith("/")) {
-      const { getAllCommands: getAllCommands2 } = (init_commands(), __toCommonJS(exports_commands));
+      const { getAllCommands: getAllCommands2 } = (init_commands2(), __toCommonJS(exports_commands));
       const cmds = getAllCommands2().map((c3) => "/" + c3.name);
       const hits = cmds.filter((c3) => c3.startsWith(line));
       return [hits.length ? hits : cmds, line];
@@ -23513,9 +23818,9 @@ ${c2.yellow("❓ Unknown command:")} /${parsed.cmd}`);
       for (const ref of fileRefs) {
         const filePath = ref.slice(1);
         const fullPath = resolve(opts.cwd || process.cwd(), filePath);
-        if (existsSync17(fullPath)) {
+        if (existsSync18(fullPath)) {
           try {
-            const content = readFileSync16(fullPath, "utf-8");
+            const content = readFileSync17(fullPath, "utf-8");
             const truncated = content.length > 5000 ? content.slice(0, 5000) + `
 ... (truncated)` : content;
             expandedInput = expandedInput.replace(ref, `
@@ -23875,7 +24180,7 @@ var init_src = __esm(() => {
   init_llm();
   init_registry();
   init_client3();
-  init_commands();
+  init_commands2();
   init_spawner();
   init_manager();
   init_onboarding();
@@ -23886,9 +24191,9 @@ var init_src = __esm(() => {
   init_spinner();
   init_streaming();
   init_markdown();
-  _loadEnv(join19(homedir16(), "nole-code", ".env"));
-  _loadEnv(join19(homedir16(), ".nole-code", ".env"));
-  _loadEnv(join19(process.cwd(), ".env"));
+  _loadEnv(join20(homedir16(), "nole-code", ".env"));
+  _loadEnv(join20(homedir16(), ".nole-code", ".env"));
+  _loadEnv(join20(process.cwd(), ".env"));
   PLAN_INTENT_PATTERNS = [
     /^let['’]?s?\s+(make\s+a\s+plan|plan|break\s+this\s+down|walk\s+me\s+through)/i,
     /^plan\s+(this|it|that|out|for|our|the)/i,
