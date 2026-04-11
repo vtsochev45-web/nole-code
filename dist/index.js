@@ -30362,18 +30362,27 @@ ${divider()}
           "Pretending to work",
           "Bribing the AI gods"
         ];
+        const pink = "\x1B[38;5;205m";
+        const resetAnsi = "\x1B[0m";
         let spinFrame = 0;
+        let currentVerbIdx = Math.floor(Math.random() * VERBS.length);
+        const spinnerStartTime = Date.now();
+        let lastVerbChange = Date.now();
         spinnerInterval = setInterval(() => {
           if (!hasOutput && process.stdout.writable) {
             const frame = SPINNER_CHARS[spinFrame % SPINNER_CHARS.length];
-            const verb = VERBS[Math.floor(spinFrame / 5) % VERBS.length];
-            const elapsed2 = ((Date.now() - sessionStartTime) / 1000).toFixed(0);
+            if (Date.now() - lastVerbChange > 5000 + Math.random() * 3000) {
+              currentVerbIdx = (currentVerbIdx + 1) % VERBS.length;
+              lastVerbChange = Date.now();
+            }
+            const verb = VERBS[currentVerbIdx];
+            const elapsed2 = ((Date.now() - spinnerStartTime) / 1000).toFixed(0);
             try {
-              process.stdout.write(`\r${c2.cyan(frame)} ${dim(verb + "...")} ${dim(`(${elapsed2}s)`)}  `);
+              process.stdout.write(`\r${pink}${frame}${resetAnsi} ${pink}${verb}...${resetAnsi} ${dim(`(${elapsed2}s)`)}  `);
             } catch {}
             spinFrame++;
           }
-        }, 150);
+        }, 120);
         const mdStream = createStreamingMarkdown();
         let xmlBuffer = "";
         let xmlBufferTimer = null;

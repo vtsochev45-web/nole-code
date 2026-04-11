@@ -807,18 +807,28 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
           'Definitely not guessing', 'Almost there probably', 'Winging it professionally',
           'Faking confidence', 'Pretending to work', 'Bribing the AI gods',
         ]
+        const pink = '\x1b[38;5;205m'  // Hot pink
+        const resetAnsi = '\x1b[0m'
         let spinFrame = 0
+        let currentVerbIdx = Math.floor(Math.random() * VERBS.length)
+        const spinnerStartTime = Date.now()
+        let lastVerbChange = Date.now()
         spinnerInterval = setInterval(() => {
           if (!hasOutput && process.stdout.writable) {
             const frame = SPINNER_CHARS[spinFrame % SPINNER_CHARS.length]
-            const verb = VERBS[Math.floor(spinFrame / 5) % VERBS.length]
-            const elapsed = ((Date.now() - sessionStartTime) / 1000).toFixed(0)
+            // Change verb every 5-8 seconds (like Claude Code), not every 750ms
+            if (Date.now() - lastVerbChange > 5000 + Math.random() * 3000) {
+              currentVerbIdx = (currentVerbIdx + 1) % VERBS.length
+              lastVerbChange = Date.now()
+            }
+            const verb = VERBS[currentVerbIdx]
+            const elapsed = ((Date.now() - spinnerStartTime) / 1000).toFixed(0)
             try {
-              process.stdout.write(`\r${c.cyan(frame)} ${dim(verb + '...')} ${dim(`(${elapsed}s)`)}  `)
+              process.stdout.write(`\r${pink}${frame}${resetAnsi} ${pink}${verb}...${resetAnsi} ${dim(`(${elapsed}s)`)}  `)
             } catch {}
             spinFrame++
           }
-        }, 150)
+        }, 120)
 
         const mdStream = createStreamingMarkdown()
 
