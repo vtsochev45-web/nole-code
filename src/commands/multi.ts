@@ -1,10 +1,12 @@
 // Nole Code - /multi command: Best-of-N LLM calls
 
 import { LLMClient, Message } from '../api/llm.js'
+import { getMiniMaxToken } from '../index.js'
 
-// Create a fresh client for multi
+// Create a fresh client using the same token resolution as main REPL
 function createClient(): LLMClient {
-  return new LLMClient()
+  const token = getMiniMaxToken()
+  return new LLMClient(token || undefined)
 }
 
 interface MultiResult {

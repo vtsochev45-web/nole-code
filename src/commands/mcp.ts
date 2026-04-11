@@ -271,7 +271,7 @@ async function handleRequest(request: JSONRPCRequest): Promise<JSONRPCResponse> 
     } else if (method === 'tools/call') {
       const { name, arguments: args } = (params as { name: string; arguments?: Record<string, unknown> }) || {}
       if (!name) {
-        return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Missing tool name' }, id }
+        return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Missing tool name' } }
       }
       result = await callTool(name, args || {})
     } else {

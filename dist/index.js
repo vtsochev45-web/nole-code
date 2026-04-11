@@ -26143,7 +26143,8 @@ __export(exports_multi, {
   registerMultiCommand: () => registerMultiCommand
 });
 function createClient() {
-  return new LLMClient;
+  const token = getMiniMaxToken();
+  return new LLMClient(token || undefined);
 }
 async function makeCall(client, prompt) {
   const messages = [
@@ -26222,6 +26223,7 @@ Examples:
 }
 var init_multi = __esm(() => {
   init_llm();
+  init_src();
 });
 
 // src/commands/mcp.ts
@@ -26341,7 +26343,7 @@ async function handleRequest(request) {
     } else if (method === "tools/call") {
       const { name, arguments: args } = params || {};
       if (!name) {
-        return { jsonrpc: "2.0", id, error: { code: -32602, message: "Missing tool name" }, id };
+        return { jsonrpc: "2.0", id, error: { code: -32602, message: "Missing tool name" } };
       }
       result = await callTool(name, args || {});
     } else {
@@ -28351,7 +28353,7 @@ function detectPlanIntent(input) {
 function getBanner(cwd, verbose = false) {
   const v2 = verbose ? `${dim("· ")}verbose` : "";
   return `
-${bold(c2.cyan("▐▛███▜▌"))} ${bold("Nole Code v1.17")} ${dim("· MiniMax")}
+${bold(c2.cyan("▐▛███▜▌"))} ${bold("Nole Code v1.18")} ${dim("· MiniMax")}
 ${dim("▝▜█████▛▘")} ${dim(cwd)} ${v2}
 
 ${divider()}

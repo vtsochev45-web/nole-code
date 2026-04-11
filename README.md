@@ -78,6 +78,12 @@ export OPENAI_API_KEY=sk-          # Fallback (optional)
 | `/diff` | Git diff |
 | `/status` | Git status |
 | `/log` | Recent commits |
+| `/read <file>` | Read file with syntax highlighting and line numbers |
+| `/grep <pattern>` | Search files with regex and colored matches |
+| `/test` | Run tests (auto-detects jest/vitest/mocha/pytest) |
+| `/debug <pid>` | Attach to Node.js/Python process for debugging |
+| `/multi <prompt>` | Best-of-3: run prompt 3x concurrently, pick best |
+| `/mcp` | MCP server mode (JSON-RPC 2.0 over stdin/stdout) |
 | `/doctor` | Health check |
 | `/help` | All commands |
 | `! <cmd>` | Run shell command inline |
@@ -86,13 +92,25 @@ export OPENAI_API_KEY=sk-          # Fallback (optional)
 
 **Auto-resume** — Reopens your last session for the same directory.
 
+**NOLE.md project context** — Create a `NOLE.md` in your project root. It's loaded into every conversation, like Claude Code's `CLAUDE.md`.
+
+**Auto-compact** — When context hits 70%, automatically compresses older messages to save tokens.
+
+**Background loops** — `/loop` spawns a detached agent process with checkpoint recovery. IPC via JSON lines.
+
 **Ctrl+C** — Cancels the current LLM call, not the whole process. Double-press to exit.
 
 **Multi-provider fallback** — If MiniMax is overloaded (529), automatically retries then falls back to OpenRouter (Gemini Flash) or OpenAI.
 
-**Colored diffs** — Edit tool shows red/green diff of what changed.
+**Best-of-3** — `/multi` runs the same prompt through the LLM 3 times concurrently and shows differences.
 
-**Line numbers** — Read tool shows `cat -n` style line numbers.
+**MCP server mode** — Run as an MCP server with `--mcp` flag. Exposes bash, read, write, edit, glob, grep, web_search, web_fetch tools via JSON-RPC 2.0.
+
+**Process debugging** — `/debug <pid>` attaches to Node.js (inspector) or Python (py-spy) processes.
+
+**Test runner** — `/test` auto-detects your test framework (jest, vitest, mocha, pytest) and runs tests with formatted output.
+
+**Colored diffs** — Edit tool shows red/green diff of what changed.
 
 **Markdown rendering** — Bold, code blocks, headers rendered in terminal.
 
@@ -100,13 +118,11 @@ export OPENAI_API_KEY=sk-          # Fallback (optional)
 
 **Animated spinner** — Shows thinking progress with elapsed time.
 
-**MCP support** — Connect Model Context Protocol servers (stdio, SSE, HTTP).
+**MCP client** — Connect to Model Context Protocol servers (stdio, SSE, HTTP).
 
 **Security** — Bash command filtering, path validation (blocks /etc/shadow, .ssh/), interactive permission prompts.
 
 **Session memory** — Extracts key facts from conversations, loads context on resume.
-
-**61 tests** — Tools, sessions, commands, security, MCP parsing.
 
 ## Configuration
 
@@ -154,12 +170,12 @@ src/
   agents/spawner.ts  — Sub-agent process spawning
   agents/team.ts     — Multi-agent coordination
   session/manager.ts — Session persistence/fork/compact
-  commands/          — Slash commands
+  commands/          — Slash commands (/read, /grep, /test, /debug, /multi, /mcp, etc.)
+  loop/              — Background execution with checkpoints and IPC
   permissions/       — Security rules engine
   mcp/client.ts      — MCP protocol client (stdio/SSE/HTTP)
   ui/markdown.ts     — Terminal markdown renderer
   ui/output/         — Spinner, streaming, styles
-tests/               — 61 tests (bun test)
 ```
 
 ## License
