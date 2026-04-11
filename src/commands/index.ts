@@ -715,3 +715,108 @@ registerCommand({
       (session.parentId ? `  Forked:    ${session.parentId}\n` : '')
   },
 })
+
+// ============ Loop Commands ============
+
+registerCommand({
+  name: 'loop',
+  description: 'Start autonomous loop: /loop <goal> or /loop --resume <id>',
+  aliases: ['autonomous', 'run'],
+  execute: async (args, ctx) => {
+    if (args[0] === '--resume' || args[0] === '-r') {
+      const id = args[1]
+      if (!id) {
+        // List checkpoints
+        const { listCheckpoints } = await import('../loop/checkpoint.js')
+        const checkpoints = listCheckpoints(10)
+        if (checkpoints.length === 0) return 'No checkpoints found.'
+        const lines = ['Available checkpoints:\n']
+        for (const cp of checkpoints) {
+          const progress = `${cp.currentStep}/${cp.steps.length}`
+          const state = cp.state
+          lines.push(`  ${cp.id} — ${cp.goal.slice(0, 50)} [${state}] ${progress}`)
+        }
+        return lines.join('\n') + '\n\nUse /loop --resume <id> to continue'
+      }
+      
+      const { resumeLoop } = await import('../loop/executor.js')
+      const result = await resumeLoop(id)
+      return result.message
+    }
+    
+    const goal = args.join(' ')
+    if (!goal) return 'Usage: /loop <goal>\nExample: /loop build a REST API with authentication\n\nResume: /loop --resume <checkpoint-id>'
+    
+    const { runLoop } = await import('../loop/executor.js')
+    const result = await runLoop({ goal, cwd: ctx.cwd })
+    return result.message
+  },
+})
+
+registerCommand({
+  name: 'checkpoints',
+  description: 'List saved loop checkpoints',
+  aliases: ['cp', 'checkpoint'],
+  execute: async (args, ctx) => {
+    const { listCheckpoints, loadCheckpoint } = await import('../loop/checkpoint.js')
+    const checkpoints = listCheckpoints(parseInt(args[0]) || 10)
+    
+    if (checkpoints.length === 0) return 'No checkpoints found.\nStart a loop with /loop <goal>'
+    
+    const lines = ['Loop Checkpoints:\n']
+    
+    for (const cp of checkpoints) {
+      const progress = `${cp.currentStep}/${cp.steps.length}`
+      const errors = cp.context.errorsEncountered.length
+      const files = cp.context.filesCreated.length
+      const age = getAge(cp.updatedAt)
+      
+      lines.push(`${cp.id}`)
+      lines.push(`  Goal: ${cp.goal.slice(0, 60)}`)
+      lines.push(`  State: ${cp.state} | Progress: ${progress} | Age: ${age}`)
+      if (files > 0) lines.push(`  Files: ${files} created`)
+      if (errors > 0) lines.push(`  Errors: ${errors}`)
+      lines.push('')
+    }
+    
+    lines.push('Resume with: /loop --resume <id>')
+    return lines.join('\n')
+  },
+})
+
+registerCommand({
+  name: 'progress',
+  description: 'Show current loop progress',
+  aliases: ['status'],
+  execute: async (args, ctx) => {
+    const { loadLatestCheckpoint, getProgress } = await import('../loop/index.js')
+    const cp = loadLatestCheckpoint()
+    
+    if (!cp) return 'No active loop.\nStart one with /loop <goal>'
+    
+    const progress = getProgress(cp)
+    const lines = [
+      `${cp.state === 'running' ? '🔄' : cp.state === 'complete' ? '✅' : '⏸'} Loop Progress`,
+      '',
+      `Goal: ${cp.goal}`,
+      `State: ${cp.state}`,
+      `Progress: ${progress.current}/${progress.total} (${progress.percent}%)`,
+      '',
+    ]
+    
+    for (let i = 0; i < cp.steps.length; i++) {
+      const step = cp.steps[i]
+      const prefix = i < progress.current ? '✓' : i === progress.current ? '▶' : '○'
+      const color = step.status === 'failed' ? '\x1b[31m' : step.status === 'complete' ? '\x1b[32m' : '\x1b[90m'
+      const status = step.status === 'failed' ? ' (FAILED)' : ''
+      lines.push(`  ${color}${prefix}\x1b[0m Step ${i + 1}: ${step.description.slice(0, 60)}${status}`)
+    }
+    
+    if (cp.context.errorsEncountered.length > 0) {
+      lines.push('')
+      lines.push(`\x1b[31m${cp.context.errorsEncountered.length} error(s)\x1b[0m`)
+    }
+    
+    return lines.join('\n')
+  },
+})
