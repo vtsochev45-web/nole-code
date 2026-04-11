@@ -186,6 +186,9 @@ export function compactSession(
     return msg
   })
 
+  // Sanitize recent messages — remove orphaned tool results at the boundary
+  sanitizeToolPairs(compressedRecent)
+
   // Build new message list
   const compactedMessages = [
     ...systemMessages,
@@ -219,6 +222,10 @@ export function compactSession(
     } else break
   }
 
+  // CRITICAL: Sanitize message pairs — remove orphaned tool results and tool_use
+  // MiniMax requires: assistant with tool_calls → tool results with matching IDs
+  sanitizeToolPairs(compactedMessages)
+
   const messagesPruned = messages.length - compactedMessages.length
 
   // Track compaction for cooldown
@@ -242,6 +249,54 @@ export function compactSession(
     compactedTokens,
     messagesPruned,
     summary,
+  }
+}
+
+/**
+ * Sanitize tool pairs — remove orphaned tool results and tool_use blocks.
+ * MiniMax/Anthropic API requires: assistant with tool_calls → matching tool results.
+ * After compaction, some tool_use blocks may have lost their tool_result, or vice versa.
+ * Mutates the array in place.
+ */
+function sanitizeToolPairs(messages: Array<{ role: string; tool_call_id?: string; [key: string]: unknown }>): void {
+  // Collect all tool_use IDs from assistant messages
+  const toolUseIds = new Set<string>()
+  for (const msg of messages) {
+    const tc = (msg as any).tool_calls as Array<{ id?: string }> | undefined
+    if (msg.role === 'assistant' && tc) {
+      for (const call of tc) {
+        if (call.id) toolUseIds.add(call.id)
+      }
+    }
+  }
+
+  // Collect all tool_result IDs
+  const toolResultIds = new Set<string>()
+  for (const msg of messages) {
+    if (msg.role === 'tool' && msg.tool_call_id) {
+      toolResultIds.add(msg.tool_call_id)
+    }
+  }
+
+  // Remove tool results that have no matching tool_use
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg.role === 'tool' && msg.tool_call_id && !toolUseIds.has(msg.tool_call_id)) {
+      messages.splice(i, 1)
+    }
+  }
+
+  // Remove tool_calls from assistant messages that have no matching tool_result
+  for (const msg of messages) {
+    const tc = (msg as any).tool_calls as Array<{ id?: string }> | undefined
+    if (msg.role === 'assistant' && tc && tc.length > 0) {
+      const validCalls = tc.filter(call => call.id && toolResultIds.has(call.id))
+      if (validCalls.length === 0) {
+        delete (msg as any).tool_calls
+      } else if (validCalls.length < tc.length) {
+        (msg as any).tool_calls = validCalls
+      }
+    }
   }
 }
 
