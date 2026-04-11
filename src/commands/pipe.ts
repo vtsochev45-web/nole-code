@@ -2,7 +2,7 @@
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import { Command, CommandContext, registerCommand } from './index.js'
-import { lastOutput } from '../index.js'
+import * as indexModule from '../index.js'
 
 const execAsync = promisify(exec)
 
@@ -11,6 +11,8 @@ export function registerPipeCommand(register: typeof registerCommand) {
     name: 'pipe',
     description: 'Pipe last output through shell command',
     execute: async (args: string[], _ctx: CommandContext): Promise<string> => {
+      const lastOutput = indexModule.lastOutput
+      
       if (!lastOutput) {
         return 'No previous output to pipe. Send a message first.'
       }
@@ -37,9 +39,4 @@ export function registerPipeCommand(register: typeof registerCommand) {
       }
     },
   })
-}
-
-// Sync lastOutput from index.ts
-export function setLastOutput(output: string) {
-  lastOutput = output
 }

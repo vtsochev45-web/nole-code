@@ -2,8 +2,6 @@
 import { promisify } from 'util'
 import { Command, CommandContext, registerCommand } from './index.js'
 
-const execAsync = promisify(exec)
-
 // Ring buffer for last 5 failed commands
 const MAX_FAILURES = 5
 let failures: string[] = []
@@ -56,8 +54,6 @@ export function registerRetryCommand(register: typeof registerCommand) {
       }
 
       // Re-run the failed command through the LLM
-      // We need to re-process it through the REPL's logic
-      // Since we don't have direct access to the LLM client, we use the session API
       try {
         const { loadSession: load, saveSession: save } = await import('../session/manager.js')
         const { LLMClient } = await import('../api/llm.js')
@@ -90,7 +86,7 @@ export function registerRetryCommand(register: typeof registerCommand) {
         // Stream response (single turn only)
         const mdStream = (await import('../ui/markdown.js')).createStreamingMarkdown()
         
-        const usage = await client.chatStream(
+        await client.chatStream(
           session.messages.map(m => {
             const msg: any = { role: m.role, content: m.content }
             if (m.tool_call_id) msg.tool_call_id = m.tool_call_id
@@ -141,14 +137,11 @@ export function registerRetryCommand(register: typeof registerCommand) {
 
         save(session)
 
-        // Update lastOutput for /pipe
-        const { lastOutput: setLastOutput } = await import('./pipe.js')
-        setLastOutput(responseText)
-
         // Clear failure after successful retry
+        const retryOf = lastFailedCommand
         lastFailedCommand = ''
 
-        return `Retried: "${lastFailedCommand.slice(0, 50)}..."\n\nResponse:\n${responseText.slice(0, 500)}${responseText.length > 500 ? '...' : ''}`
+        return `Retried: "${retryOf.slice(0, 50)}..."\n\nResponse:\n${responseText.slice(0, 500)}${responseText.length > 500 ? '...' : ''}`
       } catch (err: unknown) {
         const error = err as { message?: string }
         return `Retry failed: ${error.message || String(err)}`

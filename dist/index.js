@@ -17393,6 +17393,13 @@ var init_rules_engine = __esm(() => {
 });
 
 // src/tools/registry.ts
+var exports_registry = {};
+__export(exports_registry, {
+  tools: () => tools,
+  registerTool: () => registerTool,
+  getToolDefinitions: () => getToolDefinitions,
+  executeTool: () => executeTool
+});
 import { exec } from "child_process";
 import { promisify } from "util";
 import { readFileSync as readFileSync7, writeFileSync as writeFileSync3, existsSync as existsSync7, mkdirSync as mkdirSync3, readdirSync, statSync } from "fs";
@@ -27224,6 +27231,430 @@ function registerPortCommand(registerCommand2) {
 }
 var init_port = () => {};
 
+// src/commands/pipe.ts
+var exports_pipe = {};
+__export(exports_pipe, {
+  registerPipeCommand: () => registerPipeCommand
+});
+import { exec as exec9 } from "child_process";
+import { promisify as promisify9 } from "util";
+function registerPipeCommand(register) {
+  register({
+    name: "pipe",
+    description: "Pipe last output through shell command",
+    execute: async (args2, _ctx) => {
+      const lastOutput2 = lastOutput;
+      if (!lastOutput2) {
+        return "No previous output to pipe. Send a message first.";
+      }
+      if (args2.length === 0) {
+        return `Usage: /pipe <shell_command>
+Example: /pipe grep ERROR
+Example: /pipe wc -l
+Example: /pipe head -5`;
+      }
+      const shellCmd = args2.join(" ");
+      try {
+        const { stdout, stderr } = await execAsync9(shellCmd, {
+          input: lastOutput2,
+          encoding: "utf-8",
+          timeout: 1e4
+        });
+        if (stdout)
+          return stdout;
+        if (stderr)
+          return stderr;
+        return "(no output)";
+      } catch (err) {
+        const error2 = err;
+        return error2.stdout || error2.stderr || `Error: ${error2.message || String(err)}`;
+      }
+    }
+  });
+}
+var execAsync9;
+var init_pipe = __esm(() => {
+  init_src();
+  execAsync9 = promisify9(exec9);
+});
+
+// src/ui/markdown.ts
+var exports_markdown = {};
+__export(exports_markdown, {
+  renderMarkdown: () => renderMarkdown,
+  createStreamingMarkdown: () => createStreamingMarkdown
+});
+function renderMarkdown(text) {
+  const lines = text.split(`
+`);
+  const output = [];
+  let inCodeBlock = false;
+  let codeBlockLang = "";
+  for (let i = 0;i < lines.length; i++) {
+    let line = lines[i];
+    if (line.trimStart().startsWith("```")) {
+      if (!inCodeBlock) {
+        inCodeBlock = true;
+        codeBlockLang = line.trim().slice(3).trim();
+        output.push(`${DIM}┌─${codeBlockLang ? ` ${codeBlockLang} ` : ""}${"─".repeat(Math.max(0, 60 - codeBlockLang.length))}${RESET}`);
+      } else {
+        inCodeBlock = false;
+        codeBlockLang = "";
+        output.push(`${DIM}└${"─".repeat(62)}${RESET}`);
+      }
+      continue;
+    }
+    if (inCodeBlock) {
+      output.push(`${DIM}│${RESET} ${GREEN}${line}${RESET}`);
+      continue;
+    }
+    if (line.startsWith("### ")) {
+      output.push(`${BOLD}${CYAN}   ${line.slice(4)}${RESET}`);
+      continue;
+    }
+    if (line.startsWith("## ")) {
+      output.push(`${BOLD}${CYAN}  ${line.slice(3)}${RESET}`);
+      continue;
+    }
+    if (line.startsWith("# ")) {
+      output.push(`${BOLD}${CYAN}${line.slice(2)}${RESET}`);
+      continue;
+    }
+    if (/^[-*_]{3,}\s*$/.test(line)) {
+      output.push(`${DIM}${"─".repeat(60)}${RESET}`);
+      continue;
+    }
+    line = renderInline(line);
+    output.push(line);
+  }
+  if (inCodeBlock) {
+    output.push(`${DIM}└${"─".repeat(62)}${RESET}`);
+  }
+  return output.join(`
+`);
+}
+function renderInline(text) {
+  text = text.replace(/\*\*\*(.+?)\*\*\*/g, `${BOLD}${ITALIC}$1${RESET}`);
+  text = text.replace(/\*\*(.+?)\*\*/g, `${BOLD}$1${RESET}`);
+  text = text.replace(/(?<![/\w])\*([^*\n]+?)\*(?![/\w])/g, `${ITALIC}$1${RESET}`);
+  text = text.replace(/`([^`\n]+?)`/g, `${GREEN}$1${RESET}`);
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, `${UNDERLINE}$1${RESET} ${DIM}($2)${RESET}`);
+  text = text.replace(/~~(.+?)~~/g, `${DIM}$1${RESET}`);
+  return text;
+}
+function createStreamingMarkdown() {
+  let buffer = "";
+  let inCodeBlock = false;
+  return {
+    write(chunk) {
+      buffer += chunk;
+      while (buffer.includes(`
+`)) {
+        const idx = buffer.indexOf(`
+`);
+        const line = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 1);
+        if (line.trimStart().startsWith("```")) {
+          if (!inCodeBlock) {
+            inCodeBlock = true;
+            const lang = line.trim().slice(3).trim();
+            process.stdout.write(`${DIM}┌─${lang ? ` ${lang} ` : ""}${"─".repeat(Math.max(0, 60 - (lang?.length || 0)))}${RESET}
+`);
+          } else {
+            inCodeBlock = false;
+            process.stdout.write(`${DIM}└${"─".repeat(62)}${RESET}
+`);
+          }
+          continue;
+        }
+        if (inCodeBlock) {
+          process.stdout.write(`${DIM}│${RESET} ${GREEN}${line}${RESET}
+`);
+          continue;
+        }
+        if (line.startsWith("### ")) {
+          process.stdout.write(`${BOLD}${CYAN}   ${line.slice(4)}${RESET}
+`);
+          continue;
+        }
+        if (line.startsWith("## ")) {
+          process.stdout.write(`${BOLD}${CYAN}  ${line.slice(3)}${RESET}
+`);
+          continue;
+        }
+        if (line.startsWith("# ")) {
+          process.stdout.write(`${BOLD}${CYAN}${line.slice(2)}${RESET}
+`);
+          continue;
+        }
+        if (/^[-*_]{3,}\s*$/.test(line)) {
+          process.stdout.write(`${DIM}${"─".repeat(60)}${RESET}
+`);
+          continue;
+        }
+        process.stdout.write(renderInline(line) + `
+`);
+      }
+    },
+    flush() {
+      if (buffer) {
+        if (inCodeBlock) {
+          process.stdout.write(`${DIM}│${RESET} ${GREEN}${buffer}${RESET}`);
+        } else {
+          process.stdout.write(renderInline(buffer));
+        }
+        buffer = "";
+      }
+      if (inCodeBlock) {
+        process.stdout.write(`
+${DIM}└${"─".repeat(62)}${RESET}
+`);
+      }
+    }
+  };
+}
+var ESC2 = "\x1B[", RESET, BOLD, DIM, ITALIC, UNDERLINE, CYAN, GREEN, YELLOW, GRAY, BLUE, MAGENTA;
+var init_markdown = __esm(() => {
+  RESET = `${ESC2}0m`;
+  BOLD = `${ESC2}1m`;
+  DIM = `${ESC2}2m`;
+  ITALIC = `${ESC2}3m`;
+  UNDERLINE = `${ESC2}4m`;
+  CYAN = `${ESC2}36m`;
+  GREEN = `${ESC2}32m`;
+  YELLOW = `${ESC2}33m`;
+  GRAY = `${ESC2}90m`;
+  BLUE = `${ESC2}34m`;
+  MAGENTA = `${ESC2}35m`;
+});
+
+// src/commands/retry.ts
+var exports_retry = {};
+__export(exports_retry, {
+  registerRetryCommand: () => registerRetryCommand,
+  recordFailure: () => recordFailure,
+  getLastFailedCommand: () => getLastFailedCommand,
+  getFailures: () => getFailures
+});
+function recordFailure(command) {
+  lastFailedCommand = command;
+  failures.push(command);
+  if (failures.length > MAX_FAILURES) {
+    failures.shift();
+  }
+}
+function getLastFailedCommand() {
+  return lastFailedCommand;
+}
+function getFailures() {
+  return [...failures].reverse();
+}
+function registerRetryCommand(register) {
+  register({
+    name: "retry",
+    description: "Retry the last failed command",
+    execute: async (args2, ctx) => {
+      const showOnly = args2[0] === "--show";
+      if (!lastFailedCommand) {
+        return `No failed command to retry.
+Use recordFailure() from other code to mark commands as failed.`;
+      }
+      if (showOnly) {
+        return `Last failed command:
+
+${lastFailedCommand}
+
+Recent failures (${failures.length}):
+` + failures.map((f, i) => `  ${i + 1}. ${f.slice(0, 60)}${f.length > 60 ? "..." : ""}`).join(`
+`);
+      }
+      try {
+        const { loadSession: load, saveSession: save } = await Promise.resolve().then(() => (init_manager(), exports_manager));
+        const { LLMClient: LLMClient2 } = await Promise.resolve().then(() => (init_llm(), exports_llm));
+        const { getMiniMaxToken: getMiniMaxToken2 } = await Promise.resolve().then(() => (init_src(), exports_src));
+        const { getToolDefinitions: getToolDefinitions2, executeTool: executeTool2 } = await Promise.resolve().then(() => (init_registry(), exports_registry));
+        const { loadSettings: loadSettings2 } = await Promise.resolve().then(() => (init_onboarding(), exports_onboarding));
+        const session = load(ctx.sessionId);
+        if (!session)
+          return "Session not found";
+        const settings = loadSettings2();
+        const token = getMiniMaxToken2();
+        if (!token)
+          return "No API key configured";
+        const client = new LLMClient2(token, settings.model || "MiniMax-M2.7");
+        client.setModel(settings.model || "MiniMax-M2.7");
+        session.messages.push({
+          role: "user",
+          content: lastFailedCommand,
+          timestamp: new Date().toISOString()
+        });
+        const toolDefs = getToolDefinitions2(lastFailedCommand);
+        let responseText = "";
+        let toolCalls = [];
+        const mdStream = (await Promise.resolve().then(() => (init_markdown(), exports_markdown))).createStreamingMarkdown();
+        await client.chatStream(session.messages.map((m) => {
+          const msg = { role: m.role, content: m.content };
+          if (m.tool_call_id)
+            msg.tool_call_id = m.tool_call_id;
+          if (m.name)
+            msg.name = m.name;
+          if (m.tool_calls)
+            msg.tool_calls = m.tool_calls;
+          return msg;
+        }), { tools: toolDefs, max_tokens: settings.maxTokens || 4096 }, (chunk) => {
+          responseText += chunk;
+          mdStream.write(chunk);
+        }, (tc) => {
+          toolCalls.push({ id: tc.id || `tool_${Date.now()}`, name: tc.name, input: tc.input });
+        });
+        mdStream.flush();
+        const assistantMsg = {
+          role: "assistant",
+          content: responseText,
+          timestamp: new Date().toISOString()
+        };
+        if (toolCalls.length > 0) {
+          assistantMsg.tool_calls = toolCalls.map((tc) => ({
+            id: tc.id,
+            name: tc.name,
+            input: tc.input
+          }));
+        }
+        session.messages.push(assistantMsg);
+        if (toolCalls.length > 0 && toolCalls[0]) {
+          const tc = toolCalls[0];
+          const result2 = await executeTool2(tc.name, tc.input, { cwd: ctx.cwd, sessionId: ctx.sessionId });
+          session.messages.push({
+            role: "tool",
+            content: result2.content,
+            tool_call_id: tc.id,
+            name: tc.name,
+            timestamp: new Date().toISOString()
+          });
+        }
+        save(session);
+        const retryOf = lastFailedCommand;
+        lastFailedCommand = "";
+        return `Retried: "${retryOf.slice(0, 50)}..."
+
+Response:
+${responseText.slice(0, 500)}${responseText.length > 500 ? "..." : ""}`;
+      } catch (err) {
+        const error2 = err;
+        return `Retry failed: ${error2.message || String(err)}`;
+      }
+    }
+  });
+}
+var MAX_FAILURES = 5, failures, lastFailedCommand = "";
+var init_retry = __esm(() => {
+  failures = [];
+});
+
+// src/commands/recent.ts
+var exports_recent = {};
+__export(exports_recent, {
+  registerRecentCommand: () => registerRecentCommand
+});
+import { exec as exec10 } from "child_process";
+import { promisify as promisify10 } from "util";
+function registerRecentCommand(register) {
+  register({
+    name: "recent",
+    description: "Show recently modified files (default: last 10, last 7 days)",
+    execute: async (args2, ctx) => {
+      const count = parseInt(args2[0]) || 10;
+      if (count < 1 || count > 100) {
+        return "Usage: /recent [n] — n between 1 and 100 (default: 10)";
+      }
+      try {
+        const findCmd = `find . -type f \\( -path '*/.git/*' -o -path '*/node_modules/*' -o -path '*/.nole-code/*' -o -path '*/dist/*' -o -path '*/build/*' \\) -prune -o -type f -mtime -7 -print`;
+        const { stdout: findOutput } = await execAsync10(findCmd, {
+          encoding: "utf-8",
+          cwd: ctx.cwd,
+          timeout: 1e4
+        });
+        if (!findOutput.trim()) {
+          return "No files modified in the last 7 days.";
+        }
+        const files = findOutput.trim().split(`
+`).filter(Boolean);
+        const sortedFiles = files.map((f) => {
+          try {
+            const stat = __require("fs").statSync(__require("path").resolve(ctx.cwd, f));
+            return {
+              path: f,
+              mtime: stat.mtime,
+              size: stat.size
+            };
+          } catch {
+            return null;
+          }
+        }).filter(Boolean).sort((a, b) => b.mtime.getTime() - a.mtime.getTime()).slice(0, count);
+        if (sortedFiles.length === 0) {
+          return "No files found.";
+        }
+        const gitStatus = {};
+        try {
+          const { stdout: gitOut } = await execAsync10("git status --short", {
+            encoding: "utf-8",
+            cwd: ctx.cwd,
+            timeout: 5000
+          });
+          for (const line of gitOut.trim().split(`
+`)) {
+            if (!line)
+              continue;
+            const match = line.match(/^([ MADRC]{1,2})\s+(.+)$/);
+            if (match) {
+              const status = match[1].trim();
+              const filePath = match[2].trim();
+              gitStatus[filePath] = status;
+            }
+          }
+        } catch {}
+        const lines = [`Recent files (${sortedFiles.length}):
+`];
+        for (const file of sortedFiles) {
+          let status = "";
+          const gitStatusKey = Object.keys(gitStatus).find((k2) => k2 === file.path || k2.endsWith(file.path) || file.path.endsWith(k2));
+          if (gitStatusKey) {
+            const code = gitStatus[gitStatusKey];
+            if (code.includes("M"))
+              status = " [M]";
+            else if (code.includes("??"))
+              status = " [??]";
+            else if (code.includes("A"))
+              status = " [A]";
+            else if (code.includes("D"))
+              status = " [D]";
+          }
+          const size = file.size;
+          let sizeStr = "";
+          if (size < 1024)
+            sizeStr = `${size}B`;
+          else if (size < 1024 * 1024)
+            sizeStr = `${(size / 1024).toFixed(1)}K`;
+          else
+            sizeStr = `${(size / (1024 * 1024)).toFixed(1)}M`;
+          const mtime = file.mtime.toISOString().slice(0, 16).replace("T", " ");
+          const displayPath = file.path.length > 50 ? "..." + file.path.slice(-47) : file.path;
+          lines.push(`  ${sizeStr.padStart(6)}  ${mtime}  ${displayPath}${status}`);
+        }
+        return lines.join(`
+`);
+      } catch (err) {
+        const error2 = err;
+        return `Error: ${error2.message || String(err)}`;
+      }
+    }
+  });
+}
+var execAsync10;
+var init_recent = __esm(() => {
+  execAsync10 = promisify10(exec10);
+});
+
 // src/commands/index.ts
 var exports_commands2 = {};
 __export(exports_commands2, {
@@ -27232,8 +27663,8 @@ __export(exports_commands2, {
   getCommand: () => getCommand,
   getAllCommands: () => getAllCommands
 });
-import { exec as exec9 } from "child_process";
-import { promisify as promisify9 } from "util";
+import { exec as exec11 } from "child_process";
+import { promisify as promisify11 } from "util";
 import { existsSync as existsSync23, readFileSync as readFileSync23 } from "fs";
 import { join as join23 } from "path";
 import { homedir as homedir18 } from "os";
@@ -27263,10 +27694,10 @@ function parseCommand(input) {
   const parts = input.slice(1).split(/\s+/);
   return { cmd: parts[0], args: parts.slice(1) };
 }
-var execAsync9, commands;
+var execAsync11, commands;
 var init_commands2 = __esm(() => {
   init_env();
-  execAsync9 = promisify9(exec9);
+  execAsync11 = promisify11(exec11);
   commands = new Map;
   registerCommand({
     name: "help",
@@ -27335,8 +27766,8 @@ ${lines.join(`
       if (args2.length === 0)
         return "Usage: /commit <message>";
       const msg = args2.join(" ");
-      await execAsync9("git add -A", { cwd: process.cwd() });
-      const { stdout, stderr } = await execAsync9('git commit -m "$COMMIT_MSG"', {
+      await execAsync11("git add -A", { cwd: process.cwd() });
+      const { stdout, stderr } = await execAsync11('git commit -m "$COMMIT_MSG"', {
         cwd: process.cwd(),
         env: { ...process.env, COMMIT_MSG: msg }
       });
@@ -27349,7 +27780,7 @@ ${lines.join(`
     aliases: ["d"],
     execute: async (args2) => {
       const target = args2[0] || "";
-      const { stdout } = await execAsync9("git diff -- " + (target ? `"${target.replace(/'/g, `'"'"'`)}"` : ""), { cwd: process.cwd() });
+      const { stdout } = await execAsync11("git diff -- " + (target ? `"${target.replace(/'/g, `'"'"'`)}"` : ""), { cwd: process.cwd() });
       return stdout || "No changes";
     }
   });
@@ -27358,7 +27789,7 @@ ${lines.join(`
     description: "Show git status",
     aliases: ["st"],
     execute: async () => {
-      const { stdout } = await execAsync9("git status --short", { cwd: process.cwd() });
+      const { stdout } = await execAsync11("git status --short", { cwd: process.cwd() });
       return stdout || "Clean working tree";
     }
   });
@@ -27368,7 +27799,7 @@ ${lines.join(`
     aliases: ["lg"],
     execute: async (args2) => {
       const n7 = args2[0] || "10";
-      const { stdout } = await execAsync9("git log --oneline -n " + String(n7), { cwd: process.cwd() });
+      const { stdout } = await execAsync11("git log --oneline -n " + String(n7), { cwd: process.cwd() });
       return stdout || "No commits";
     }
   });
@@ -27377,7 +27808,7 @@ ${lines.join(`
     description: "Show git branches",
     aliases: ["br"],
     execute: async () => {
-      const { stdout } = await execAsync9("git branch -v", { cwd: process.cwd() });
+      const { stdout } = await execAsync11("git branch -v", { cwd: process.cwd() });
       return stdout || "No branches";
     }
   });
@@ -27388,7 +27819,7 @@ ${lines.join(`
       if (args2.length === 0)
         return "Usage: /checkout <branch|file>";
       try {
-        const { stdout, stderr } = await execAsync9("git checkout -- " + args2.map((a) => `'${a.replace(/'/g, `'"'"'`)}'`).join(" "), { cwd: process.cwd() });
+        const { stdout, stderr } = await execAsync11("git checkout -- " + args2.map((a) => `'${a.replace(/'/g, `'"'"'`)}'`).join(" "), { cwd: process.cwd() });
         return (stdout + stderr).trim() || `Checked out ${args2[0]}`;
       } catch (e) {
         const err = e;
@@ -27403,7 +27834,7 @@ ${lines.join(`
       const port = args2[0] || "";
       const cmd = port ? `lsof -i :${port}` : "lsof -i -P";
       try {
-        const { stdout } = await execAsync9(cmd);
+        const { stdout } = await execAsync11(cmd);
         return stdout || "No results";
       } catch {
         return "lsof not available";
@@ -27415,7 +27846,7 @@ ${lines.join(`
     description: "Show running processes",
     execute: async (args2) => {
       const filter = args2.join(" ") || "aux";
-      const { stdout } = await execAsync9(`ps ${filter} | head -20`);
+      const { stdout } = await execAsync11(`ps ${filter} | head -20`);
       return stdout || "No processes";
     }
   });
@@ -28140,6 +28571,9 @@ Start one with /loop <goal>`;
     Promise.resolve().then(() => (init_exec(), exports_exec)).then((m) => m.registerExecCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_alias(), exports_alias)).then((m) => m.registerAliasCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_port(), exports_port)).then((m) => m.registerPortCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_pipe(), exports_pipe)).then((m) => m.registerPipeCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_retry(), exports_retry)).then((m) => m.registerRetryCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_recent(), exports_recent)).then((m) => m.registerRecentCommand(registerCommand)).catch(() => {});
   }, 0);
 });
 
@@ -28606,102 +29040,6 @@ function formatShortcuts() {
 var CANCELLED = "⏱ Cancelled", dim2 = "\x1B[2m", reset = "\x1B[0m", yellow = "\x1B[33m";
 var init_streaming = __esm(() => {
   init_spinner();
-});
-
-// src/ui/markdown.ts
-function renderInline(text) {
-  text = text.replace(/\*\*\*(.+?)\*\*\*/g, `${BOLD}${ITALIC}$1${RESET}`);
-  text = text.replace(/\*\*(.+?)\*\*/g, `${BOLD}$1${RESET}`);
-  text = text.replace(/(?<![/\w])\*([^*\n]+?)\*(?![/\w])/g, `${ITALIC}$1${RESET}`);
-  text = text.replace(/`([^`\n]+?)`/g, `${GREEN}$1${RESET}`);
-  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, `${UNDERLINE}$1${RESET} ${DIM}($2)${RESET}`);
-  text = text.replace(/~~(.+?)~~/g, `${DIM}$1${RESET}`);
-  return text;
-}
-function createStreamingMarkdown() {
-  let buffer = "";
-  let inCodeBlock = false;
-  return {
-    write(chunk) {
-      buffer += chunk;
-      while (buffer.includes(`
-`)) {
-        const idx = buffer.indexOf(`
-`);
-        const line = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 1);
-        if (line.trimStart().startsWith("```")) {
-          if (!inCodeBlock) {
-            inCodeBlock = true;
-            const lang = line.trim().slice(3).trim();
-            process.stdout.write(`${DIM}┌─${lang ? ` ${lang} ` : ""}${"─".repeat(Math.max(0, 60 - (lang?.length || 0)))}${RESET}
-`);
-          } else {
-            inCodeBlock = false;
-            process.stdout.write(`${DIM}└${"─".repeat(62)}${RESET}
-`);
-          }
-          continue;
-        }
-        if (inCodeBlock) {
-          process.stdout.write(`${DIM}│${RESET} ${GREEN}${line}${RESET}
-`);
-          continue;
-        }
-        if (line.startsWith("### ")) {
-          process.stdout.write(`${BOLD}${CYAN}   ${line.slice(4)}${RESET}
-`);
-          continue;
-        }
-        if (line.startsWith("## ")) {
-          process.stdout.write(`${BOLD}${CYAN}  ${line.slice(3)}${RESET}
-`);
-          continue;
-        }
-        if (line.startsWith("# ")) {
-          process.stdout.write(`${BOLD}${CYAN}${line.slice(2)}${RESET}
-`);
-          continue;
-        }
-        if (/^[-*_]{3,}\s*$/.test(line)) {
-          process.stdout.write(`${DIM}${"─".repeat(60)}${RESET}
-`);
-          continue;
-        }
-        process.stdout.write(renderInline(line) + `
-`);
-      }
-    },
-    flush() {
-      if (buffer) {
-        if (inCodeBlock) {
-          process.stdout.write(`${DIM}│${RESET} ${GREEN}${buffer}${RESET}`);
-        } else {
-          process.stdout.write(renderInline(buffer));
-        }
-        buffer = "";
-      }
-      if (inCodeBlock) {
-        process.stdout.write(`
-${DIM}└${"─".repeat(62)}${RESET}
-`);
-      }
-    }
-  };
-}
-var ESC2 = "\x1B[", RESET, BOLD, DIM, ITALIC, UNDERLINE, CYAN, GREEN, YELLOW, GRAY, BLUE, MAGENTA;
-var init_markdown = __esm(() => {
-  RESET = `${ESC2}0m`;
-  BOLD = `${ESC2}1m`;
-  DIM = `${ESC2}2m`;
-  ITALIC = `${ESC2}3m`;
-  UNDERLINE = `${ESC2}4m`;
-  CYAN = `${ESC2}36m`;
-  GREEN = `${ESC2}32m`;
-  YELLOW = `${ESC2}33m`;
-  GRAY = `${ESC2}90m`;
-  BLUE = `${ESC2}34m`;
-  MAGENTA = `${ESC2}35m`;
 });
 
 // src/plugins/loader.ts
