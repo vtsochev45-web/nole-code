@@ -30102,6 +30102,16 @@ ${divider()}
       const MAX_TURNS = parseInt(process.env.NOLE_MAX_TURNS || "") || settings.maxTurns || 50;
       let turn = 0;
       while (turn < MAX_TURNS) {
+        let flushXmlBuffer = function() {
+          if (xmlBuffer) {
+            mdStream.write(xmlBuffer);
+            xmlBuffer = "";
+          }
+          if (xmlBufferTimer) {
+            clearTimeout(xmlBufferTimer);
+            xmlBufferTimer = null;
+          }
+        };
         turn++;
         responseText = "";
         toolCalls = [];
@@ -30174,6 +30184,8 @@ ${divider()}
           }
         }, 150);
         const mdStream = createStreamingMarkdown();
+        let xmlBuffer = "";
+        let xmlBufferTimer = null;
         const usage = await client.chatStream(session.messages.map((m) => {
           const msg = { role: m.role, content: m.content };
           if (m.tool_call_id)
@@ -30191,7 +30203,22 @@ ${divider()}
           }
           hasOutput = true;
           responseText += chunk;
-          mdStream.write(chunk);
+          xmlBuffer += chunk;
+          if (xmlBuffer.includes("<invoke") || xmlBuffer.includes("<minimax:tool_call")) {
+            if (xmlBufferTimer)
+              clearTimeout(xmlBufferTimer);
+            if (xmlBuffer.includes("</invoke>")) {
+              const clean = xmlBuffer.replace(/<minimax:tool_call>[\s\S]*?<\/minimax:tool_call>/g, "").replace(/<invoke[\s\S]*?<\/invoke>/g, "").trim();
+              if (clean)
+                mdStream.write(clean);
+              xmlBuffer = "";
+            } else {
+              xmlBufferTimer = setTimeout(() => flushXmlBuffer(), 500);
+            }
+          } else if (!xmlBuffer.includes("<")) {
+            mdStream.write(xmlBuffer);
+            xmlBuffer = "";
+          }
         }, (tc) => {
           toolCalls.push({ id: tc.id || `tool_${Date.now()}`, name: tc.name, input: tc.input });
         });
@@ -30200,6 +30227,25 @@ ${divider()}
           spinnerInterval = null;
           process.stdout.write("\r\x1B[K");
         }
+        if (xmlBuffer) {
+          if (xmlBuffer.includes("<invoke")) {
+            const { parseXmlToolCalls: parseXmlToolCalls2 } = await Promise.resolve().then(() => (init_llm(), exports_llm));
+            const xmlCalls = parseXmlToolCalls2(xmlBuffer);
+            if (xmlCalls.length > 0) {
+              toolCalls.push(...xmlCalls);
+              const clean = xmlBuffer.replace(/<minimax:tool_call>[\s\S]*?<\/minimax:tool_call>/g, "").replace(/<invoke[\s\S]*?<\/invoke>/g, "").trim();
+              if (clean)
+                mdStream.write(clean);
+            } else {
+              mdStream.write(xmlBuffer);
+            }
+          } else {
+            mdStream.write(xmlBuffer);
+          }
+          xmlBuffer = "";
+        }
+        if (xmlBufferTimer)
+          clearTimeout(xmlBufferTimer);
         mdStream.flush();
         console.log("");
         if (toolCalls.length === 0 && responseText.includes("<invoke")) {
@@ -30236,7 +30282,7 @@ ${divider()}
         if (feature("AUTO_COMPACT") || feature("SESSION_COMPACT")) {
           printTokenBudget(session.messages);
         }
-        const MAX_TOOL_RESULT = 8000;
+        const MAX_TOOL_RESULT = 4000;
         const toolResults = [];
         if (cancelRequested) {
           console.log(formatCancelled("Skipped tools"));
@@ -30263,12 +30309,12 @@ ${divider()}
           if (llmContent.length > MAX_TOOL_RESULT) {
             const lines = llmContent.split(`
 `);
-            const kept = lines.slice(0, 50);
+            const kept = lines.slice(0, 30);
             const tail = lines.slice(-5);
             llmContent = kept.join(`
 `) + `
 
-[... ${lines.length - 55} lines truncated ...]
+[... ${lines.length - 35} lines truncated ...]
 
 ` + tail.join(`
 `);

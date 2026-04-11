@@ -822,6 +822,21 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
 
         const mdStream = createStreamingMarkdown()
 
+        // Buffer for XML tool call detection — hold back text that might be <invoke>
+        let xmlBuffer = ''
+        let xmlBufferTimer: ReturnType<typeof setTimeout> | null = null
+
+        function flushXmlBuffer() {
+          if (xmlBuffer) {
+            mdStream.write(xmlBuffer)
+            xmlBuffer = ''
+          }
+          if (xmlBufferTimer) {
+            clearTimeout(xmlBufferTimer)
+            xmlBufferTimer = null
+          }
+        }
+
         const usage = await client.chatStream(
           session!.messages.map(m => {
             const msg: any = { role: m.role, content: m.content }
@@ -839,7 +854,31 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
             }
             hasOutput = true
             responseText += chunk
-            mdStream.write(chunk)
+
+            // Buffer chunks that might contain XML tool calls
+            xmlBuffer += chunk
+            if (xmlBuffer.includes('<invoke') || xmlBuffer.includes('<minimax:tool_call')) {
+              // Hold — might be an XML tool call, wait for </invoke> or timeout
+              if (xmlBufferTimer) clearTimeout(xmlBufferTimer)
+              if (xmlBuffer.includes('</invoke>')) {
+                // Complete XML tool call — don't render it, parse later
+                // Strip XML and render any remaining text
+                const clean = xmlBuffer
+                  .replace(/<minimax:tool_call>[\s\S]*?<\/minimax:tool_call>/g, '')
+                  .replace(/<invoke[\s\S]*?<\/invoke>/g, '')
+                  .trim()
+                if (clean) mdStream.write(clean)
+                xmlBuffer = ''
+              } else {
+                // Incomplete — set a timeout to flush if no more data arrives
+                xmlBufferTimer = setTimeout(() => flushXmlBuffer(), 500)
+              }
+            } else if (!xmlBuffer.includes('<')) {
+              // No XML markers — safe to render immediately
+              mdStream.write(xmlBuffer)
+              xmlBuffer = ''
+            }
+            // else: contains '<' but not '<invoke' yet — keep buffering briefly
           },
           (tc) => {
             toolCalls.push({ id: tc.id || `tool_${Date.now()}`, name: tc.name, input: tc.input })
@@ -853,18 +892,40 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
           process.stdout.write('\r\x1b[K')
         }
 
+        // Flush any remaining buffered text (non-XML)
+        if (xmlBuffer) {
+          // Check if buffer contains XML tool calls before flushing
+          if (xmlBuffer.includes('<invoke')) {
+            const { parseXmlToolCalls } = await import('./api/llm.js')
+            const xmlCalls = parseXmlToolCalls(xmlBuffer)
+            if (xmlCalls.length > 0) {
+              toolCalls.push(...xmlCalls)
+              // Strip XML, render remaining clean text
+              const clean = xmlBuffer
+                .replace(/<minimax:tool_call>[\s\S]*?<\/minimax:tool_call>/g, '')
+                .replace(/<invoke[\s\S]*?<\/invoke>/g, '')
+                .trim()
+              if (clean) mdStream.write(clean)
+            } else {
+              mdStream.write(xmlBuffer)
+            }
+          } else {
+            mdStream.write(xmlBuffer)
+          }
+          xmlBuffer = ''
+        }
+        if (xmlBufferTimer) clearTimeout(xmlBufferTimer)
+
         // Flush any remaining markdown
         mdStream.flush()
         console.log('')
 
-        // Fallback: parse XML tool calls from streamed text if no structured ones found
-        // MiniMax sometimes outputs <invoke name="Tool"> as text instead of tool_use blocks
+        // Fallback: parse XML tool calls from full response text if no structured ones found
         if (toolCalls.length === 0 && responseText.includes('<invoke')) {
           const { parseXmlToolCalls } = await import('./api/llm.js')
           const xmlCalls = parseXmlToolCalls(responseText)
           if (xmlCalls.length > 0) {
             toolCalls.push(...xmlCalls)
-            // Clean the displayed text (XML was already shown, but tool will execute now)
             responseText = responseText.replace(/<invoke[\s\S]*?<\/invoke>/g, '').replace(/<\/?minimax:tool_call>/g, '').trim()
           }
         }
@@ -908,7 +969,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
 
         // ========== TOOL EXECUTION ==========
         // Run tools in parallel when possible (independent tools run concurrently)
-        const MAX_TOOL_RESULT = 8000 // truncate before sending to LLM
+        const MAX_TOOL_RESULT = 4000 // truncate before sending to LLM (saves ~50% context vs 8000)
         const toolResults: Array<{ tc: typeof toolCalls[0]; result: { content: string; isError?: boolean }; ms: number }> = []
 
         if (cancelRequested) {
@@ -939,9 +1000,9 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
           let llmContent = result.content
           if (llmContent.length > MAX_TOOL_RESULT) {
             const lines = llmContent.split('\n')
-            const kept = lines.slice(0, 50)
+            const kept = lines.slice(0, 30)
             const tail = lines.slice(-5)
-            llmContent = kept.join('\n') + `\n\n[... ${lines.length - 55} lines truncated ...]\n\n` + tail.join('\n')
+            llmContent = kept.join('\n') + `\n\n[... ${lines.length - 35} lines truncated ...]\n\n` + tail.join('\n')
           }
 
           session!.messages.push({
