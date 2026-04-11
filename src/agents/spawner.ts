@@ -141,7 +141,9 @@ export async function spawnAgent(options: {
         } else if (msg.type === 'progress') {
           agentEmitter.emit('message', { ...msg, agentId: id })
         }
-      } catch {}
+      } catch (error) {
+        console.error(`[Agent ${id}] Message parse error:`, error instanceof Error ? error.message : String(error))
+      }
     }
   })
 
@@ -295,8 +297,9 @@ async function createWorktree(repoPath: string, slug: string): Promise<string> {
     })
 
     return worktreeDir
-  } catch {
+  } catch (error) {
     // Fallback: use the original directory
+    console.warn(`[Spawner] Worktree creation failed, using original directory: ${repoPath}`, error instanceof Error ? error.message : String(error))
     return repoPath
   }
 }
@@ -308,5 +311,7 @@ export async function removeWorktree(slug: string): Promise<void> {
     execSync(`git worktree remove "${worktreeDir}" --force`, {
       stdio: 'ignore',
     })
-  } catch {}
+  } catch (error) {
+    console.error(`[Spawner] Failed to remove worktree ${slug}:`, error instanceof Error ? error.message : String(error))
+  }
 }

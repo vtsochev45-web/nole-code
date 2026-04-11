@@ -275,7 +275,7 @@ export function resumeLoop(checkpointId: string): void {
 
 export function pauseLoop(): boolean {
   if (!activeLoop) return false
-  
+
   // Send SIGTERM to process group (child + detached grandchild)
   // -pid sends to entire group, catching the detached loop-agent
   try {
@@ -284,18 +284,21 @@ export function pauseLoop(): boolean {
     // Fallback to direct kill if group kill fails
     activeLoop.child.kill('SIGTERM')
   }
-  
+
   // If still alive after 5s, SIGKILL
-  setTimeout(() => {
+  const killTimeout = setTimeout(() => {
     if (activeLoop && !activeLoop.child.killed) {
       try {
         process.kill(-activeLoop.child.pid, 'SIGKILL')
-      } catch {
+      } catch (error) {
+        console.error(`[Loop] Failed to kill process group:`, error instanceof Error ? error.message : String(error))
         activeLoop.child.kill('SIGKILL')
       }
     }
+    activeLoop = null
   }, 5000)
-  
+
+  // Return true and let caller clear timeout if needed
   return true
 }
 
@@ -310,12 +313,13 @@ export function killLoop(reason: string): boolean {
   if (!activeLoop) return false
   console.log(dim(`\nKilling active loop: ${reason}`))
   activeLoop.child.kill('SIGTERM')
-  setTimeout(() => {
+  const killTimeout = setTimeout(() => {
     if (activeLoop && !activeLoop.child.killed) {
       activeLoop.child.kill('SIGKILL')
     }
     activeLoop = null
   }, 5000)
+  // Return true and let caller clear timeout if needed
   return true
 }
 

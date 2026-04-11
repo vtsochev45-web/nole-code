@@ -3,6 +3,9 @@
 // Adapted from Nole Code's permissions architecture
 
 import { EventEmitter } from 'events'
+import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs'
+import { join, dirname } from 'path'
+import { homedir } from 'os'
 
 export type PermissionMode = 'allow' | 'deny' | 'ask'
 export type PermissionResult = 'allow' | 'deny' | 'ask'
@@ -21,6 +24,11 @@ export interface PermissionRule {
   reason?: string
 }
 
+export function logError(context: string, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error)
+  console.error(`[Permissions] ${context}: ${message}`)
+}
+
 class PermissionManager {
   private rules: PermissionRule[] = []
   private mode: PermissionMode = 'ask'  // Default: ask for permission
@@ -28,38 +36,42 @@ class PermissionManager {
   private pendingRequests = new Map<string, {
     resolve: (result: PermissionResult) => void
     reject: (err: Error) => void
+    timeoutId?: ReturnType<typeof setTimeout>
   }>()
 
   constructor() {
+    this.emitter.setMaxListeners(50) // Prevent memory leak
     this.loadRules()
   }
 
   private rulesFile(): string {
-    const { join } = require('path')
-    const { homedir } = require('os')
     return join(homedir(), '.nole-code', 'permissions.json')
   }
 
   private loadRules(): void {
     try {
-      const { existsSync, readFileSync } = require('fs')
       const rulesFile = this.rulesFile()
       if (existsSync(rulesFile)) {
         const data = JSON.parse(readFileSync(rulesFile, 'utf-8'))
         this.rules = data.rules || []
         this.mode = data.mode || 'ask'
       }
-    } catch {}
+    } catch (error) {
+      logError('Failed to load rules', error)
+      // Fallback to defaults
+      this.rules = []
+      this.mode = 'ask'
+    }
   }
 
   saveRules(): void {
     try {
-      const { mkdirSync, writeFileSync } = require('fs')
-      const { dirname } = require('path')
       const rulesFile = this.rulesFile()
       mkdirSync(dirname(rulesFile), { recursive: true })
       writeFileSync(rulesFile, JSON.stringify({ rules: this.rules, mode: this.mode }, null, 2))
-    } catch {}
+    } catch (error) {
+      logError('Failed to save rules', error)
+    }
   }
 
   setMode(mode: PermissionMode): void {
@@ -99,39 +111,45 @@ class PermissionManager {
       }
     }
 
-    // Global mode
-    switch (this.mode) {
-      case 'allow':
-        return 'allow'
-      case 'deny':
-        return 'deny'
-      case 'ask':
-        return 'ask'
-    }
+    // Default behavior based on mode
+    if (this.mode === 'allow') return 'allow'
+    if (this.mode === 'deny') return 'deny'
+
+    // Ask mode - show prompt
+    return this.requestPermission(tool, input)
   }
 
-  // Request permission interactively
-  async requestPermission(check: PermissionCheck): Promise<boolean> {
-    return new Promise((resolve, reject) => {
-      const requestId = `${Date.now()}-${Math.random()}`
-
-      this.emitter.emit('permission-request', {
-        id: requestId,
-        tool: check.tool,
-        input: check.input,
-        reason: check.reason,
-      })
+  // Request permission from user
+  private requestPermission(tool: string, input: Record<string, unknown>): Promise<PermissionResult> {
+    return new Promise((resolve) => {
+      const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const preview = JSON.stringify(input).slice(0, 100)
 
       // Store the pending request
-      this.pendingRequests.set(requestId, { resolve, reject })
+      this.pendingRequests.set(requestId, { resolve, reject: () => {} })
 
-      // Timeout after 60 seconds
-      setTimeout(() => {
+      // Timeout after 60 seconds - FIXED: clear pending request on timeout
+      const timeoutId = setTimeout(() => {
         if (this.pendingRequests.has(requestId)) {
           this.pendingRequests.delete(requestId)
+          console.warn(`[Permissions] Request timed out for tool: ${tool}`)
           resolve(false)
         }
       }, 60000)
+
+      // Store timeout ID for cleanup
+      const pending = this.pendingRequests.get(requestId)
+      if (pending) {
+        pending.timeoutId = timeoutId
+      }
+
+      // Emit the request event
+      this.emitter.emit('permission-request', {
+        id: requestId,
+        tool,
+        input,
+        reason: `Tool ${tool} requires permission with input: ${preview}`,
+      })
     })
   }
 
@@ -139,8 +157,12 @@ class PermissionManager {
   respond(requestId: string, approved: boolean): void {
     const pending = this.pendingRequests.get(requestId)
     if (pending) {
-      pending.resolve(approved)
+      // Clear timeout if still pending
+      if (pending.timeoutId) {
+        clearTimeout(pending.timeoutId)
+      }
       this.pendingRequests.delete(requestId)
+      pending.resolve(approved)
     }
   }
 
@@ -154,72 +176,63 @@ class PermissionManager {
     this.emitter.on('permission-request', handler)
     return () => this.emitter.off('permission-request', handler)
   }
+
+  // Clear all pending requests (for cleanup)
+  clearPendingRequests(): void {
+    for (const [id, pending] of this.pendingRequests) {
+      if (pending.timeoutId) {
+        clearTimeout(pending.timeoutId)
+      }
+      pending.resolve(false)
+    }
+    this.pendingRequests.clear()
+  }
+
+  // Get pending request count
+  getPendingCount(): number {
+    return this.pendingRequests.size
+  }
 }
 
-export const permissions = new PermissionManager()
+// Export singleton
+const permissionManager = new PermissionManager()
+export { permissionManager }
 
-// Pre-configured permission rules for common tools
-export const DEFAULT_ALLOW = [
-  'Bash:ls',
-  'Bash:cat',
-  'Bash:pwd',
-  'Bash:git status',
-  'Bash:git log',
-  'Bash:git diff',
-  'Read',
-  'Glob',
-  'Grep',
-  'WebSearch',
-  'WebFetch',
-  'TodoWrite',
-  'TaskList',
-  'TaskGet',
-  'Sleep',
-]
+// For backwards compatibility
+export function addRule(rule: PermissionRule): void {
+  permissionManager.addRule(rule)
+}
 
-export const DEFAULT_DENY = [
-  'Bash:sudo',
-  'Bash:rm -rf /',
-  'Bash:mkfs',
-  'Bash:dd',
-  'Bash:>:/dev/',
-]
+export function removeRule(tool: string): void {
+  permissionManager.removeRule(tool)
+}
 
-export const DANGEROUS_PATTERNS = [
-  { pattern: 'rm -rf', reason: 'Recursive delete can remove important files' },
-  { pattern: '>/dev/', reason: 'Writing to device files can be destructive' },
-  { pattern: 'curl.*\|.*sh', reason: 'Pipe to shell is a common attack vector' },
-  { pattern: 'wget.*\|.*sh', reason: 'Pipe to shell is a common attack vector' },
-  { pattern: 'chmod 777', reason: 'World-writable permissions are insecure' },
-  { pattern: ':(){ :|:& };:', reason: 'Fork bomb detected' },
-]
+export function listRules(): PermissionRule[] {
+  return permissionManager.listRules()
+}
 
-// Permission-aware tool executor
-export async function executeWithPermission(
-  tool: string,
-  input: Record<string, unknown>,
-  executor: () => Promise<string>,
-): Promise<string> {
-  const result = await permissions.check(tool, input)
+export function checkPermission(tool: string, input: Record<string, unknown>): Promise<PermissionResult> {
+  return permissionManager.check(tool, input)
+}
 
-  switch (result) {
-    case 'allow':
-      return executor()
+export function onPermissionRequest(handler: (request: {
+  id: string
+  tool: string
+  input: Record<string, unknown>
+  reason?: string
+}) => void): () => void {
+  return permissionManager.onPermissionRequest(handler)
+}
 
-    case 'deny':
-      throw new Error(`Permission denied for tool: ${tool}`)
+export function respondToRequest(requestId: string, approved: boolean): void {
+  permissionManager.respond(requestId, approved)
+}
 
-    case 'ask':
-      const allowed = await permissions.requestPermission({
-        tool,
-        input,
-        mode: 'ask',
-        reason: `Tool "${tool}" requires permission`,
-      })
-      if (allowed) {
-        return executor()
-      } else {
+// Default deny if no explicit allow
+export function enforcePermission(tool: string, input: Record<string, unknown>): Promise<void> {
+  return permissionManager.check(tool, input).then(result => {
+      if (result !== 'allow') {
         throw new Error(`Permission denied for tool: ${tool}`)
       }
-  }
+  })
 }

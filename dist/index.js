@@ -16667,7 +16667,9 @@ async function spawnAgent(options) {
         } else if (msg.type === "progress") {
           agentEmitter.emit("message", { ...msg, agentId: id });
         }
-      } catch {}
+      } catch (error2) {
+        console.error(`[Agent ${id}] Message parse error:`, error2 instanceof Error ? error2.message : String(error2));
+      }
     }
   });
   proc.stderr?.on("data", (data) => {
@@ -16807,7 +16809,8 @@ async function createWorktree(repoPath, slug) {
       stdio: "ignore"
     });
     return worktreeDir;
-  } catch {
+  } catch (error2) {
+    console.warn(`[Spawner] Worktree creation failed, using original directory: ${repoPath}`, error2 instanceof Error ? error2.message : String(error2));
     return repoPath;
   }
 }
@@ -16817,7 +16820,9 @@ async function removeWorktree(slug) {
     execSync(`git worktree remove "${worktreeDir}" --force`, {
       stdio: "ignore"
     });
-  } catch {}
+  } catch (error2) {
+    console.error(`[Spawner] Failed to remove worktree ${slug}:`, error2 instanceof Error ? error2.message : String(error2));
+  }
 }
 var agents, agentProcesses, agentEmitter;
 var init_spawner = __esm(() => {
@@ -17210,24 +17215,48 @@ var init_audit = __esm(() => {
 });
 
 // src/hooks/index.ts
-import { existsSync as existsSync5, readFileSync as readFileSync5 } from "fs";
+import { existsSync as existsSync5, readFileSync as readFileSync5, statSync } from "fs";
 import { join as join6 } from "path";
 import { homedir as homedir5 } from "os";
+function logError(context, error2) {
+  const message = error2 instanceof Error ? error2.message : String(error2);
+  console.error(`[Hooks] ${context}: ${message}`);
+}
+function escapeShellArg(input) {
+  return input.replace(/\\/g, "\\\\").replace(/\$/g, "\\$").replace(/`/g, "\\`").replace(/"/g, "\\\"");
+}
 function loadHooks() {
+  try {
+    if (existsSync5(HOOKS_FILE)) {
+      const stats = statSync(HOOKS_FILE);
+      if (cachedHooks && stats.mtimeMs > cachedHooksMtime) {
+        cachedHooks = null;
+      }
+    } else if (cachedHooks !== null) {
+      cachedHooks = null;
+    }
+  } catch {
+    cachedHooks = null;
+  }
   if (cachedHooks)
     return cachedHooks;
   if (!existsSync5(HOOKS_FILE)) {
     cachedHooks = { pre: [], post: [] };
+    cachedHooksMtime = 0;
     return cachedHooks;
   }
   try {
+    const stats = statSync(HOOKS_FILE);
+    cachedHooksMtime = stats.mtimeMs;
     const data = JSON.parse(readFileSync5(HOOKS_FILE, "utf-8"));
     cachedHooks = {
       pre: Array.isArray(data.pre) ? data.pre : [],
       post: Array.isArray(data.post) ? data.post : []
     };
-  } catch {
+  } catch (error2) {
+    logError("Failed to load hooks", error2);
     cachedHooks = { pre: [], post: [] };
+    cachedHooksMtime = 0;
   }
   return cachedHooks;
 }
@@ -17246,9 +17275,10 @@ async function runHooks(hooks, context) {
     try {
       let cmd = hook.command;
       for (const [key, val] of Object.entries(context.input)) {
-        cmd = cmd.replace(`\${${key}}`, String(val));
+        const escaped = escapeShellArg(String(val));
+        cmd = cmd.replace(`\${${key}}`, escaped);
       }
-      cmd = cmd.replace("${tool}", context.tool);
+      cmd = cmd.replace("${tool}", escapeShellArg(context.tool));
       const output = execFileSync("/bin/bash", ["-c", cmd], {
         encoding: "utf-8",
         cwd: hook.cwd || context.cwd,
@@ -17257,12 +17287,14 @@ async function runHooks(hooks, context) {
       if (output)
         results.push(output);
     } catch (err) {
-      results.push(`Hook error: ${err.message || err}`);
+      const message = err instanceof Error ? err.message : String(err);
+      logError(`Hook execution failed for ${context.tool}`, err);
+      results.push(`Hook error: ${message}`);
     }
   }
   return results;
 }
-var HOOKS_FILE, cachedHooks = null;
+var HOOKS_FILE, cachedHooks = null, cachedHooksMtime = 0;
 var init_hooks = __esm(() => {
   HOOKS_FILE = join6(homedir5(), ".nole-code", "hooks.json");
 });
@@ -17438,7 +17470,7 @@ __export(exports_registry, {
 });
 import { exec } from "child_process";
 import { promisify } from "util";
-import { readFileSync as readFileSync7, writeFileSync as writeFileSync3, existsSync as existsSync7, mkdirSync as mkdirSync3, readdirSync, statSync } from "fs";
+import { readFileSync as readFileSync7, writeFileSync as writeFileSync3, existsSync as existsSync7, mkdirSync as mkdirSync3, readdirSync, statSync as statSync2 } from "fs";
 import { join as join8, relative as relative2, resolve as resolve3 } from "path";
 import { homedir as homedir7 } from "os";
 async function promptPermission(toolName, input, reason) {
@@ -17798,7 +17830,7 @@ var init_registry = __esm(() => {
       if (imageExts.includes(ext)) {
         try {
           const buf = readFileSync7(path);
-          const size = statSync(path).size;
+          const size = statSync2(path).size;
           const base642 = buf.toString("base64").slice(0, 1000);
           return `[Image: ${ext.toUpperCase()}, ${formatSize(size)}]
 Base64 preview: ${base642}...
@@ -17809,7 +17841,7 @@ Path: ${path}`;
       }
       const binaryExts = ["zip", "tar", "gz", "exe", "dll", "so", "o", "wasm", "pdf"];
       if (binaryExts.includes(ext)) {
-        const size = statSync(path).size;
+        const size = statSync2(path).size;
         if (ext === "pdf") {
           try {
             const pdfText = await runBash(`pdftotext "${path}" - 2>/dev/null | head -200`);
@@ -18414,7 +18446,7 @@ Manage with /team list or /team send`;
         const lines = filtered.map((name) => {
           try {
             const fullPath = join8(dir, name);
-            const stat = statSync(fullPath);
+            const stat = statSync2(fullPath);
             const isDir = stat.isDirectory();
             const size = isDir ? "-" : formatSize(stat.size);
             const date5 = stat.mtime.toISOString().slice(0, 10);
@@ -18455,8 +18487,8 @@ Manage with /team list or /team send`;
           return;
         try {
           const entries = readdirSync(dir).filter((e) => !e.startsWith(".") && e !== "node_modules" && e !== ".git").sort((a, b) => {
-            const aIsDir = statSync(join8(dir, a)).isDirectory();
-            const bIsDir = statSync(join8(dir, b)).isDirectory();
+            const aIsDir = statSync2(join8(dir, a)).isDirectory();
+            const bIsDir = statSync2(join8(dir, b)).isDirectory();
             if (aIsDir !== bIsDir)
               return aIsDir ? -1 : 1;
             return a.localeCompare(b);
@@ -18468,7 +18500,7 @@ Manage with /team list or /team send`;
             const connector = isLast ? "└── " : "├── ";
             const childPrefix = isLast ? "    " : "│   ";
             try {
-              const isDir = statSync(fullPath).isDirectory();
+              const isDir = statSync2(fullPath).isDirectory();
               if (isDir) {
                 dirCount++;
                 lines.push(`${prefix}${connector}${name}/`);
@@ -18948,7 +18980,7 @@ ${output.slice(0, 500) || "(no output yet)"}`;
       if (!existsSync7(targetPath))
         return `Not found: ${targetPath}`;
       try {
-        const stat = statSync(targetPath);
+        const stat = statSync2(targetPath);
         if (stat.isDirectory()) {
           if (!input.recursive)
             return `"${input.path}" is a directory. Set recursive=true to delete.`;
@@ -20471,14 +20503,16 @@ function pauseLoop() {
   } catch (e) {
     activeLoop.child.kill("SIGTERM");
   }
-  setTimeout(() => {
+  const killTimeout = setTimeout(() => {
     if (activeLoop && !activeLoop.child.killed) {
       try {
         process.kill(-activeLoop.child.pid, "SIGKILL");
-      } catch {
+      } catch (error2) {
+        console.error(`[Loop] Failed to kill process group:`, error2 instanceof Error ? error2.message : String(error2));
         activeLoop.child.kill("SIGKILL");
       }
     }
+    activeLoop = null;
   }, 5000);
   return true;
 }
@@ -20495,7 +20529,7 @@ function killLoop(reason) {
   console.log(dim(`
 Killing active loop: ${reason}`));
   activeLoop.child.kill("SIGTERM");
-  setTimeout(() => {
+  const killTimeout = setTimeout(() => {
     if (activeLoop && !activeLoop.child.killed) {
       activeLoop.child.kill("SIGKILL");
     }
@@ -21988,8 +22022,8 @@ class SkillLoader {
       for (const entry of entries) {
         const skillPath = join17(dir, entry);
         try {
-          const { statSync: statSync2 } = __require("fs");
-          if (!statSync2(skillPath).isDirectory())
+          const { statSync: statSync3 } = __require("fs");
+          if (!statSync3(skillPath).isDirectory())
             continue;
         } catch {
           continue;
@@ -25689,7 +25723,7 @@ var exports_read = {};
 __export(exports_read, {
   registerReadCommand: () => registerReadCommand
 });
-import { existsSync as existsSync16, readFileSync as readFileSync16, statSync as statSync2 } from "fs";
+import { existsSync as existsSync16, readFileSync as readFileSync16, statSync as statSync3 } from "fs";
 import { join as join19, basename as basename2, extname } from "path";
 function getLanguage(ext) {
   const langMap = {
@@ -25746,7 +25780,7 @@ function readFile(filePath, options = {}) {
   const end = options.lines ? start + options.lines : lines.length;
   const selectedLines = lines.slice(start, end);
   const ext = extname(filePath);
-  const stats = statSync2(filePath);
+  const stats = statSync3(filePath);
   const language = getLanguage(ext);
   const output = [];
   output.push(`\x1B[1;34m${basename2(filePath)}\x1B[0m \x1B[90m(${language})\x1B[0m`);
@@ -25804,7 +25838,7 @@ Supported: .ts, .js, .py, .sh, .json, .md, .yml, .html, .css, .sql, .go, .rs, .j
       output.push(`\x1B[1;32m${files.length} files matching ${filePattern}:\x1B[0m
 `);
       for (const file of files) {
-        const stats = statSync2(file);
+        const stats = statSync3(file);
         output.push(`  \x1B[37m${basename2(file)}\x1B[0m ${getFileSize(stats.size)}`);
       }
       return output.join(`
@@ -25851,7 +25885,7 @@ var exports_grep = {};
 __export(exports_grep, {
   registerGrepCommand: () => registerGrepCommand
 });
-import { readFileSync as readFileSync17, statSync as statSync3 } from "fs";
+import { readFileSync as readFileSync17, statSync as statSync4 } from "fs";
 import { join as join20 } from "path";
 async function execute2(args, ctx) {
   if (args.length === 0) {
@@ -25920,7 +25954,7 @@ Options:
   const searchedFiles = [];
   for (const filePath of files) {
     const resolved = filePath.startsWith("/") ? filePath : join20(ctx.cwd, filePath);
-    const stat = statSync3(resolved);
+    const stat = statSync4(resolved);
     if (stat.isDirectory()) {
       const { glob } = await Promise.resolve().then(() => (init_index_min(), exports_index_min));
       let pattern2 = "**/*";
@@ -26008,7 +26042,7 @@ var exports_test = {};
 __export(exports_test, {
   registerTestCommand: () => registerTestCommand
 });
-import { existsSync as existsSync18, readFileSync as readFileSync18, statSync as statSync4 } from "fs";
+import { existsSync as existsSync18, readFileSync as readFileSync18, statSync as statSync5 } from "fs";
 import { join as join21, basename as basename4 } from "path";
 import { exec as exec2 } from "child_process";
 import { promisify as promisify2 } from "util";
@@ -26152,7 +26186,7 @@ async function execute3(args, ctx) {
   if (!existsSync18(target)) {
     return `Target not found: ${target}`;
   }
-  const stat = statSync4(target);
+  const stat = statSync5(target);
   const cwd = stat.isDirectory() ? target : ctx.cwd;
   const framework = await detectTestFramework(cwd);
   if (!framework) {
@@ -27779,7 +27813,7 @@ __export(exports_recent, {
   registerRecentCommand: () => registerRecentCommand
 });
 import { exec as exec9 } from "child_process";
-import { statSync as statSync5 } from "fs";
+import { statSync as statSync6 } from "fs";
 import { resolve as resolve5 } from "path";
 import { promisify as promisify9 } from "util";
 function registerRecentCommand(register) {
@@ -27805,7 +27839,7 @@ function registerRecentCommand(register) {
 `).filter(Boolean);
         const sortedFiles = files.map((f) => {
           try {
-            const stat = statSync5(resolve5(ctx.cwd, f));
+            const stat = statSync6(resolve5(ctx.cwd, f));
             return {
               path: f,
               mtime: stat.mtime,
@@ -29321,7 +29355,7 @@ __export(exports_indexer, {
   indexProject: () => indexProject,
   formatIndexForPrompt: () => formatIndexForPrompt
 });
-import { readFileSync as readFileSync26, readdirSync as readdirSync8, statSync as statSync6 } from "fs";
+import { readFileSync as readFileSync26, readdirSync as readdirSync8, statSync as statSync7 } from "fs";
 import { join as join26, relative as relative3, extname as extname3 } from "path";
 function indexProject(root, maxFiles = 200) {
   const languages = {};
@@ -29343,7 +29377,7 @@ function indexProject(root, maxFiles = 200) {
         continue;
       const fullPath = join26(dir, entry);
       try {
-        const stat = statSync6(fullPath);
+        const stat = statSync7(fullPath);
         const rel = relative3(root, fullPath);
         if (stat.isDirectory()) {
           treeParts.push(`${"  ".repeat(depth)}${entry}/`);
@@ -29903,13 +29937,13 @@ ${memorySummary}` : ""}${resumeContext}`;
       try {
         const dir = last.includes("/") ? last.substring(0, last.lastIndexOf("/") + 1) : "./";
         const prefix = last.includes("/") ? last.substring(last.lastIndexOf("/") + 1) : last;
-        const { readdirSync: readdirSync9, statSync: statSync7 } = __require("fs");
+        const { readdirSync: readdirSync9, statSync: statSync8 } = __require("fs");
         const { resolve: resolvePath } = __require("path");
         const fullDir = resolvePath(process.cwd(), dir);
         const entries = readdirSync9(fullDir).filter((f) => f.startsWith(prefix));
         const completions = entries.map((f) => {
           try {
-            const isDir = statSync7(resolvePath(fullDir, f)).isDirectory();
+            const isDir = statSync8(resolvePath(fullDir, f)).isDirectory();
             return dir + f + (isDir ? "/" : "");
           } catch {
             return dir + f;
@@ -30244,8 +30278,10 @@ ${divider()}
           }
           xmlBuffer = "";
         }
-        if (xmlBufferTimer)
+        if (xmlBufferTimer) {
           clearTimeout(xmlBufferTimer);
+          xmlBufferTimer = null;
+        }
         mdStream.flush();
         console.log("");
         if (toolCalls.length === 0 && responseText.includes("<invoke")) {

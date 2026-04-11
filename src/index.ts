@@ -914,7 +914,11 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
           }
           xmlBuffer = ''
         }
-        if (xmlBufferTimer) clearTimeout(xmlBufferTimer)
+        // FIX: Clear timer to prevent race condition after stream ends
+        if (xmlBufferTimer) {
+          clearTimeout(xmlBufferTimer)
+          xmlBufferTimer = null
+        }
 
         // Flush any remaining markdown
         mdStream.flush()

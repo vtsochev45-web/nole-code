@@ -26,14 +26,24 @@ interface RemoteMessage {
 class RemoteSessionManager {
   private sessions = new Map<string, RemoteSession>()
   private wss: WebSocketServer | null = null
-  private port = 18790
+  private _port = 0
+
+  // FIX: Get port from env with fallback to default
+  private getDefaultPort(): number {
+    const envPort = parseInt(process.env.NOLE_REMOTE_PORT || '', 10)
+    return isNaN(envPort) ? 18790 : envPort
+  }
+
+  getPort(): number {
+    return this._port || this.getDefaultPort()
+  }
 
   // Start the WebSocket server
-  async start(port = 18790): Promise<void> {
+  async start(port?: number): Promise<void> {
     if (this.wss) return
 
-    this.port = port
-    this.wss = new WebSocketServer({ port })
+    this._port = port || this.getDefaultPort()
+    this.wss = new WebSocketServer({ port: this._port })
 
     this.wss.on('connection', (ws) => {
       this.handleConnection(ws)
