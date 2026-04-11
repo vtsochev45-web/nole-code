@@ -23281,7 +23281,12 @@ var init_executor = __esm(() => {
     /EPERM/,
     /EACCES/,
     /exit code [1-9]/,
-    /No such file/
+    /No such file/,
+    /timed out/i,
+    /connection refused/i,
+    /host not found/i,
+    /Enter host password/i,
+    /password:/i
   ];
 });
 
@@ -23326,7 +23331,7 @@ function startStepWatcher(checkpointId) {
           step: i,
           error: step.error || "Unknown error",
           retry: step.retryCount,
-          maxRetries: cp.settings.maxRetries
+          maxRetries: cp.settings?.maxRetries ?? 2
         });
       }
       if (step.status === "skipped" && lastStep?.status !== "skipped") {

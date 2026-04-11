@@ -332,3 +332,101 @@ export function notify(title: string, body: string, urgent = false): void {
     console.log(`[NOTIFICATION] ${title}: ${body}`)
   }
 }
+
+// ============ WordPress Tools ============
+
+export const wordpressTools = [
+  {
+    name: 'WordPressPost',
+    description: 'Create a new WordPress post via REST API',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Post title' },
+        content: { type: 'string', description: 'Post body content' },
+        status: { type: 'string', description: 'draft, publish, or private', default: 'draft' },
+      },
+      required: ['title', 'content'],
+    },
+  },
+  {
+    name: 'WordPressUpdate',
+    description: 'Update an existing WordPress post',
+    input_schema: {
+      type: 'object',
+      properties: {
+        post_id: { type: 'string', description: 'Post ID to update' },
+        title: { type: 'string', description: 'New post title' },
+        content: { type: 'string', description: 'New post content' },
+        status: { type: 'string', description: 'draft, publish, or private' },
+      },
+      required: ['post_id'],
+    },
+  },
+]
+
+// WordPress via Bash (curl) - no new tool registration needed
+// Use Bash tool with: curl -s -X POST ...
+
+export async function executeWordPressTool(
+  name: string,
+  input: Record<string, unknown>,
+  ctx: ToolContext,
+): Promise<{ content: string; isError?: boolean }> {
+  const { WP_SITE, WP_USERNAME, WP_APP_PASSWORD } = await import('../utils/env.js')
+  
+  if (!WP_SITE || !WP_USERNAME || !WP_APP_PASSWORD) {
+    return { content: 'WordPress credentials not configured. Set WP_SITE, WP_USERNAME, WP_APP_PASSWORD in .env', isError: true }
+  }
+  
+  const credentials = Buffer.from(`${WP_USERNAME}:${WP_APP_PASSWORD}`).toString('base64')
+  
+  if (name === 'WordPressPost') {
+    const { title, content, status = 'draft' } = input as { title: string; content: string; status?: string }
+    
+    const response = await fetch(`${WP_SITE}/wp-json/wp/v2/posts`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ title, content, status }),
+    })
+    
+    if (!response.ok) {
+      const error = await response.text()
+      return { content: `WP post failed: ${response.status} ${error}`, isError: true }
+    }
+    
+    const post = await response.json() as { id: number; link: string; title: { rendered: string } }
+    return { content: `Post created: ID=${post.id} | ${post.link}` }
+  }
+  
+  if (name === 'WordPressUpdate') {
+    const { post_id, title, content, status } = input as { post_id: string; title?: string; content?: string; status?: string }
+    
+    const body: Record<string, unknown> = {}
+    if (title) body.title = title
+    if (content) body.content = content
+    if (status) body.status = status
+    
+    const response = await fetch(`${WP_SITE}/wp-json/wp/v2/posts/${post_id}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+    
+    if (!response.ok) {
+      const error = await response.text()
+      return { content: `WP update failed: ${response.status} ${error}`, isError: true }
+    }
+    
+    const post = await response.json() as { id: number; link: string }
+    return { content: `Post ${post.id} updated: ${post.link}` }
+  }
+  
+  return { content: `Unknown WP tool: ${name}`, isError: true }
+}

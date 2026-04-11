@@ -44,6 +44,11 @@ const FAILURE_SIGNATURES = [
   /EACCES/,
   /exit code [1-9]/,
   /No such file/,
+  /timed out/i,
+  /connection refused/i,
+  /host not found/i,
+  /Enter host password/i,
+  /password:/i,
 ]
 
 function isActualFailure(result: string): boolean {

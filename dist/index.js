@@ -20708,7 +20708,12 @@ var init_executor = __esm(() => {
     /EPERM/,
     /EACCES/,
     /exit code [1-9]/,
-    /No such file/
+    /No such file/,
+    /timed out/i,
+    /connection refused/i,
+    /host not found/i,
+    /Enter host password/i,
+    /password:/i
   ];
 });
 

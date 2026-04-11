@@ -77,7 +77,7 @@ function startStepWatcher(checkpointId: string): void {
           step: i,
           error: step.error || 'Unknown error',
           retry: step.retryCount,
-          maxRetries: cp.settings.maxRetries,
+          maxRetries: (cp.settings?.maxRetries ?? 2),
         })
       }
       
