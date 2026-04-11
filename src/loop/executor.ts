@@ -137,7 +137,7 @@ function printSummary(checkpoint: Checkpoint, totalMs: number): void {
 /**
  * Break goal into steps using LLM
  */
-async function planSteps(goal: string, client: LLMClient, cwd: string): Promise<string[]> {
+export async function planSteps(goal: string, client: LLMClient, cwd: string): Promise<string[]> {
   const systemPrompt = `You are a task planner. Break down the goal into 5-10 concrete steps.
   
 Rules:

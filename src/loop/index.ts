@@ -44,3 +44,14 @@ export {
   pauseLoop,
   resumeLoop,
 } from './executor.js'
+
+export {
+  spawnLoop,
+  resumeLoop as resumeLoopProcess,
+  pauseLoop as pauseLoopProcess,
+  abortLoop as abortLoopProcess,
+  killLoop,
+  getActiveLoop,
+  isLoopRunning,
+  type LoopProcess,
+} from './spawner.js'

@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -65,6 +64,305 @@ var __export = (target, all) => {
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
+// src/loop/checkpoint.ts
+var exports_checkpoint = {};
+__export(exports_checkpoint, {
+  waitForConfirmation: () => waitForConfirmation,
+  startStep: () => startStep,
+  skipStep: () => skipStep,
+  shouldContinue: () => shouldContinue,
+  setSteps: () => setSteps,
+  saveCheckpoint: () => saveCheckpoint,
+  resumeCheckpoint: () => resumeCheckpoint,
+  pauseCheckpoint: () => pauseCheckpoint,
+  loadLatestCheckpoint: () => loadLatestCheckpoint,
+  loadCheckpoint: () => loadCheckpoint,
+  listCheckpoints: () => listCheckpoints,
+  getProgress: () => getProgress,
+  failStep: () => failStep,
+  deleteCheckpoint: () => deleteCheckpoint,
+  createCheckpoint: () => createCheckpoint,
+  completeStep: () => completeStep,
+  completeCheckpoint: () => completeCheckpoint,
+  buildRetryContext: () => buildRetryContext,
+  addStep: () => addStep,
+  abortCheckpoint: () => abortCheckpoint
+});
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  readdirSync,
+  unlinkSync,
+  renameSync
+} from "fs";
+import { join } from "path";
+import { homedir } from "os";
+function ensureCheckpointDir() {
+  mkdirSync(CHECKPOINT_DIR, { recursive: true });
+}
+function createCheckpoint(goal, cwd, settings) {
+  ensureCheckpointDir();
+  const id = `loop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const now = new Date().toISOString();
+  const checkpoint = {
+    id,
+    goal,
+    state: "pending",
+    steps: [],
+    currentStep: 0,
+    context: {
+      cwd,
+      filesCreated: [],
+      filesModified: [],
+      errorsEncountered: []
+    },
+    settings: {
+      maxRetries: settings?.maxRetries ?? 2,
+      confirmMajorPivots: settings?.confirmMajorPivots ?? true,
+      reportEveryNSteps: settings?.reportEveryNSteps ?? 3
+    },
+    createdAt: now,
+    updatedAt: now
+  };
+  saveCheckpoint(checkpoint);
+  return checkpoint;
+}
+function loadCheckpoint(id) {
+  const file = join(CHECKPOINT_DIR, `${id}.json`);
+  if (!existsSync(file))
+    return null;
+  try {
+    return JSON.parse(readFileSync(file, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+function loadLatestCheckpoint() {
+  ensureCheckpointDir();
+  const files = readdirSync(CHECKPOINT_DIR).filter((f) => f.startsWith("loop-") && f.endsWith(".json"));
+  if (files.length === 0)
+    return null;
+  files.sort((a, b) => b.localeCompare(a));
+  return loadCheckpoint(files[0].replace(".json", ""));
+}
+function saveCheckpoint(checkpoint) {
+  ensureCheckpointDir();
+  checkpoint.updatedAt = new Date().toISOString();
+  const file = join(CHECKPOINT_DIR, `${checkpoint.id}.json`);
+  const tmp = file + `.tmp.${Date.now()}`;
+  writeFileSync(tmp, JSON.stringify(checkpoint, null, 2), "utf-8");
+  renameSync(tmp, file);
+}
+function deleteCheckpoint(id) {
+  const file = join(CHECKPOINT_DIR, `${id}.json`);
+  if (existsSync(file)) {
+    unlinkSync(file);
+    return true;
+  }
+  return false;
+}
+function listCheckpoints(limit = 10) {
+  ensureCheckpointDir();
+  const files = readdirSync(CHECKPOINT_DIR).filter((f) => f.startsWith("loop-") && f.endsWith(".json"));
+  const checkpoints = files.map((f) => loadCheckpoint(f.replace(".json", ""))).filter(Boolean);
+  checkpoints.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  return checkpoints.slice(0, limit);
+}
+function addStep(checkpoint, description) {
+  const step = {
+    id: checkpoint.steps.length,
+    description,
+    status: "pending",
+    retryCount: 0
+  };
+  checkpoint.steps.push(step);
+  saveCheckpoint(checkpoint);
+  return step;
+}
+function setSteps(checkpoint, steps) {
+  checkpoint.steps = steps.map((description, i) => ({
+    id: i,
+    description,
+    status: "pending",
+    retryCount: 0
+  }));
+  saveCheckpoint(checkpoint);
+}
+function startStep(checkpoint, stepId) {
+  const id = stepId ?? checkpoint.currentStep;
+  const step = checkpoint.steps[id];
+  if (!step)
+    throw new Error(`Step ${id} not found`);
+  step.status = "running";
+  step.startedAt = new Date().toISOString();
+  checkpoint.currentStep = id;
+  checkpoint.state = "running";
+  saveCheckpoint(checkpoint);
+  return step;
+}
+function completeStep(checkpoint, stepId, toolCalls = []) {
+  const step = checkpoint.steps[stepId];
+  if (!step)
+    throw new Error(`Step ${stepId} not found`);
+  step.status = "complete";
+  step.completedAt = new Date().toISOString();
+  step.toolCalls = toolCalls;
+  for (const tc of toolCalls ?? []) {
+    if (tc.name === "Write" || tc.name === "Edit") {
+      const path = tc.input.path;
+      if (path && !checkpoint.context.filesCreated.includes(path)) {
+        checkpoint.context.filesCreated.push(path);
+      }
+    }
+    if (tc.name === "Bash") {
+      const cmd = tc.input.command;
+      if (cmd?.includes("git commit")) {}
+    }
+  }
+  checkpoint.currentStep = stepId + 1;
+  saveCheckpoint(checkpoint);
+  return step;
+}
+function failStep(checkpoint, stepId, error, toolCalls = []) {
+  const step = checkpoint.steps[stepId];
+  if (!step)
+    throw new Error(`Step ${stepId} not found`);
+  step.status = "failed";
+  step.error = error;
+  step.completedAt = new Date().toISOString();
+  step.toolCalls = toolCalls;
+  step.retryCount++;
+  checkpoint.context.errorsEncountered.push({
+    step: stepId,
+    error,
+    timestamp: new Date().toISOString()
+  });
+  checkpoint.context.lastToolResult = error;
+  saveCheckpoint(checkpoint);
+  return step;
+}
+function skipStep(checkpoint, stepId) {
+  const step = checkpoint.steps[stepId];
+  if (!step)
+    throw new Error(`Step ${stepId} not found`);
+  step.status = "skipped";
+  step.completedAt = new Date().toISOString();
+  checkpoint.currentStep = stepId + 1;
+  saveCheckpoint(checkpoint);
+  return step;
+}
+function pauseCheckpoint(checkpoint) {
+  checkpoint.state = "paused";
+  saveCheckpoint(checkpoint);
+}
+function resumeCheckpoint(checkpoint) {
+  checkpoint.state = "running";
+  saveCheckpoint(checkpoint);
+}
+function waitForConfirmation(checkpoint) {
+  checkpoint.state = "waiting";
+  saveCheckpoint(checkpoint);
+}
+function completeCheckpoint(checkpoint) {
+  checkpoint.state = "complete";
+  checkpoint.completedAt = new Date().toISOString();
+  saveCheckpoint(checkpoint);
+}
+function abortCheckpoint(checkpoint) {
+  checkpoint.state = "aborted";
+  saveCheckpoint(checkpoint);
+}
+function getProgress(checkpoint) {
+  const total = checkpoint.steps.length;
+  const current = checkpoint.currentStep;
+  const percent = total > 0 ? Math.round(current / total * 100) : 0;
+  return {
+    current,
+    total,
+    percent,
+    currentStep: checkpoint.steps[current]
+  };
+}
+function shouldContinue(checkpoint) {
+  const currentStep = checkpoint.steps[checkpoint.currentStep];
+  if (!currentStep) {
+    return { continue: true };
+  }
+  if (currentStep.retryCount >= checkpoint.settings.maxRetries) {
+    return {
+      continue: false,
+      reason: `Max retries (${checkpoint.settings.maxRetries}) exceeded on step ${checkpoint.currentStep}`
+    };
+  }
+  if (checkpoint.state === "aborted") {
+    return { continue: false, reason: "Checkpoint aborted" };
+  }
+  return { continue: true };
+}
+function buildRetryContext(checkpoint, stepId) {
+  const step = checkpoint.steps[stepId];
+  if (!step)
+    return "";
+  const errors = checkpoint.context.errorsEncountered.filter((e) => e.step === stepId);
+  if (errors.length === 0)
+    return "";
+  const lastError = errors[errors.length - 1].error;
+  const lines = [];
+  lines.push(`
+<!-- Retry ${step.retryCount + 1}/${checkpoint.settings.maxRetries} -->`);
+  lines.push(`
+Previous attempt failed:`);
+  lines.push(`  Error: ${lastError}`);
+  const hint = inferErrorHint(lastError);
+  if (hint) {
+    lines.push(`  Hint: ${hint}`);
+  }
+  lines.push(`
+Try a DIFFERENT approach this time:`);
+  lines.push(`- Do NOT repeat the same command`);
+  lines.push(`- Consider: create parent directories first, check permissions, use different tool`);
+  lines.push(`- Goal: ${checkpoint.goal}`);
+  return lines.join(`
+`);
+}
+function inferErrorHint(error) {
+  const e = error.toLowerCase();
+  if (e.includes("enoent") || e.includes("no such file")) {
+    if (e.includes("directory") || e.includes("/")) {
+      return "Parent directory may not exist. Try: mkdir -p first";
+    }
+    return "File does not exist. Verify path or create file first";
+  }
+  if (e.includes("permission denied")) {
+    return "Check file/directory permissions or run with elevated access";
+  }
+  if (e.includes("eacces")) {
+    return "Permission issue. Try chmod or different location";
+  }
+  if (e.includes("enospc")) {
+    return "Disk space may be full. Check: df -h";
+  }
+  if (e.includes("etimedout") || e.includes("timeout")) {
+    return "Connection timed out. Check network or retry with longer timeout";
+  }
+  if (e.includes("econnrefused")) {
+    return "Connection refused. Check service is running";
+  }
+  if (e.includes("command not found") || e.includes("not found")) {
+    return "Command/tool not available. Try alternative approach";
+  }
+  if (e.includes("parse error") || e.includes("syntax")) {
+    return "Parse/syntax error. Check input format";
+  }
+  return null;
+}
+var CHECKPOINT_DIR;
+var init_checkpoint = __esm(() => {
+  CHECKPOINT_DIR = join(homedir(), ".nole-code", "checkpoints");
+});
+
 // src/utils/env.ts
 var exports_env = {};
 __export(exports_env, {
@@ -76,14 +374,14 @@ __export(exports_env, {
   MINIMAX_BASE_URL: () => MINIMAX_BASE_URL,
   MINIMAX_API_KEY: () => MINIMAX_API_KEY
 });
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
+import { existsSync as existsSync2, readFileSync as readFileSync2 } from "fs";
+import { join as join2 } from "path";
+import { homedir as homedir2 } from "os";
 function loadEnvFile(path) {
-  if (!existsSync(path))
+  if (!existsSync2(path))
     return;
   try {
-    const content = readFileSync(path, "utf-8");
+    const content = readFileSync2(path, "utf-8");
     for (const line of content.split(`
 `)) {
       const trimmed = line.trim();
@@ -137,9 +435,9 @@ function hasAnyProvider() {
 }
 var MINIMAX_API_KEY, MINIMAX_BASE_URL, OPENROUTER_API_KEY, OPENAI_API_KEY;
 var init_env = __esm(() => {
-  loadEnvFile(join(process.cwd(), ".env"));
-  loadEnvFile(join(homedir(), ".nole-code", ".env"));
-  loadEnvFile(join(homedir(), "nole-code", ".env"));
+  loadEnvFile(join2(process.cwd(), ".env"));
+  loadEnvFile(join2(homedir2(), ".nole-code", ".env"));
+  loadEnvFile(join2(homedir2(), "nole-code", ".env"));
   MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || "";
   MINIMAX_BASE_URL = process.env.MINIMAX_BASE_URL || "https://api.minimax.chat/v1";
   OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
@@ -147,6 +445,11 @@ var init_env = __esm(() => {
 });
 
 // src/api/llm.ts
+var exports_llm = {};
+__export(exports_llm, {
+  llm: () => llm,
+  LLMClient: () => LLMClient
+});
 function parseApiError(raw) {
   try {
     const data = JSON.parse(raw);
@@ -16242,22 +16545,22 @@ var init_streamableHttp = __esm(() => {
 });
 
 // src/mcp/client.ts
-import { readFileSync as readFileSync2, existsSync as existsSync2 } from "fs";
-import { join as join2 } from "path";
-import { homedir as homedir2 } from "os";
+import { readFileSync as readFileSync3, existsSync as existsSync3 } from "fs";
+import { join as join3 } from "path";
+import { homedir as homedir3 } from "os";
 
 class MCPClientManager {
   servers = new Map;
   configPath;
   constructor() {
-    this.configPath = join2(homedir2(), ".nole-code", "mcp.json");
+    this.configPath = join3(homedir3(), ".nole-code", "mcp.json");
   }
   loadConfigs() {
-    if (!existsSync2(this.configPath)) {
+    if (!existsSync3(this.configPath)) {
       return this.getDefaultServers();
     }
     try {
-      const data = JSON.parse(readFileSync2(this.configPath, "utf-8"));
+      const data = JSON.parse(readFileSync3(this.configPath, "utf-8"));
       if (Array.isArray(data))
         return data;
       return data.servers || this.getDefaultServers();
@@ -16522,9 +16825,9 @@ __export(exports_spawner, {
 import { spawn as spawn2, execSync } from "child_process";
 import { EventEmitter } from "events";
 import { randomUUID } from "crypto";
-import { join as join3 } from "path";
-import { writeFileSync, mkdirSync, existsSync as existsSync3 } from "fs";
-import { homedir as homedir3 } from "os";
+import { join as join4 } from "path";
+import { writeFileSync as writeFileSync2, mkdirSync as mkdirSync2, existsSync as existsSync4 } from "fs";
+import { homedir as homedir4 } from "os";
 function getAgent(id) {
   return agents.get(id);
 }
@@ -16578,9 +16881,9 @@ async function spawnAgent(options) {
     cwd: actualCwd,
     apiKey: MINIMAX_API_KEY
   });
-  const scriptPath = join3(homedir3(), ".nole-code", "agents", `${id}.js`);
-  mkdirSync(join3(homedir3(), ".nole-code", "agents"), { recursive: true });
-  writeFileSync(scriptPath, agentScript, "utf-8");
+  const scriptPath = join4(homedir4(), ".nole-code", "agents", `${id}.js`);
+  mkdirSync2(join4(homedir4(), ".nole-code", "agents"), { recursive: true });
+  writeFileSync2(scriptPath, agentScript, "utf-8");
   const proc = spawn2("node", [scriptPath], {
     cwd: actualCwd,
     stdio: ["pipe", "pipe", "pipe"],
@@ -16735,13 +17038,13 @@ run().catch(e => {
 `;
 }
 async function createWorktree(repoPath, slug) {
-  const worktreeDir = join3(homedir3(), ".nole-code", "worktrees", slug);
+  const worktreeDir = join4(homedir4(), ".nole-code", "worktrees", slug);
   try {
-    const gitDir = join3(repoPath, ".git");
-    if (!existsSync3(gitDir)) {
+    const gitDir = join4(repoPath, ".git");
+    if (!existsSync4(gitDir)) {
       return repoPath;
     }
-    mkdirSync(worktreeDir, { recursive: true });
+    mkdirSync2(worktreeDir, { recursive: true });
     execSync(`git worktree add "${worktreeDir}" --checkout`, {
       cwd: repoPath,
       stdio: "ignore"
@@ -16752,7 +17055,7 @@ async function createWorktree(repoPath, slug) {
   }
 }
 async function removeWorktree(slug) {
-  const worktreeDir = join3(homedir3(), ".nole-code", "worktrees", slug);
+  const worktreeDir = join4(homedir4(), ".nole-code", "worktrees", slug);
   try {
     execSync(`git worktree remove "${worktreeDir}" --force`, {
       stdio: "ignore"
@@ -17090,14 +17393,14 @@ __export(exports_audit, {
   logToolCall: () => logToolCall,
   getAuditLog: () => getAuditLog
 });
-import { appendFileSync, mkdirSync as mkdirSync2, existsSync as existsSync4, readFileSync as readFileSync4 } from "fs";
-import { join as join5, dirname as dirname3 } from "path";
-import { homedir as homedir4 } from "os";
+import { appendFileSync, mkdirSync as mkdirSync3, existsSync as existsSync5, readFileSync as readFileSync5 } from "fs";
+import { join as join6, dirname as dirname3 } from "path";
+import { homedir as homedir5 } from "os";
 function logToolCall(entry) {
   try {
     const dir = dirname3(AUDIT_FILE);
-    if (!existsSync4(dir))
-      mkdirSync2(dir, { recursive: true });
+    if (!existsSync5(dir))
+      mkdirSync3(dir, { recursive: true });
     const safeInput = {};
     for (const [k, v] of Object.entries(entry.input)) {
       const str = String(v);
@@ -17117,10 +17420,10 @@ function logToolCall(entry) {
   } catch {}
 }
 function getAuditLog(limit = 50, sessionId) {
-  if (!existsSync4(AUDIT_FILE))
+  if (!existsSync5(AUDIT_FILE))
     return [];
   try {
-    const lines = readFileSync4(AUDIT_FILE, "utf-8").trim().split(`
+    const lines = readFileSync5(AUDIT_FILE, "utf-8").trim().split(`
 `).filter(Boolean);
     const entries = lines.slice(-limit * 2).map((line) => {
       try {
@@ -17146,22 +17449,22 @@ function getAuditLog(limit = 50, sessionId) {
 }
 var AUDIT_FILE;
 var init_audit = __esm(() => {
-  AUDIT_FILE = join5(homedir4(), ".nole-code", "audit.jsonl");
+  AUDIT_FILE = join6(homedir5(), ".nole-code", "audit.jsonl");
 });
 
 // src/hooks/index.ts
-import { existsSync as existsSync5, readFileSync as readFileSync5 } from "fs";
-import { join as join6 } from "path";
-import { homedir as homedir5 } from "os";
+import { existsSync as existsSync6, readFileSync as readFileSync6 } from "fs";
+import { join as join7 } from "path";
+import { homedir as homedir6 } from "os";
 function loadHooks() {
   if (cachedHooks)
     return cachedHooks;
-  if (!existsSync5(HOOKS_FILE)) {
+  if (!existsSync6(HOOKS_FILE)) {
     cachedHooks = { pre: [], post: [] };
     return cachedHooks;
   }
   try {
-    const data = JSON.parse(readFileSync5(HOOKS_FILE, "utf-8"));
+    const data = JSON.parse(readFileSync6(HOOKS_FILE, "utf-8"));
     cachedHooks = {
       pre: Array.isArray(data.pre) ? data.pre : [],
       post: Array.isArray(data.post) ? data.post : []
@@ -17204,7 +17507,7 @@ async function runHooks(hooks, context) {
 }
 var HOOKS_FILE, cachedHooks = null;
 var init_hooks = __esm(() => {
-  HOOKS_FILE = join6(homedir5(), ".nole-code", "hooks.json");
+  HOOKS_FILE = join7(homedir6(), ".nole-code", "hooks.json");
 });
 
 // src/permissions/rules-engine.ts
@@ -17221,17 +17524,17 @@ __export(exports_rules_engine, {
   checkPermission: () => checkPermission,
   addRule: () => addRule
 });
-import { existsSync as existsSync6, readFileSync as readFileSync6, writeFileSync as writeFileSync2 } from "fs";
-import { homedir as homedir6 } from "node:os";
-import { join as join7 } from "node:path";
+import { existsSync as existsSync7, readFileSync as readFileSync7, writeFileSync as writeFileSync3 } from "fs";
+import { homedir as homedir7 } from "node:os";
+import { join as join8 } from "node:path";
 function loadPermissions() {
-  if (!existsSync6(PERMISSIONS_FILE)) {
+  if (!existsSync7(PERMISSIONS_FILE)) {
     permissionRules = [...DEFAULT_RULES];
     savePermissions();
     return;
   }
   try {
-    const data = JSON.parse(readFileSync6(PERMISSIONS_FILE, "utf-8"));
+    const data = JSON.parse(readFileSync7(PERMISSIONS_FILE, "utf-8"));
     permissionRules = data.rules || [...DEFAULT_RULES];
     currentMode = data.mode || "default";
   } catch {
@@ -17244,7 +17547,7 @@ function savePermissions() {
     mode: currentMode,
     updated: new Date().toISOString()
   };
-  writeFileSync2(PERMISSIONS_FILE, JSON.stringify(data, null, 2), "utf-8");
+  writeFileSync3(PERMISSIONS_FILE, JSON.stringify(data, null, 2), "utf-8");
 }
 function setPermissionMode(mode) {
   currentMode = mode;
@@ -17334,8 +17637,8 @@ function formatPermission(toolName, input, result, reason) {
 var PERMISSIONS_DIR, PERMISSIONS_FILE, DEFAULT_RULES, permissionRules, currentMode = "default";
 var init_rules_engine = __esm(() => {
   init_feature_flags();
-  PERMISSIONS_DIR = join7(homedir6(), ".nole-code");
-  PERMISSIONS_FILE = join7(PERMISSIONS_DIR, "permissions.json");
+  PERMISSIONS_DIR = join8(homedir7(), ".nole-code");
+  PERMISSIONS_FILE = join8(PERMISSIONS_DIR, "permissions.json");
   DEFAULT_RULES = [
     { pattern: "Bash(ls *)", action: "allow", reason: "Listing directories is safe" },
     { pattern: "Bash(cat *)", action: "allow", reason: "Reading files is safe" },
@@ -17371,9 +17674,9 @@ var init_rules_engine = __esm(() => {
 // src/tools/registry.ts
 import { exec } from "child_process";
 import { promisify } from "util";
-import { readFileSync as readFileSync7, writeFileSync as writeFileSync3, existsSync as existsSync7, mkdirSync as mkdirSync3, readdirSync, statSync } from "fs";
-import { join as join8, relative as relative2, resolve as resolve3 } from "path";
-import { homedir as homedir7 } from "os";
+import { readFileSync as readFileSync8, writeFileSync as writeFileSync4, existsSync as existsSync8, mkdirSync as mkdirSync4, readdirSync as readdirSync2, statSync } from "fs";
+import { join as join9, relative as relative2, resolve as resolve3 } from "path";
+import { homedir as homedir8 } from "os";
 async function promptPermission(toolName, input, reason) {
   if (!process.stdin.isTTY) {
     process.stderr.write(`\x1B[33m⚠ Auto-allowed (non-interactive): ${toolName}\x1B[0m
@@ -17548,19 +17851,19 @@ ${stderrClean}`;
 }
 function loadTasks() {
   try {
-    if (existsSync7(TASKS_FILE)) {
-      const data = JSON.parse(readFileSync7(TASKS_FILE, "utf-8"));
+    if (existsSync8(TASKS_FILE)) {
+      const data = JSON.parse(readFileSync8(TASKS_FILE, "utf-8"));
       return new Map(Object.entries(data));
     }
   } catch {}
   return new Map;
 }
 function saveTasks(tasks) {
-  const dir = join8(TASKS_FILE, "..");
-  if (!existsSync7(dir))
-    mkdirSync3(dir, { recursive: true });
+  const dir = join9(TASKS_FILE, "..");
+  if (!existsSync8(dir))
+    mkdirSync4(dir, { recursive: true });
   const obj = Object.fromEntries(tasks);
-  writeFileSync3(TASKS_FILE, JSON.stringify(obj, null, 2));
+  writeFileSync4(TASKS_FILE, JSON.stringify(obj, null, 2));
 }
 function formatSize(bytes) {
   if (bytes < 1024)
@@ -17653,13 +17956,13 @@ var init_registry = __esm(() => {
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
-      if (!existsSync7(path))
+      if (!existsSync8(path))
         return `File not found: ${path}`;
       const ext = path.split(".").pop()?.toLowerCase() || "";
       const imageExts = ["png", "jpg", "jpeg", "gif", "webp", "svg", "ico", "bmp"];
       if (imageExts.includes(ext)) {
         try {
-          const buf = readFileSync7(path);
+          const buf = readFileSync8(path);
           const size = statSync(path).size;
           const base642 = buf.toString("base64").slice(0, 1000);
           return `[Image: ${ext.toUpperCase()}, ${formatSize(size)}]
@@ -17684,7 +17987,7 @@ ${pdfText}`;
         return `[Binary file: ${ext.toUpperCase()}, ${formatSize(size)}] — cannot display contents`;
       }
       try {
-        const raw = readFileSync7(path, "utf-8");
+        const raw = readFileSync8(path, "utf-8");
         const allLines = raw.split(`
 `);
         const offset = input.offset || 1;
@@ -17731,10 +18034,10 @@ ${content}`;
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
       try {
-        const dir = join8(path, "..");
-        if (!existsSync7(dir))
-          mkdirSync3(dir, { recursive: true });
-        writeFileSync3(path, input.content, "utf-8");
+        const dir = join9(path, "..");
+        if (!existsSync8(dir))
+          mkdirSync4(dir, { recursive: true });
+        writeFileSync4(path, input.content, "utf-8");
         return `Written ${input.content.length} chars to ${path}`;
       } catch (err) {
         return `Error writing ${path}: ${err}`;
@@ -17758,10 +18061,10 @@ ${content}`;
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
-      if (!existsSync7(path))
+      if (!existsSync8(path))
         return `File not found: ${path}`;
       try {
-        let content = readFileSync7(path, "utf-8");
+        let content = readFileSync8(path, "utf-8");
         const oldText = input.old_text;
         const newText = input.new_text;
         if (!content.includes(oldText)) {
@@ -17779,7 +18082,7 @@ ${content}`;
               if (endIdx >= 0) {
                 const actualOld = content.slice(lineIdx, endIdx + lastLine.length);
                 content = content.replace(actualOld, newText);
-                writeFileSync3(path, content, "utf-8");
+                writeFileSync4(path, content, "utf-8");
                 const relPath2 = relative2(process.cwd(), path) || path;
                 const diffLines2 = [`${relPath2} (fuzzy match — whitespace differences):`];
                 for (const l of actualOld.split(`
@@ -17810,7 +18113,7 @@ Tip: Use Read to check the exact content first.`;
           return hint;
         }
         content = content.replace(oldText, newText);
-        writeFileSync3(path, content, "utf-8");
+        writeFileSync4(path, content, "utf-8");
         const relPath = relative2(process.cwd(), path) || path;
         const oldLines = oldText.split(`
 `);
@@ -17821,7 +18124,7 @@ Tip: Use Read to check the exact content first.`;
           diffLines.push(`\x1B[31m- ${line}\x1B[0m`);
         for (const line of newLines)
           diffLines.push(`\x1B[32m+ ${line}\x1B[0m`);
-        const verify = readFileSync7(path, "utf-8");
+        const verify = readFileSync8(path, "utf-8");
         if (!verify.includes(newText)) {
           diffLines.push(`\x1B[31m⚠ VERIFICATION FAILED: new text not found after edit\x1B[0m`);
         }
@@ -17849,7 +18152,7 @@ Tip: Use Read to check the exact content first.`;
       const parts = pattern.split("/");
       const filePattern = parts[parts.length - 1] || "*";
       const dirParts = parts.slice(0, -1).filter((p) => p !== "**" && p !== "*");
-      const searchDir = dirParts.length > 0 ? join8(cwd, ...dirParts) : cwd;
+      const searchDir = dirParts.length > 0 ? join9(cwd, ...dirParts) : cwd;
       const isRecursive = pattern.includes("**");
       let cmd;
       if (isRecursive) {
@@ -17947,7 +18250,7 @@ Tip: Use Read to check the exact content first.`;
 `);
     }
   });
-  TASKS_FILE = join8(homedir7(), ".nole-code", "tasks.json");
+  TASKS_FILE = join9(homedir8(), ".nole-code", "tasks.json");
   registerTool({
     name: "TaskCreate",
     description: "Create a new background task and get a task ID.",
@@ -18167,17 +18470,17 @@ Manage with /team list or /team send`;
     },
     execute: async (input, _ctx) => {
       const path = resolve3(process.cwd(), input.path);
-      if (!existsSync7(path))
+      if (!existsSync8(path))
         return `Notebook not found: ${path}`;
       try {
-        const nb = JSON.parse(readFileSync7(path, "utf-8"));
+        const nb = JSON.parse(readFileSync8(path, "utf-8"));
         const idx = input.cell_index;
         if (!nb.cells || !nb.cells[idx])
           return `Cell ${idx} not found`;
         nb.cells[idx].source = input.new_text;
         if (input.cell_type)
           nb.cells[idx].cell_type = input.cell_type;
-        writeFileSync3(path, JSON.stringify(nb, null, 2));
+        writeFileSync4(path, JSON.stringify(nb, null, 2));
         return `Edited cell ${idx} in ${path}`;
       } catch (err) {
         return `Error: ${err}`;
@@ -18261,10 +18564,10 @@ Manage with /team list or /team send`;
     },
     execute: async (input, _ctx) => {
       const dir = resolve3(process.cwd(), input.path || ".");
-      if (!existsSync7(dir))
+      if (!existsSync8(dir))
         return `Directory not found: ${dir}`;
       try {
-        const entries = readdirSync(dir);
+        const entries = readdirSync2(dir);
         const showHidden = input.all;
         const longFormat = input.long !== false;
         const filtered = showHidden ? entries : entries.filter((e) => !e.startsWith("."));
@@ -18275,7 +18578,7 @@ Manage with /team list or /team send`;
 `);
         const lines = filtered.map((name) => {
           try {
-            const fullPath = join8(dir, name);
+            const fullPath = join9(dir, name);
             const stat = statSync(fullPath);
             const isDir = stat.isDirectory();
             const size = isDir ? "-" : formatSize(stat.size);
@@ -18316,16 +18619,16 @@ Manage with /team list or /team send`;
         if (depth > maxDepth)
           return;
         try {
-          const entries = readdirSync(dir).filter((e) => !e.startsWith(".") && e !== "node_modules" && e !== ".git").sort((a, b) => {
-            const aIsDir = statSync(join8(dir, a)).isDirectory();
-            const bIsDir = statSync(join8(dir, b)).isDirectory();
+          const entries = readdirSync2(dir).filter((e) => !e.startsWith(".") && e !== "node_modules" && e !== ".git").sort((a, b) => {
+            const aIsDir = statSync(join9(dir, a)).isDirectory();
+            const bIsDir = statSync(join9(dir, b)).isDirectory();
             if (aIsDir !== bIsDir)
               return aIsDir ? -1 : 1;
             return a.localeCompare(b);
           });
           for (let i = 0;i < entries.length; i++) {
             const name = entries[i];
-            const fullPath = join8(dir, name);
+            const fullPath = join9(dir, name);
             const isLast = i === entries.length - 1;
             const connector = isLast ? "└── " : "├── ";
             const childPrefix = isLast ? "    " : "│   ";
@@ -18381,10 +18684,10 @@ ${dirCount} directories, ${fileCount} files`);
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
-      if (!existsSync7(filePath))
+      if (!existsSync8(filePath))
         return `File not found: ${filePath}`;
       const edits = input.edits;
-      let content = readFileSync7(filePath, "utf-8");
+      let content = readFileSync8(filePath, "utf-8");
       const diffs = [];
       let applied = 0;
       for (const edit of edits) {
@@ -18404,8 +18707,8 @@ ${dirCount} directories, ${fileCount} files`);
           diffs.push(`\x1B[32m+ ${l}\x1B[0m`);
         diffs.push("");
       }
-      writeFileSync3(filePath, content, "utf-8");
-      const verify = readFileSync7(filePath, "utf-8");
+      writeFileSync4(filePath, content, "utf-8");
+      const verify = readFileSync8(filePath, "utf-8");
       let verified = 0;
       for (const edit of edits) {
         if (verify.includes(edit.new_text))
@@ -18505,7 +18808,7 @@ ${responseBody}`;
       let totalMatches = 0;
       for (const file of files) {
         try {
-          const content = readFileSync7(file, "utf-8");
+          const content = readFileSync8(file, "utf-8");
           const regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g");
           const matches = content.match(regex);
           if (matches && matches.length > 0) {
@@ -18513,7 +18816,7 @@ ${responseBody}`;
             const relPath = relative2(process.cwd(), file);
             if (!dryRun) {
               const newContent = content.split(pattern).join(replacement);
-              writeFileSync3(file, newContent, "utf-8");
+              writeFileSync4(file, newContent, "utf-8");
             }
             changes.push(`  ${relPath}: ${matches.length} match${matches.length > 1 ? "es" : ""}`);
           }
@@ -18656,26 +18959,26 @@ ${staged.trim()}`;
       let cmd = input.command;
       if (!cmd) {
         const cwd = process.cwd();
-        if (existsSync7(join8(cwd, "package.json"))) {
-          const pkg = JSON.parse(readFileSync7(join8(cwd, "package.json"), "utf-8"));
+        if (existsSync8(join9(cwd, "package.json"))) {
+          const pkg = JSON.parse(readFileSync8(join9(cwd, "package.json"), "utf-8"));
           const scripts = pkg.scripts || {};
           if (scripts.test) {
             cmd = "npm test";
-          } else if (existsSync7(join8(cwd, "vitest.config.ts")) || existsSync7(join8(cwd, "vitest.config.js"))) {
+          } else if (existsSync8(join9(cwd, "vitest.config.ts")) || existsSync8(join9(cwd, "vitest.config.js"))) {
             cmd = "npx vitest run";
-          } else if (existsSync7(join8(cwd, "jest.config.ts")) || existsSync7(join8(cwd, "jest.config.js"))) {
+          } else if (existsSync8(join9(cwd, "jest.config.ts")) || existsSync8(join9(cwd, "jest.config.js"))) {
             cmd = "npx jest";
-          } else if (existsSync7(join8(cwd, "bun.lock")) || existsSync7(join8(cwd, "bunfig.toml"))) {
+          } else if (existsSync8(join9(cwd, "bun.lock")) || existsSync8(join9(cwd, "bunfig.toml"))) {
             cmd = "bun test";
           }
         }
-        if (existsSync7(join8(process.cwd(), "pytest.ini")) || existsSync7(join8(process.cwd(), "pyproject.toml"))) {
+        if (existsSync8(join9(process.cwd(), "pytest.ini")) || existsSync8(join9(process.cwd(), "pyproject.toml"))) {
           cmd = cmd || "python -m pytest -v";
         }
-        if (existsSync7(join8(process.cwd(), "Cargo.toml"))) {
+        if (existsSync8(join9(process.cwd(), "Cargo.toml"))) {
           cmd = cmd || "cargo test";
         }
-        if (existsSync7(join8(process.cwd(), "go.mod"))) {
+        if (existsSync8(join9(process.cwd(), "go.mod"))) {
           cmd = cmd || "go test ./...";
         }
         cmd = cmd || 'echo "No test framework detected. Use command parameter to specify."';
@@ -18743,9 +19046,9 @@ ${output.slice(0, 500) || "(no output yet)"}`;
     execute: async (input, _ctx) => {
       const f1 = resolve3(process.cwd(), input.file1);
       const f2 = resolve3(process.cwd(), input.file2);
-      if (!existsSync7(f1))
+      if (!existsSync8(f1))
         return `File not found: ${f1}`;
-      if (!existsSync7(f2))
+      if (!existsSync8(f2))
         return `File not found: ${f2}`;
       const result = await runBash(`diff --color=never -u "${f1}" "${f2}" 2>/dev/null`);
       if (!result.trim())
@@ -18778,13 +19081,13 @@ ${output.slice(0, 500) || "(no output yet)"}`;
     execute: async (input, _ctx) => {
       const from = resolve3(process.cwd(), input.from);
       const to = resolve3(process.cwd(), input.to);
-      if (!existsSync7(from))
+      if (!existsSync8(from))
         return `Not found: ${from}`;
-      if (existsSync7(to))
+      if (existsSync8(to))
         return `Target already exists: ${to}`;
-      const { renameSync } = __require("fs");
+      const { renameSync: renameSync2 } = __require("fs");
       try {
-        renameSync(from, to);
+        renameSync2(from, to);
         return `Renamed: ${relative2(process.cwd(), from)} → ${relative2(process.cwd(), to)}`;
       } catch (err) {
         return `Error: ${err}`;
@@ -18807,7 +19110,7 @@ ${output.slice(0, 500) || "(no output yet)"}`;
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
-      if (!existsSync7(targetPath))
+      if (!existsSync8(targetPath))
         return `Not found: ${targetPath}`;
       try {
         const stat = statSync(targetPath);
@@ -18817,8 +19120,8 @@ ${output.slice(0, 500) || "(no output yet)"}`;
           const { rmSync } = __require("fs");
           rmSync(targetPath, { recursive: true });
         } else {
-          const { unlinkSync } = __require("fs");
-          unlinkSync(targetPath);
+          const { unlinkSync: unlinkSync2 } = __require("fs");
+          unlinkSync2(targetPath);
         }
         return `Deleted: ${relative2(process.cwd(), targetPath)}`;
       } catch (err) {
@@ -18826,177 +19129,6 @@ ${output.slice(0, 500) || "(no output yet)"}`;
       }
     }
   });
-});
-
-// src/session/manager.ts
-var exports_manager = {};
-__export(exports_manager, {
-  saveSession: () => saveSession,
-  loadSession: () => loadSession,
-  listSessions: () => listSessions,
-  getSessionMeta: () => getSessionMeta,
-  forkSession: () => forkSession,
-  exportSession: () => exportSession,
-  deleteSession: () => deleteSession,
-  createSession: () => createSession,
-  compactSession: () => compactSession
-});
-import {
-  existsSync as existsSync8,
-  mkdirSync as mkdirSync4,
-  readFileSync as readFileSync8,
-  writeFileSync as writeFileSync4,
-  readdirSync as readdirSync2,
-  unlinkSync,
-  renameSync
-} from "fs";
-import { join as join9 } from "path";
-import { homedir as homedir8 } from "os";
-function ensureSessionDir() {
-  mkdirSync4(SESSION_DIR, { recursive: true });
-}
-function listSessions(limit = 20) {
-  ensureSessionDir();
-  const files = readdirSync2(SESSION_DIR).filter((f) => f.endsWith(".json"));
-  const sessions = files.map((f) => {
-    try {
-      return JSON.parse(readFileSync8(join9(SESSION_DIR, f), "utf-8"));
-    } catch {
-      return null;
-    }
-  }).filter(Boolean).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  return sessions.slice(0, limit);
-}
-function loadSession(id) {
-  const file = join9(SESSION_DIR, `${id}.json`);
-  if (!existsSync8(file))
-    return null;
-  try {
-    return JSON.parse(readFileSync8(file, "utf-8"));
-  } catch {
-    return null;
-  }
-}
-function saveSession(session) {
-  ensureSessionDir();
-  session.updatedAt = new Date().toISOString();
-  const file = join9(SESSION_DIR, `${session.id}.json`);
-  const tmp = file + `.tmp.${Date.now()}`;
-  writeFileSync4(tmp, JSON.stringify(session, null, 2), "utf-8");
-  renameSync(tmp, file);
-}
-function deleteSession(id) {
-  const file = join9(SESSION_DIR, `${id}.json`);
-  if (existsSync8(file)) {
-    unlinkSync(file);
-    return true;
-  }
-  return false;
-}
-function createSession(cwdOrOpts) {
-  const opts = typeof cwdOrOpts === "string" ? { cwd: cwdOrOpts } : cwdOrOpts || {};
-  const id = `nole-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-  const now = new Date().toISOString();
-  const session = {
-    id,
-    messages: [],
-    createdAt: now,
-    updatedAt: now,
-    cwd: opts.cwd || process.cwd(),
-    model: opts.model || "MiniMax-Text-01"
-  };
-  if (opts.parentId) {
-    session.parentId = opts.parentId;
-  }
-  saveSession(session);
-  return session;
-}
-function forkSession(parentId, reason) {
-  const parent = loadSession(parentId);
-  if (!parent)
-    return null;
-  const forked = createSession({
-    parentId,
-    cwd: parent.cwd,
-    model: parent.model
-  });
-  forked.messages = [...parent.messages];
-  forked.messages.push({
-    role: "system",
-    content: `Session forked from ${parentId}${reason ? `: ${reason}` : ""}`,
-    timestamp: new Date().toISOString()
-  });
-  saveSession(forked);
-  return forked;
-}
-function compactSession(id, keepMessages = 10) {
-  const session = loadSession(id);
-  if (!session)
-    return null;
-  const toolIndices = [];
-  for (let i = 0;i < session.messages.length; i++) {
-    if (session.messages[i].role === "tool")
-      toolIndices.push(i);
-  }
-  const indicesToRemove = new Set(toolIndices.slice(0, Math.max(0, toolIndices.length - keepMessages)));
-  const removedCount = indicesToRemove.size;
-  if (removedCount === 0) {
-    return session;
-  }
-  const newMessages = [];
-  let addedSummary = false;
-  for (let i = 0;i < session.messages.length; i++) {
-    if (indicesToRemove.has(i)) {
-      if (!addedSummary) {
-        addedSummary = true;
-        newMessages.push({
-          role: "system",
-          content: `[${removedCount} older tool results omitted during compaction]`,
-          timestamp: new Date().toISOString()
-        });
-      }
-    } else {
-      newMessages.push(session.messages[i]);
-    }
-  }
-  session.messages = newMessages;
-  saveSession(session);
-  return session;
-}
-function getSessionMeta(id) {
-  const session = loadSession(id);
-  if (!session)
-    return null;
-  const created = new Date(session.createdAt);
-  const now = new Date;
-  const ageMs = now.getTime() - created.getTime();
-  const ageHours = Math.round(ageMs / (1000 * 60 * 60));
-  return {
-    messageCount: session.messages.length,
-    createdAt: created.toLocaleString(),
-    age: `${ageHours}h ago`,
-    parentId: session.parentId
-  };
-}
-function exportSession(id) {
-  const session = loadSession(id);
-  if (!session)
-    return null;
-  const lines = [`# Nole Code Session - ${session.id}`, `Created: ${session.createdAt}`, ""];
-  for (const msg of session.messages) {
-    if (msg.role === "system")
-      continue;
-    const label = msg.role === "user" ? "➜ you" : msg.role === "nole" ? "\uD83E\uDD16 nole" : "\uD83D\uDD27 tool";
-    lines.push(`**${label}**`);
-    lines.push(msg.content.slice(0, 2000));
-    lines.push("");
-  }
-  return lines.join(`
-`);
-}
-var SESSION_DIR;
-var init_manager = __esm(() => {
-  SESSION_DIR = join9(homedir8(), ".nole-code", "sessions");
 });
 
 // src/project/onboarding.ts
@@ -19224,10 +19356,241 @@ var init_onboarding = __esm(() => {
   SETTINGS_FILE = join10(CONFIG_DIR, "settings.json");
 });
 
+// src/ui/output/styles.ts
+function bold(text) {
+  return `${ESC}1m${text}${ESC}0m`;
+}
+function dim(text) {
+  return `${ESC}2m${text}${ESC}0m`;
+}
+function italic(text) {
+  return `${ESC}3m${text}${ESC}0m`;
+}
+function underline(text) {
+  return `${ESC}4m${text}${ESC}0m`;
+}
+function divider(char = "─", length = 80) {
+  return `${ESC}2m${char.repeat(length)}${ESC}0m`;
+}
+function tokenBudgetDisplay(used, max) {
+  const percent = Math.round(used / max * 100);
+  const barLength = 20;
+  const filled = Math.round(used / max * barLength);
+  const bar = "█".repeat(filled) + "░".repeat(barLength - filled);
+  const color = percent > 80 ? "91" : percent > 60 ? "93" : "92";
+  return `${c.dim("[")}${ESC}${color}m${bar}${ESC}0m${c.dim(`] ${used}/${max} tokens (${percent}%)`)}`;
+}
+var ESC = "\x1B[", c;
+var init_styles = __esm(() => {
+  c = {
+    black: (text) => `${ESC}30m${text}${ESC}0m`,
+    red: (text) => `${ESC}31m${text}${ESC}0m`,
+    green: (text) => `${ESC}32m${text}${ESC}0m`,
+    yellow: (text) => `${ESC}33m${text}${ESC}0m`,
+    blue: (text) => `${ESC}34m${text}${ESC}0m`,
+    magenta: (text) => `${ESC}35m${text}${ESC}0m`,
+    cyan: (text) => `${ESC}36m${text}${ESC}0m`,
+    white: (text) => `${ESC}37m${text}${ESC}0m`,
+    gray: (text) => `${ESC}90m${text}${ESC}0m`,
+    brightRed: (text) => `${ESC}91m${text}${ESC}0m`,
+    brightGreen: (text) => `${ESC}92m${text}${ESC}0m`,
+    brightYellow: (text) => `${ESC}93m${text}${ESC}0m`,
+    brightBlue: (text) => `${ESC}94m${text}${ESC}0m`,
+    brightMagenta: (text) => `${ESC}95m${text}${ESC}0m`,
+    brightCyan: (text) => `${ESC}96m${text}${ESC}0m`,
+    primary: (text) => `${ESC}96m${text}${ESC}0m`,
+    secondary: (text) => `${ESC}33m${text}${ESC}0m`,
+    success: (text) => `${ESC}92m${text}${ESC}0m`,
+    error: (text) => `${ESC}91m${text}${ESC}0m`,
+    warning: (text) => `${ESC}93m${text}${ESC}0m`,
+    info: (text) => `${ESC}94m${text}${ESC}0m`,
+    user: (text) => `${ESC}94m${text}${ESC}0m`,
+    assistant: (text) => `${ESC}95m${text}${ESC}0m`,
+    tool: (text) => `${ESC}93m${text}${ESC}0m`,
+    system: (text) => `${ESC}90m${text}${ESC}0m`,
+    bold,
+    dim,
+    italic,
+    underline,
+    reset: () => `${ESC}0m`
+  };
+});
+
+// src/session/manager.ts
+var exports_manager = {};
+__export(exports_manager, {
+  saveSession: () => saveSession,
+  loadSession: () => loadSession,
+  listSessions: () => listSessions,
+  getSessionMeta: () => getSessionMeta,
+  forkSession: () => forkSession,
+  exportSession: () => exportSession,
+  deleteSession: () => deleteSession,
+  createSession: () => createSession,
+  compactSession: () => compactSession
+});
+import {
+  existsSync as existsSync10,
+  mkdirSync as mkdirSync6,
+  readFileSync as readFileSync10,
+  writeFileSync as writeFileSync6,
+  readdirSync as readdirSync3,
+  unlinkSync as unlinkSync2,
+  renameSync as renameSync2
+} from "fs";
+import { join as join11 } from "path";
+import { homedir as homedir10 } from "os";
+function ensureSessionDir() {
+  mkdirSync6(SESSION_DIR, { recursive: true });
+}
+function listSessions(limit = 20) {
+  ensureSessionDir();
+  const files = readdirSync3(SESSION_DIR).filter((f) => f.endsWith(".json"));
+  const sessions = files.map((f) => {
+    try {
+      return JSON.parse(readFileSync10(join11(SESSION_DIR, f), "utf-8"));
+    } catch {
+      return null;
+    }
+  }).filter(Boolean).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  return sessions.slice(0, limit);
+}
+function loadSession(id) {
+  const file = join11(SESSION_DIR, `${id}.json`);
+  if (!existsSync10(file))
+    return null;
+  try {
+    return JSON.parse(readFileSync10(file, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+function saveSession(session) {
+  ensureSessionDir();
+  session.updatedAt = new Date().toISOString();
+  const file = join11(SESSION_DIR, `${session.id}.json`);
+  const tmp = file + `.tmp.${Date.now()}`;
+  writeFileSync6(tmp, JSON.stringify(session, null, 2), "utf-8");
+  renameSync2(tmp, file);
+}
+function deleteSession(id) {
+  const file = join11(SESSION_DIR, `${id}.json`);
+  if (existsSync10(file)) {
+    unlinkSync2(file);
+    return true;
+  }
+  return false;
+}
+function createSession(cwdOrOpts) {
+  const opts = typeof cwdOrOpts === "string" ? { cwd: cwdOrOpts } : cwdOrOpts || {};
+  const id = `nole-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const now = new Date().toISOString();
+  const session = {
+    id,
+    messages: [],
+    createdAt: now,
+    updatedAt: now,
+    cwd: opts.cwd || process.cwd(),
+    model: opts.model || "MiniMax-Text-01"
+  };
+  if (opts.parentId) {
+    session.parentId = opts.parentId;
+  }
+  saveSession(session);
+  return session;
+}
+function forkSession(parentId, reason) {
+  const parent = loadSession(parentId);
+  if (!parent)
+    return null;
+  const forked = createSession({
+    parentId,
+    cwd: parent.cwd,
+    model: parent.model
+  });
+  forked.messages = [...parent.messages];
+  forked.messages.push({
+    role: "system",
+    content: `Session forked from ${parentId}${reason ? `: ${reason}` : ""}`,
+    timestamp: new Date().toISOString()
+  });
+  saveSession(forked);
+  return forked;
+}
+function compactSession(id, keepMessages = 10) {
+  const session = loadSession(id);
+  if (!session)
+    return null;
+  const toolIndices = [];
+  for (let i = 0;i < session.messages.length; i++) {
+    if (session.messages[i].role === "tool")
+      toolIndices.push(i);
+  }
+  const indicesToRemove = new Set(toolIndices.slice(0, Math.max(0, toolIndices.length - keepMessages)));
+  const removedCount = indicesToRemove.size;
+  if (removedCount === 0) {
+    return session;
+  }
+  const newMessages = [];
+  let addedSummary = false;
+  for (let i = 0;i < session.messages.length; i++) {
+    if (indicesToRemove.has(i)) {
+      if (!addedSummary) {
+        addedSummary = true;
+        newMessages.push({
+          role: "system",
+          content: `[${removedCount} older tool results omitted during compaction]`,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } else {
+      newMessages.push(session.messages[i]);
+    }
+  }
+  session.messages = newMessages;
+  saveSession(session);
+  return session;
+}
+function getSessionMeta(id) {
+  const session = loadSession(id);
+  if (!session)
+    return null;
+  const created = new Date(session.createdAt);
+  const now = new Date;
+  const ageMs = now.getTime() - created.getTime();
+  const ageHours = Math.round(ageMs / (1000 * 60 * 60));
+  return {
+    messageCount: session.messages.length,
+    createdAt: created.toLocaleString(),
+    age: `${ageHours}h ago`,
+    parentId: session.parentId
+  };
+}
+function exportSession(id) {
+  const session = loadSession(id);
+  if (!session)
+    return null;
+  const lines = [`# Nole Code Session - ${session.id}`, `Created: ${session.createdAt}`, ""];
+  for (const msg of session.messages) {
+    if (msg.role === "system")
+      continue;
+    const label = msg.role === "user" ? "➜ you" : msg.role === "nole" ? "\uD83E\uDD16 nole" : "\uD83D\uDD27 tool";
+    lines.push(`**${label}**`);
+    lines.push(msg.content.slice(0, 2000));
+    lines.push("");
+  }
+  return lines.join(`
+`);
+}
+var SESSION_DIR;
+var init_manager = __esm(() => {
+  SESSION_DIR = join11(homedir10(), ".nole-code", "sessions");
+});
+
 // src/plan/index.ts
 var exports_plan = {};
 __export(exports_plan, {
-  skipStep: () => skipStep,
+  skipStep: () => skipStep2,
   promptForPlanAction: () => promptForPlanAction,
   modifyStep: () => modifyStep,
   isPlanModeActive: () => isPlanModeActive,
@@ -19344,7 +19707,7 @@ function denyStep(reason) {
   console.log("Plan aborted.");
   return { denied: true, step, plan: currentPlan };
 }
-function skipStep() {
+function skipStep2() {
   if (!currentPlan || currentPlan.status !== "active") {
     return { skipped: false };
   }
@@ -19569,13 +19932,13 @@ __export(exports_cost, {
   table: () => table,
   spinner: () => spinner,
   costTracker: () => costTracker,
-  c: () => c,
+  c: () => c2,
   box: () => box,
   applyStyle: () => applyStyle
 });
-import { existsSync as existsSync10, readFileSync as readFileSync10, mkdirSync as mkdirSync6, appendFileSync as appendFileSync2 } from "fs";
-import { homedir as homedir10 } from "node:os";
-import { join as join11, dirname as dirname4 } from "node:path";
+import { existsSync as existsSync11, readFileSync as readFileSync11, mkdirSync as mkdirSync7, appendFileSync as appendFileSync2 } from "fs";
+import { homedir as homedir11 } from "node:os";
+import { join as join12, dirname as dirname4 } from "node:path";
 
 class CostTracker {
   sessionCosts = new Map;
@@ -19599,7 +19962,7 @@ class CostTracker {
       cost: this.calculateCost(model, inputTokens, outputTokens),
       requests: 1
     };
-    mkdirSync6(dirname4(COST_FILE), { recursive: true });
+    mkdirSync7(dirname4(COST_FILE), { recursive: true });
     appendFileSync2(COST_FILE, JSON.stringify(entry) + `
 `);
     if (this.currentSession) {
@@ -19626,9 +19989,9 @@ class CostTracker {
       totalOutputTokens: 0,
       byModel: {}
     };
-    if (!existsSync10(COST_FILE))
+    if (!existsSync11(COST_FILE))
       return summary;
-    const lines = readFileSync10(COST_FILE, "utf-8").trim().split(`
+    const lines = readFileSync11(COST_FILE, "utf-8").trim().split(`
 `);
     for (const line of lines) {
       try {
@@ -19666,10 +20029,10 @@ class CostTracker {
     return this.currentSession;
   }
   clearHistory() {
-    const { unlinkSync: unlinkSync2 } = __require("fs");
+    const { unlinkSync: unlinkSync3 } = __require("fs");
     try {
-      if (existsSync10(COST_FILE)) {
-        unlinkSync2(COST_FILE);
+      if (existsSync11(COST_FILE)) {
+        unlinkSync3(COST_FILE);
       }
     } catch {}
   }
@@ -19745,7 +20108,7 @@ function table(headers, rows, options = {}) {
   ].join(`
 `);
 }
-var PRICING, COST_FILE, costTracker, STYLES, c, SPINNER_FRAMES;
+var PRICING, COST_FILE, costTracker, STYLES, c2, SPINNER_FRAMES;
 var init_cost = __esm(() => {
   PRICING = {
     "MiniMax-Text-01": { input: 0.01, output: 0.01 },
@@ -19753,7 +20116,7 @@ var init_cost = __esm(() => {
     "MiniMax-M2.5": { input: 0.005, output: 0.005 },
     default: { input: 0.01, output: 0.01 }
   };
-  COST_FILE = join11(homedir10(), ".nole-code", "costs.jsonl");
+  COST_FILE = join12(homedir11(), ".nole-code", "costs.jsonl");
   costTracker = new CostTracker;
   STYLES = {
     user: { color: "#60A5FA" },
@@ -19765,7 +20128,7 @@ var init_cost = __esm(() => {
     dim: { dim: true },
     bold: { bold: true }
   };
-  c = {
+  c2 = {
     user: (text) => applyStyle(text, "user"),
     nole: (text) => applyStyle(text, "nole"),
     tool: (text) => applyStyle(text, "tool"),
@@ -19788,365 +20151,6 @@ var init_cost = __esm(() => {
     }
   };
   SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-});
-
-// src/loop/checkpoint.ts
-var exports_checkpoint = {};
-__export(exports_checkpoint, {
-  waitForConfirmation: () => waitForConfirmation,
-  startStep: () => startStep,
-  skipStep: () => skipStep2,
-  shouldContinue: () => shouldContinue,
-  setSteps: () => setSteps,
-  saveCheckpoint: () => saveCheckpoint,
-  resumeCheckpoint: () => resumeCheckpoint,
-  pauseCheckpoint: () => pauseCheckpoint,
-  loadLatestCheckpoint: () => loadLatestCheckpoint,
-  loadCheckpoint: () => loadCheckpoint,
-  listCheckpoints: () => listCheckpoints,
-  getProgress: () => getProgress,
-  failStep: () => failStep,
-  deleteCheckpoint: () => deleteCheckpoint,
-  createCheckpoint: () => createCheckpoint,
-  completeStep: () => completeStep,
-  completeCheckpoint: () => completeCheckpoint,
-  buildRetryContext: () => buildRetryContext,
-  addStep: () => addStep,
-  abortCheckpoint: () => abortCheckpoint
-});
-import {
-  existsSync as existsSync11,
-  mkdirSync as mkdirSync7,
-  readFileSync as readFileSync11,
-  writeFileSync as writeFileSync7,
-  readdirSync as readdirSync3,
-  unlinkSync as unlinkSync2,
-  renameSync as renameSync2
-} from "fs";
-import { join as join12 } from "path";
-import { homedir as homedir11 } from "os";
-function ensureCheckpointDir() {
-  mkdirSync7(CHECKPOINT_DIR, { recursive: true });
-}
-function createCheckpoint(goal, cwd, settings) {
-  ensureCheckpointDir();
-  const id = `loop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-  const now = new Date().toISOString();
-  const checkpoint = {
-    id,
-    goal,
-    state: "pending",
-    steps: [],
-    currentStep: 0,
-    context: {
-      cwd,
-      filesCreated: [],
-      filesModified: [],
-      errorsEncountered: []
-    },
-    settings: {
-      maxRetries: settings?.maxRetries ?? 2,
-      confirmMajorPivots: settings?.confirmMajorPivots ?? true,
-      reportEveryNSteps: settings?.reportEveryNSteps ?? 3
-    },
-    createdAt: now,
-    updatedAt: now
-  };
-  saveCheckpoint(checkpoint);
-  return checkpoint;
-}
-function loadCheckpoint(id) {
-  const file = join12(CHECKPOINT_DIR, `${id}.json`);
-  if (!existsSync11(file))
-    return null;
-  try {
-    return JSON.parse(readFileSync11(file, "utf-8"));
-  } catch {
-    return null;
-  }
-}
-function loadLatestCheckpoint() {
-  ensureCheckpointDir();
-  const files = readdirSync3(CHECKPOINT_DIR).filter((f) => f.startsWith("loop-") && f.endsWith(".json"));
-  if (files.length === 0)
-    return null;
-  files.sort((a, b) => b.localeCompare(a));
-  return loadCheckpoint(files[0].replace(".json", ""));
-}
-function saveCheckpoint(checkpoint) {
-  ensureCheckpointDir();
-  checkpoint.updatedAt = new Date().toISOString();
-  const file = join12(CHECKPOINT_DIR, `${checkpoint.id}.json`);
-  const tmp = file + `.tmp.${Date.now()}`;
-  writeFileSync7(tmp, JSON.stringify(checkpoint, null, 2), "utf-8");
-  renameSync2(tmp, file);
-}
-function deleteCheckpoint(id) {
-  const file = join12(CHECKPOINT_DIR, `${id}.json`);
-  if (existsSync11(file)) {
-    unlinkSync2(file);
-    return true;
-  }
-  return false;
-}
-function listCheckpoints(limit = 10) {
-  ensureCheckpointDir();
-  const files = readdirSync3(CHECKPOINT_DIR).filter((f) => f.startsWith("loop-") && f.endsWith(".json"));
-  const checkpoints = files.map((f) => loadCheckpoint(f.replace(".json", ""))).filter(Boolean);
-  checkpoints.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  return checkpoints.slice(0, limit);
-}
-function addStep(checkpoint, description) {
-  const step = {
-    id: checkpoint.steps.length,
-    description,
-    status: "pending",
-    retryCount: 0
-  };
-  checkpoint.steps.push(step);
-  saveCheckpoint(checkpoint);
-  return step;
-}
-function setSteps(checkpoint, steps) {
-  checkpoint.steps = steps.map((description, i) => ({
-    id: i,
-    description,
-    status: "pending",
-    retryCount: 0
-  }));
-  saveCheckpoint(checkpoint);
-}
-function startStep(checkpoint, stepId) {
-  const id = stepId ?? checkpoint.currentStep;
-  const step = checkpoint.steps[id];
-  if (!step)
-    throw new Error(`Step ${id} not found`);
-  step.status = "running";
-  step.startedAt = new Date().toISOString();
-  checkpoint.currentStep = id;
-  checkpoint.state = "running";
-  saveCheckpoint(checkpoint);
-  return step;
-}
-function completeStep(checkpoint, stepId, toolCalls = []) {
-  const step = checkpoint.steps[stepId];
-  if (!step)
-    throw new Error(`Step ${stepId} not found`);
-  step.status = "complete";
-  step.completedAt = new Date().toISOString();
-  step.toolCalls = toolCalls;
-  for (const tc of toolCalls ?? []) {
-    if (tc.name === "Write" || tc.name === "Edit") {
-      const path = tc.input.path;
-      if (path && !checkpoint.context.filesCreated.includes(path)) {
-        checkpoint.context.filesCreated.push(path);
-      }
-    }
-    if (tc.name === "Bash") {
-      const cmd = tc.input.command;
-      if (cmd?.includes("git commit")) {}
-    }
-  }
-  checkpoint.currentStep = stepId + 1;
-  saveCheckpoint(checkpoint);
-  return step;
-}
-function failStep(checkpoint, stepId, error2, toolCalls = []) {
-  const step = checkpoint.steps[stepId];
-  if (!step)
-    throw new Error(`Step ${stepId} not found`);
-  step.status = "failed";
-  step.error = error2;
-  step.completedAt = new Date().toISOString();
-  step.toolCalls = toolCalls;
-  step.retryCount++;
-  checkpoint.context.errorsEncountered.push({
-    step: stepId,
-    error: error2,
-    timestamp: new Date().toISOString()
-  });
-  checkpoint.context.lastToolResult = error2;
-  saveCheckpoint(checkpoint);
-  return step;
-}
-function skipStep2(checkpoint, stepId) {
-  const step = checkpoint.steps[stepId];
-  if (!step)
-    throw new Error(`Step ${stepId} not found`);
-  step.status = "skipped";
-  step.completedAt = new Date().toISOString();
-  checkpoint.currentStep = stepId + 1;
-  saveCheckpoint(checkpoint);
-  return step;
-}
-function pauseCheckpoint(checkpoint) {
-  checkpoint.state = "paused";
-  saveCheckpoint(checkpoint);
-}
-function resumeCheckpoint(checkpoint) {
-  checkpoint.state = "running";
-  saveCheckpoint(checkpoint);
-}
-function waitForConfirmation(checkpoint) {
-  checkpoint.state = "waiting";
-  saveCheckpoint(checkpoint);
-}
-function completeCheckpoint(checkpoint) {
-  checkpoint.state = "complete";
-  checkpoint.completedAt = new Date().toISOString();
-  saveCheckpoint(checkpoint);
-}
-function abortCheckpoint(checkpoint) {
-  checkpoint.state = "aborted";
-  saveCheckpoint(checkpoint);
-}
-function getProgress(checkpoint) {
-  const total = checkpoint.steps.length;
-  const current = checkpoint.currentStep;
-  const percent = total > 0 ? Math.round(current / total * 100) : 0;
-  return {
-    current,
-    total,
-    percent,
-    currentStep: checkpoint.steps[current]
-  };
-}
-function shouldContinue(checkpoint) {
-  const currentStep = checkpoint.steps[checkpoint.currentStep];
-  if (!currentStep) {
-    return { continue: true };
-  }
-  if (currentStep.retryCount >= checkpoint.settings.maxRetries) {
-    return {
-      continue: false,
-      reason: `Max retries (${checkpoint.settings.maxRetries}) exceeded on step ${checkpoint.currentStep}`
-    };
-  }
-  if (checkpoint.state === "aborted") {
-    return { continue: false, reason: "Checkpoint aborted" };
-  }
-  return { continue: true };
-}
-function buildRetryContext(checkpoint, stepId) {
-  const step = checkpoint.steps[stepId];
-  if (!step)
-    return "";
-  const errors3 = checkpoint.context.errorsEncountered.filter((e) => e.step === stepId);
-  if (errors3.length === 0)
-    return "";
-  const lastError = errors3[errors3.length - 1].error;
-  const lines = [];
-  lines.push(`
-<!-- Retry ${step.retryCount + 1}/${checkpoint.settings.maxRetries} -->`);
-  lines.push(`
-Previous attempt failed:`);
-  lines.push(`  Error: ${lastError}`);
-  const hint = inferErrorHint(lastError);
-  if (hint) {
-    lines.push(`  Hint: ${hint}`);
-  }
-  lines.push(`
-Try a DIFFERENT approach this time:`);
-  lines.push(`- Do NOT repeat the same command`);
-  lines.push(`- Consider: create parent directories first, check permissions, use different tool`);
-  lines.push(`- Goal: ${checkpoint.goal}`);
-  return lines.join(`
-`);
-}
-function inferErrorHint(error2) {
-  const e = error2.toLowerCase();
-  if (e.includes("enoent") || e.includes("no such file")) {
-    if (e.includes("directory") || e.includes("/")) {
-      return "Parent directory may not exist. Try: mkdir -p first";
-    }
-    return "File does not exist. Verify path or create file first";
-  }
-  if (e.includes("permission denied")) {
-    return "Check file/directory permissions or run with elevated access";
-  }
-  if (e.includes("eacces")) {
-    return "Permission issue. Try chmod or different location";
-  }
-  if (e.includes("enospc")) {
-    return "Disk space may be full. Check: df -h";
-  }
-  if (e.includes("etimedout") || e.includes("timeout")) {
-    return "Connection timed out. Check network or retry with longer timeout";
-  }
-  if (e.includes("econnrefused")) {
-    return "Connection refused. Check service is running";
-  }
-  if (e.includes("command not found") || e.includes("not found")) {
-    return "Command/tool not available. Try alternative approach";
-  }
-  if (e.includes("parse error") || e.includes("syntax")) {
-    return "Parse/syntax error. Check input format";
-  }
-  return null;
-}
-var CHECKPOINT_DIR;
-var init_checkpoint = __esm(() => {
-  CHECKPOINT_DIR = join12(homedir11(), ".nole-code", "checkpoints");
-});
-
-// src/ui/output/styles.ts
-function bold(text) {
-  return `${ESC}1m${text}${ESC}0m`;
-}
-function dim(text) {
-  return `${ESC}2m${text}${ESC}0m`;
-}
-function italic(text) {
-  return `${ESC}3m${text}${ESC}0m`;
-}
-function underline(text) {
-  return `${ESC}4m${text}${ESC}0m`;
-}
-function divider(char = "─", length = 80) {
-  return `${ESC}2m${char.repeat(length)}${ESC}0m`;
-}
-function tokenBudgetDisplay(used, max) {
-  const percent = Math.round(used / max * 100);
-  const barLength = 20;
-  const filled = Math.round(used / max * barLength);
-  const bar = "█".repeat(filled) + "░".repeat(barLength - filled);
-  const color = percent > 80 ? "91" : percent > 60 ? "93" : "92";
-  return `${c2.dim("[")}${ESC}${color}m${bar}${ESC}0m${c2.dim(`] ${used}/${max} tokens (${percent}%)`)}`;
-}
-var ESC = "\x1B[", c2;
-var init_styles = __esm(() => {
-  c2 = {
-    black: (text) => `${ESC}30m${text}${ESC}0m`,
-    red: (text) => `${ESC}31m${text}${ESC}0m`,
-    green: (text) => `${ESC}32m${text}${ESC}0m`,
-    yellow: (text) => `${ESC}33m${text}${ESC}0m`,
-    blue: (text) => `${ESC}34m${text}${ESC}0m`,
-    magenta: (text) => `${ESC}35m${text}${ESC}0m`,
-    cyan: (text) => `${ESC}36m${text}${ESC}0m`,
-    white: (text) => `${ESC}37m${text}${ESC}0m`,
-    gray: (text) => `${ESC}90m${text}${ESC}0m`,
-    brightRed: (text) => `${ESC}91m${text}${ESC}0m`,
-    brightGreen: (text) => `${ESC}92m${text}${ESC}0m`,
-    brightYellow: (text) => `${ESC}93m${text}${ESC}0m`,
-    brightBlue: (text) => `${ESC}94m${text}${ESC}0m`,
-    brightMagenta: (text) => `${ESC}95m${text}${ESC}0m`,
-    brightCyan: (text) => `${ESC}96m${text}${ESC}0m`,
-    primary: (text) => `${ESC}96m${text}${ESC}0m`,
-    secondary: (text) => `${ESC}33m${text}${ESC}0m`,
-    success: (text) => `${ESC}92m${text}${ESC}0m`,
-    error: (text) => `${ESC}91m${text}${ESC}0m`,
-    warning: (text) => `${ESC}93m${text}${ESC}0m`,
-    info: (text) => `${ESC}94m${text}${ESC}0m`,
-    user: (text) => `${ESC}94m${text}${ESC}0m`,
-    assistant: (text) => `${ESC}95m${text}${ESC}0m`,
-    tool: (text) => `${ESC}93m${text}${ESC}0m`,
-    system: (text) => `${ESC}90m${text}${ESC}0m`,
-    bold,
-    dim,
-    italic,
-    underline,
-    reset: () => `${ESC}0m`
-  };
 });
 
 // src/loop/spawner.ts
@@ -20175,33 +20179,33 @@ function displayProgress(event) {
   clearLine();
   switch (event.type) {
     case "step_start":
-      process.stdout.write(`${c2.cyan("◉")} ${bold(event.description.slice(0, 50))} ` + `[${event.step}/${event.total}] ` + dim("running..."));
+      process.stdout.write(`${c.cyan("◉")} ${bold(event.description.slice(0, 50))} ` + `[${event.step}/${event.total}] ` + dim("running..."));
       break;
     case "step_complete":
       const elapsed = event.duration > 1000 ? `${(event.duration / 1000).toFixed(1)}s` : `${event.duration}ms`;
-      process.stdout.write(`${c2.cyan("◉")} ${event.description.slice(0, 50)} ` + `[${event.step}/${event.total}] ` + `${c2.green("✓")} ${dim(elapsed)}`);
+      process.stdout.write(`${c.cyan("◉")} ${event.description.slice(0, 50)} ` + `[${event.step}/${event.total}] ` + `${c.green("✓")} ${dim(elapsed)}`);
       break;
     case "step_failed":
-      process.stdout.write(`${c2.cyan("◉")} Step ${event.step} ` + `${c2.red("✗")} ${event.error.slice(0, 50)} ` + dim(`retry ${event.retry}/${event.maxRetries}`));
+      process.stdout.write(`${c.cyan("◉")} Step ${event.step} ` + `${c.red("✗")} ${event.error.slice(0, 50)} ` + dim(`retry ${event.retry}/${event.maxRetries}`));
       break;
     case "checkpoint_saved":
       process.stdout.write(`${dim("Checkpoint:")} ${event.checkpointId}`);
       break;
     case "loop_complete":
       process.stdout.write(`
-${c2.green("✓")} Loop complete ` + dim(`(${event.steps} steps, ${(event.duration / 1000).toFixed(0)}s)`));
+${c.green("✓")} Loop complete ` + dim(`(${event.steps} steps, ${(event.duration / 1000).toFixed(0)}s)`));
       break;
     case "loop_paused":
       process.stdout.write(`
-${c2.yellow("⏸")} Loop paused ` + dim(`(${event.reason})`));
+${c.yellow("⏸")} Loop paused ` + dim(`(${event.reason})`));
       break;
     case "loop_aborted":
       process.stdout.write(`
-${c2.red("✗")} Loop aborted ` + dim(`(${event.reason})`));
+${c.red("✗")} Loop aborted ` + dim(`(${event.reason})`));
       break;
     case "error":
       process.stdout.write(`
-${c2.red("!")} Loop error: ${event.message}`);
+${c.red("!")} Loop error: ${event.message}`);
       break;
   }
   process.stdout.write(`
@@ -20351,303 +20355,13 @@ var init_spawner2 = __esm(() => {
   init_styles();
 });
 
-// src/loop/executor.ts
-function clearLine2() {
-  process.stdout.write("\r" + "\x1B[K");
-}
-function printProgress(checkpoint) {
-  const progress = getProgress(checkpoint);
-  const state = checkpoint.state.toUpperCase();
-  let stateColor = dim;
-  if (checkpoint.state === "running")
-    stateColor = c2.yellow;
-  if (checkpoint.state === "complete")
-    stateColor = green;
-  if (checkpoint.state === "failed" || checkpoint.state === "aborted")
-    stateColor = c2.red;
-  clearLine2();
-  process.stdout.write(`\r${c2.cyan("◉")} ${bold(checkpoint.goal.slice(0, 60))} ` + `[${progress.current}/${progress.total}] ` + `${stateColor(state)}`);
-  if (progress.currentStep) {
-    const step = progress.currentStep;
-    const prefix = step.status === "running" ? "▶" : step.status === "failed" ? "✗" : "○";
-    const stepColor = step.status === "running" ? c2.yellow : step.status === "failed" ? c2.red : dim;
-    process.stdout.write(`
-  ${stepColor(prefix)} ${step.description.slice(0, 70)}`);
-  }
-  process.stdout.write(`
-`);
-}
-function printStepComplete(stepNum, step, ms) {
-  const elapsed = ms > 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
-  console.log(`  ${c2.green("✓")} Step ${stepNum + 1}: ${step.description.slice(0, 60)} ${dim(`[${elapsed}]`)}`);
-}
-function printStepFailed(stepNum, step, error2) {
-  console.log(`  ${c2.red("✗")} Step ${stepNum + 1}: ${step.description.slice(0, 60)}`);
-  console.log(`    ${c2.red(error2.slice(0, 100))}`);
-}
-function printSummary(checkpoint, totalMs) {
-  const elapsed = (totalMs / 1000).toFixed(0);
-  const progress = getProgress(checkpoint);
-  const errors3 = checkpoint.context.errorsEncountered.length;
-  console.log(`
-` + dim("─".repeat(70)));
-  if (checkpoint.state === "complete") {
-    console.log(`${c2.green("✓")} Loop complete`);
-  } else if (checkpoint.state === "aborted") {
-    console.log(`${c2.yellow("⚠")} Loop aborted`);
-  } else if (checkpoint.state === "failed") {
-    console.log(`${c2.red("✗")} Loop failed`);
-  } else {
-    console.log(`${c2.yellow("◷")} Loop paused`);
-  }
-  console.log(`  Goal: ${checkpoint.goal.slice(0, 60)}`);
-  console.log(`  Steps: ${progress.current}/${progress.total} (${progress.percent}%)`);
-  console.log(`  Time: ${elapsed}s`);
-  console.log(`  Errors: ${errors3}`);
-  console.log(`  Files created: ${checkpoint.context.filesCreated.length}`);
-  if (checkpoint.context.filesCreated.length > 0) {
-    console.log(`  ${dim("Created:")}`);
-    for (const f of checkpoint.context.filesCreated.slice(0, 5)) {
-      console.log(`    ${dim(f)}`);
-    }
-    if (checkpoint.context.filesCreated.length > 5) {
-      console.log(`    ${dim(`...and ${checkpoint.context.filesCreated.length - 5} more`)}`);
-    }
-  }
-  console.log(`
-  ${dim("Checkpoint:")} ${checkpoint.id}`);
-  console.log(dim("─".repeat(70)));
-}
-async function planSteps(goal, client, cwd) {
-  const systemPrompt = `You are a task planner. Break down the goal into 5-10 concrete steps.
-  
-Rules:
-- Each step should be a single actionable task
-- Steps should be ordered (do X before Y)
-- Include verification steps (test, check, verify)
-- Be specific, not vague
-
-Return a JSON array of step descriptions:
-["Step 1: ...", "Step 2: ...", ...]`;
-  try {
-    const result = await client.chat([
-      { role: "system", content: systemPrompt },
-      { role: "user", content: `Goal: ${goal}
-CWD: ${cwd}` }
-    ], { max_tokens: 1000, temperature: 0 });
-    const content = result.content.trim();
-    let jsonStr = content;
-    if (content.includes("```json")) {
-      jsonStr = content.split("```json")[1].split("```")[0];
-    } else if (content.includes("```")) {
-      jsonStr = content.split("```")[1].split("```")[0];
-    }
-    const steps = JSON.parse(jsonStr.trim());
-    if (Array.isArray(steps)) {
-      return steps.map((s) => String(s));
-    }
-    return content.split(`
-`).filter((l) => l.trim()).slice(0, 10);
-  } catch (err) {
-    console.log(`${c2.yellow("⚠")} Planning failed: ${err}, using fallback`);
-    return [
-      `Analyze goal and create plan for: ${goal.slice(0, 50)}`,
-      `Execute the first part of the plan`,
-      `Execute the second part`,
-      `Verify the results`,
-      `Make any necessary corrections`
-    ];
-  }
-}
-async function executeStep(step, context, cwd, sessionMessages, client, options) {
-  const toolDefs = getToolDefinitions();
-  const toolCalls = [];
-  let shouldContinue2 = true;
-  const stepContext = `
-Current step: ${step.description}
-Working directory: ${cwd}
-Files created so far: ${context.filesCreated.join(", ") || "none"}
-Errors so far: ${context.errorsEncountered.length}
-
-${step.retryCount > 0 ? buildRetryContext({ steps: [step], context }, 0) : ""}
-`.trim();
-  try {
-    const result = await client.chat([
-      ...sessionMessages.slice(-20),
-      { role: "user", content: `
-
-TASK: ${step.description}
-
-Context:
-${stepContext}
-
-What tools should I use to complete this step? Respond with specific tool calls.` }
-    ], { tools: toolDefs, max_tokens: 2000, temperature: 0 });
-    if (result.toolCalls && result.toolCalls.length > 0) {
-      for (const tc of result.toolCalls) {
-        if (options.verbose) {
-          console.log(`  ${dim("→")} ${tc.name}(${JSON.stringify(tc.input).slice(0, 50)}...)`);
-        }
-        try {
-          const execResult = await executeTool(tc.name, tc.input, { cwd, sessionId: "loop" });
-          toolCalls.push({
-            name: tc.name,
-            input: tc.input,
-            result: execResult.content,
-            success: !execResult.isError
-          });
-          if (execResult.isError) {
-            context.errorsEncountered.push({
-              step: step.id,
-              error: execResult.content,
-              timestamp: new Date().toISOString()
-            });
-            shouldContinue2 = false;
-            break;
-          }
-          sessionMessages.push({
-            role: "assistant",
-            content: `Used ${tc.name} to ${tc.input.description || tc.input.command || "execute task"}`,
-            tool_calls: [{ id: tc.id, name: tc.name, input: tc.input }]
-          });
-          sessionMessages.push({
-            role: "tool",
-            content: execResult.content.slice(0, 500),
-            tool_call_id: tc.id,
-            name: tc.name
-          });
-        } catch (err) {
-          toolCalls.push({
-            name: tc.name,
-            input: tc.input,
-            result: String(err),
-            success: false
-          });
-          shouldContinue2 = false;
-          break;
-        }
-      }
-    } else {
-      if (result.content) {
-        toolCalls.push({
-          name: "Response",
-          input: {},
-          result: result.content,
-          success: true
-        });
-      }
-    }
-  } catch (err) {
-    toolCalls.push({
-      name: "Error",
-      input: {},
-      result: String(err),
-      success: false
-    });
-    shouldContinue2 = false;
-  }
-  return { toolCalls, shouldContinue: shouldContinue2 };
-}
-async function runLoop(options) {
-  const startTime = Date.now();
-  const cwd = options.cwd || process.cwd();
-  console.log(`
-${c2.cyan("◉")} ${bold("Starting autonomous loop")}`);
-  console.log(`  ${dim("Goal:")} ${options.goal.slice(0, 70)}`);
-  console.log(`  ${dim("CWD:")} ${cwd}`);
-  console.log(dim("─".repeat(70)));
-  let checkpoint;
-  if (options.checkpointId) {
-    const loaded = loadCheckpoint(options.checkpointId);
-    if (!loaded) {
-      return { success: false, checkpoint: null, message: `Checkpoint ${options.checkpointId} not found` };
-    }
-    checkpoint = loaded;
-    console.log(`  ${dim("Resuming checkpoint:")} ${checkpoint.id}`);
-  } else {
-    checkpoint = createCheckpoint(options.goal, cwd, {
-      maxRetries: options.maxSteps ? 2 : 2
-    });
-  }
-  const settings = loadSettings();
-  const { getMiniMaxToken } = await Promise.resolve().then(() => (init_src(), exports_src));
-  const token = getMiniMaxToken();
-  const client = new LLMClient(token, settings.model || "MiniMax-M2.7");
-  const sessionMessages = [];
-  if (checkpoint.state === "pending" || checkpoint.steps.length === 0) {
-    console.log(`
-  ${dim("Planning...")}`);
-    checkpoint.state = "running";
-    const steps = await planSteps(options.goal, client, cwd);
-    setSteps(checkpoint, steps);
-    console.log(`  ${dim(`Created ${steps.length} steps`)}`);
-  }
-  while (shouldContinue(checkpoint).continue) {
-    const currentStepId = checkpoint.currentStep;
-    if (currentStepId >= checkpoint.steps.length) {
-      completeCheckpoint(checkpoint);
-      break;
-    }
-    const step = checkpoint.steps[currentStepId];
-    startStep(checkpoint, currentStepId);
-    printProgress(checkpoint);
-    const stepStartTime = Date.now();
-    const { toolCalls, shouldContinue: stepShouldContinue } = await executeStep(step, checkpoint.context, cwd, sessionMessages, client, { verbose: options.verbose });
-    const stepMs = Date.now() - stepStartTime;
-    if (!stepShouldContinue) {
-      if (step.retryCount >= checkpoint.settings.maxRetries) {
-        failStep(checkpoint, currentStepId, step.error || "Max retries exceeded", toolCalls);
-        printStepFailed(currentStepId, step, step.error || "Max retries exceeded");
-        abortCheckpoint(checkpoint);
-        break;
-      }
-      failStep(checkpoint, currentStepId, step.error || "Step failed", toolCalls);
-      printStepFailed(currentStepId, step, step.error || "Step failed");
-      console.log(`  ${c2.yellow("↻")} Retrying step ${currentStepId + 1} (attempt ${step.retryCount + 1}/${checkpoint.settings.maxRetries})`);
-      continue;
-    }
-    completeStep(checkpoint, currentStepId, toolCalls);
-    printStepComplete(currentStepId, step, stepMs);
-    if ((currentStepId + 1) % checkpoint.settings.reportEveryNSteps === 0) {
-      printProgress(checkpoint);
-    }
-  }
-  const totalMs = Date.now() - startTime;
-  printSummary(checkpoint, totalMs);
-  return {
-    success: checkpoint.state === "complete",
-    checkpoint,
-    message: checkpoint.state === "complete" ? `Completed ${checkpoint.steps.length} steps in ${(totalMs / 1000).toFixed(0)}s` : `Stopped at step ${checkpoint.currentStep + 1}: ${checkpoint.state}`
-  };
-}
-function pauseLoop2(checkpoint) {
-  pauseCheckpoint(checkpoint);
-  console.log(`
-${c2.yellow("⏸")} Loop paused. Resume with /resume ${checkpoint.id}`);
-}
-async function resumeLoop2(checkpointId) {
-  const checkpoint = loadCheckpoint(checkpointId);
-  if (!checkpoint) {
-    return { success: false, checkpoint: null, message: "Checkpoint not found" };
-  }
-  resumeCheckpoint(checkpoint);
-  return runLoop({ goal: checkpoint.goal, checkpointId, cwd: checkpoint.context.cwd });
-}
-var init_executor = __esm(() => {
-  init_checkpoint();
-  init_llm();
-  init_registry();
-  init_onboarding();
-  init_styles();
-});
-
 // src/loop/index.ts
 var exports_loop = {};
 __export(exports_loop, {
   waitForConfirmation: () => waitForConfirmation,
   startStep: () => startStep,
   spawnLoop: () => spawnLoop,
-  skipStep: () => skipStep2,
+  skipStep: () => skipStep,
   shouldContinue: () => shouldContinue,
   setSteps: () => setSteps,
   saveCheckpoint: () => saveCheckpoint,
@@ -21477,8 +21191,8 @@ Start a loop with /loop <goal>`;
     description: "Show current loop progress",
     aliases: ["status"],
     execute: async (args, ctx) => {
-      const { loadLatestCheckpoint: loadLatestCheckpoint3, getProgress: getProgress2 } = await Promise.resolve().then(() => (init_loop(), exports_loop));
-      const cp = loadLatestCheckpoint3();
+      const { loadLatestCheckpoint: loadLatestCheckpoint2, getProgress: getProgress2 } = await Promise.resolve().then(() => (init_loop(), exports_loop));
+      const cp = loadLatestCheckpoint2();
       if (!cp)
         return `No active loop.
 Start one with /loop <goal>`;
@@ -21896,7 +21610,7 @@ function initVerboseOutput() {
   showTimings = feature("TOOL_TIMING");
   streamingEnabled = feature("TOOL_RESULT_STREAMING");
   if (isVerbose) {
-    console.log(c2.dim(`
+    console.log(c.dim(`
 \uD83D\uDD0D Verbose output enabled
 `));
   }
@@ -21911,33 +21625,33 @@ function printTokenBudget(messages) {
   if (!feature("AUTO_COMPACT") && !feature("SESSION_COMPACT"))
     return;
   const budget = getTokenBudget(messages);
-  console.log(c2.dim(`
+  console.log(c.dim(`
 ${tokenBudgetDisplay(budget.used, budget.max)}
 `));
 }
 function printContextHeader(sessionInfo) {
   if (!isVerbose)
     return;
-  console.log(c2.dim(divider()));
+  console.log(c.dim(divider()));
   console.log(`Session: ${sessionInfo.sessionId}`);
   console.log(`CWD: ${sessionInfo.cwd}`);
   console.log(`Model: ${sessionInfo.model}`);
-  console.log(c2.dim(divider()));
+  console.log(c.dim(divider()));
 }
 function printError(message, options = {}) {
   const { details, stack } = options;
   console.error(`
-${c2.red("✗ Error:")} ${message}`);
+${c.red("✗ Error:")} ${message}`);
   if (details && isVerbose) {
-    console.error(`  ${c2.dim(details)}`);
+    console.error(`  ${c.dim(details)}`);
   }
   if (stack && isVerbose) {
-    console.error(c2.dim(stack));
+    console.error(c.dim(stack));
   }
 }
 function printWarning(message) {
   console.log(`
-${c2.yellow("⚠")} ${message}
+${c.yellow("⚠")} ${message}
 `);
 }
 var isVerbose = false, showTimings = false, streamingEnabled = false;
@@ -22396,7 +22110,7 @@ function detectPlanIntent(input) {
 function getBanner(cwd, verbose = false) {
   const v = verbose ? `${dim("· ")}verbose` : "";
   return `
-${bold(c2.cyan("▐▛███▜▌"))} ${bold("Nole Code v1.17")} ${dim("· MiniMax")}
+${bold(c.cyan("▐▛███▜▌"))} ${bold("Nole Code v1.17")} ${dim("· MiniMax")}
 ${dim("▝▜█████▛▘")} ${dim(cwd)} ${v}
 
 ${divider()}
@@ -22416,23 +22130,23 @@ async function runRepl(opts) {
   if (!token && !hasAnyProvider2()) {
     console.clear();
     console.log(`
-${bold(c2.cyan("▐▛███▜▌"))} ${bold("Welcome to Nole Code!")}
+${bold(c.cyan("▐▛███▜▌"))} ${bold("Welcome to Nole Code!")}
 ${dim("▝▜█████▛▘")} ${dim("First-time setup")}
 
 ${bold("You need an API key to get started.")}
 
-${c2.cyan("Option 1 — OpenRouter")} ${dim("(recommended, many free models)")}
-  1. Go to ${c2.cyan("https://openrouter.ai/keys")}
+${c.cyan("Option 1 — OpenRouter")} ${dim("(recommended, many free models)")}
+  1. Go to ${c.cyan("https://openrouter.ai/keys")}
   2. Create a free account and generate a key
   3. Run: ${bold("export OPENROUTER_API_KEY=sk-or-...")}
 
-${c2.cyan("Option 2 — MiniMax")} ${dim("(free tier, can be slow)")}
-  1. Go to ${c2.cyan("https://platform.minimaxi.com")}
+${c.cyan("Option 2 — MiniMax")} ${dim("(free tier, can be slow)")}
+  1. Go to ${c.cyan("https://platform.minimaxi.com")}
   2. Get your API key
   3. Run: ${bold("export MINIMAX_API_KEY=your-key")}
 
-${c2.cyan("Option 3 — OpenAI")}
-  1. Go to ${c2.cyan("https://platform.openai.com/api-keys")}
+${c.cyan("Option 3 — OpenAI")}
+  1. Go to ${c.cyan("https://platform.openai.com/api-keys")}
   2. Run: ${bold("export OPENAI_API_KEY=sk-...")}
 
 ${dim("Or add keys to ~/.nole-code/.env:")}
@@ -22676,7 +22390,7 @@ ${memorySummary}` : ""}${resumeContext}`;
   const unsubAgent = onAgentMessage((msg) => {
     if (msg.type === "output") {
       console.log(`
-${c2.magenta("\uD83E\uDD16 Agent:")} ${msg.payload}`);
+${c.magenta("\uD83E\uDD16 Agent:")} ${msg.payload}`);
     }
   });
   let sigintCount = 0;
@@ -22686,7 +22400,7 @@ ${c2.magenta("\uD83E\uDD16 Agent:")} ${msg.payload}`);
       isProcessing = false;
       sigintCount = 0;
       console.log(`
-${c2.yellow("⏹")} Cancelled`);
+${c.yellow("⏹")} Cancelled`);
       prompt();
       return;
     }
@@ -22726,7 +22440,7 @@ ${dim("Press Ctrl+C again to exit, or type a message.")}`);
     }
     if (input.length > 50000) {
       console.log(`
-${c2.yellow("⚠")} Message too large (${(input.length / 1024).toFixed(0)}KB). Max ~50KB.`);
+${c.yellow("⚠")} Message too large (${(input.length / 1024).toFixed(0)}KB). Max ~50KB.`);
       console.log(dim("Use @filename to reference files instead of pasting contents."));
       prompt();
       return;
@@ -22737,7 +22451,7 @@ ${c2.yellow("⚠")} Message too large (${(input.length / 1024).toFixed(0)}KB). M
       const steps = generatePlanSteps2(planIntent);
       const plan = enterPlanMode2(planIntent, steps);
       console.log(`
-${c2.cyan("\uD83D\uDCCB PLAN MODE")} — triggered by "${input.slice(0, 50)}..."`);
+${c.cyan("\uD83D\uDCCB PLAN MODE")} — triggered by "${input.slice(0, 50)}..."`);
       console.log(`${plan.steps.length} steps identified. Use /plan approve to proceed.`);
       prompt();
       return;
@@ -22790,7 +22504,7 @@ ${result}
         return;
       } else {
         console.log(`
-${c2.yellow("❓ Unknown command:")} /${parsed.cmd}`);
+${c.yellow("❓ Unknown command:")} /${parsed.cmd}`);
         prompt();
         return;
       }
@@ -22821,7 +22535,7 @@ ${truncated}
         }
       }
     }
-    console.log(`${c2.blue("➜ you")} │ ${input}`);
+    console.log(`${c.blue("➜ you")} │ ${input}`);
     session.messages.push({
       role: "user",
       content: expandedInput,
@@ -22833,7 +22547,7 @@ ${truncated}
     console.log(`
 ${divider()}
 `);
-    console.log(`${c2.magenta("\uD83E\uDD16 nole")} │ `);
+    console.log(`${c.magenta("\uD83E\uDD16 nole")} │ `);
     const startTime = Date.now();
     try {
       const MAX_TURNS = parseInt(process.env.NOLE_MAX_TURNS || "") || settings.maxTurns || 50;
@@ -22893,7 +22607,7 @@ ${divider()}
             const verb = VERBS[Math.floor(spinFrame / 5) % VERBS.length];
             const elapsed2 = ((Date.now() - sessionStartTime) / 1000).toFixed(0);
             try {
-              process.stdout.write(`\r${c2.cyan(frame)} ${dim(verb + "...")} ${dim(`(${elapsed2}s)`)}  `);
+              process.stdout.write(`\r${c.cyan(frame)} ${dim(verb + "...")} ${dim(`(${elapsed2}s)`)}  `);
             } catch {}
             spinFrame++;
           }
@@ -22960,7 +22674,7 @@ ${divider()}
           const tc = toolCalls[0];
           const toolStart = Date.now();
           const preview = tc.input.command ? String(tc.input.command).slice(0, 60) : JSON.stringify(tc.input).slice(0, 60);
-          process.stdout.write(`\r${c2.cyan("⟳")} ${tc.name} ${dim(`(${preview})`)}
+          process.stdout.write(`\r${c.cyan("⟳")} ${tc.name} ${dim(`(${preview})`)}
 `);
           const result = await executeTool(tc.name, tc.input, { cwd: opts.cwd || process.cwd(), sessionId: session.id });
           toolResults.push({ tc, result, ms: Date.now() - toolStart });
@@ -23020,7 +22734,7 @@ ${divider()}
       }
       if (turn >= MAX_TURNS) {
         console.log(`
-${c2.yellow("⚠")} Reached maximum ${MAX_TURNS} turns in agentic loop.
+${c.yellow("⚠")} Reached maximum ${MAX_TURNS} turns in agentic loop.
 `);
       }
       const { estimateTotalTokens: estimateTotalTokens2 } = await Promise.resolve().then(() => exports_count_tokens);
@@ -23202,9 +22916,472 @@ var init_src = __esm(() => {
     process.exit(1);
   });
 });
-init_src();
 
-export {
-  getMiniMaxToken,
-  activeClient
-};
+// src/loop/executor.ts
+var exports_executor = {};
+__export(exports_executor, {
+  runLoop: () => runLoop,
+  resumeLoop: () => resumeLoop2,
+  planSteps: () => planSteps,
+  pauseLoop: () => pauseLoop2
+});
+function clearLine3() {
+  process.stdout.write("\r" + "\x1B[K");
+}
+function printProgress(checkpoint) {
+  const progress = getProgress(checkpoint);
+  const state = checkpoint.state.toUpperCase();
+  let stateColor = dim;
+  if (checkpoint.state === "running")
+    stateColor = c.yellow;
+  if (checkpoint.state === "complete")
+    stateColor = green;
+  if (checkpoint.state === "failed" || checkpoint.state === "aborted")
+    stateColor = c.red;
+  clearLine3();
+  process.stdout.write(`\r${c.cyan("◉")} ${bold(checkpoint.goal.slice(0, 60))} ` + `[${progress.current}/${progress.total}] ` + `${stateColor(state)}`);
+  if (progress.currentStep) {
+    const step = progress.currentStep;
+    const prefix = step.status === "running" ? "▶" : step.status === "failed" ? "✗" : "○";
+    const stepColor = step.status === "running" ? c.yellow : step.status === "failed" ? c.red : dim;
+    process.stdout.write(`
+  ${stepColor(prefix)} ${step.description.slice(0, 70)}`);
+  }
+  process.stdout.write(`
+`);
+}
+function printStepComplete(stepNum, step, ms) {
+  const elapsed = ms > 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
+  console.log(`  ${c.green("✓")} Step ${stepNum + 1}: ${step.description.slice(0, 60)} ${dim(`[${elapsed}]`)}`);
+}
+function printStepFailed(stepNum, step, error2) {
+  console.log(`  ${c.red("✗")} Step ${stepNum + 1}: ${step.description.slice(0, 60)}`);
+  console.log(`    ${c.red(error2.slice(0, 100))}`);
+}
+function printSummary(checkpoint, totalMs) {
+  const elapsed = (totalMs / 1000).toFixed(0);
+  const progress = getProgress(checkpoint);
+  const errors3 = checkpoint.context.errorsEncountered.length;
+  console.log(`
+` + dim("─".repeat(70)));
+  if (checkpoint.state === "complete") {
+    console.log(`${c.green("✓")} Loop complete`);
+  } else if (checkpoint.state === "aborted") {
+    console.log(`${c.yellow("⚠")} Loop aborted`);
+  } else if (checkpoint.state === "failed") {
+    console.log(`${c.red("✗")} Loop failed`);
+  } else {
+    console.log(`${c.yellow("◷")} Loop paused`);
+  }
+  console.log(`  Goal: ${checkpoint.goal.slice(0, 60)}`);
+  console.log(`  Steps: ${progress.current}/${progress.total} (${progress.percent}%)`);
+  console.log(`  Time: ${elapsed}s`);
+  console.log(`  Errors: ${errors3}`);
+  console.log(`  Files created: ${checkpoint.context.filesCreated.length}`);
+  if (checkpoint.context.filesCreated.length > 0) {
+    console.log(`  ${dim("Created:")}`);
+    for (const f of checkpoint.context.filesCreated.slice(0, 5)) {
+      console.log(`    ${dim(f)}`);
+    }
+    if (checkpoint.context.filesCreated.length > 5) {
+      console.log(`    ${dim(`...and ${checkpoint.context.filesCreated.length - 5} more`)}`);
+    }
+  }
+  console.log(`
+  ${dim("Checkpoint:")} ${checkpoint.id}`);
+  console.log(dim("─".repeat(70)));
+}
+async function planSteps(goal, client, cwd) {
+  const systemPrompt = `You are a task planner. Break down the goal into 5-10 concrete steps.
+  
+Rules:
+- Each step should be a single actionable task
+- Steps should be ordered (do X before Y)
+- Include verification steps (test, check, verify)
+- Be specific, not vague
+
+Return a JSON array of step descriptions:
+["Step 1: ...", "Step 2: ...", ...]`;
+  try {
+    const result = await client.chat([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `Goal: ${goal}
+CWD: ${cwd}` }
+    ], { max_tokens: 1000, temperature: 0 });
+    const content = result.content.trim();
+    let jsonStr = content;
+    if (content.includes("```json")) {
+      jsonStr = content.split("```json")[1].split("```")[0];
+    } else if (content.includes("```")) {
+      jsonStr = content.split("```")[1].split("```")[0];
+    }
+    const steps = JSON.parse(jsonStr.trim());
+    if (Array.isArray(steps)) {
+      return steps.map((s) => String(s));
+    }
+    return content.split(`
+`).filter((l) => l.trim()).slice(0, 10);
+  } catch (err) {
+    console.log(`${c.yellow("⚠")} Planning failed: ${err}, using fallback`);
+    return [
+      `Analyze goal and create plan for: ${goal.slice(0, 50)}`,
+      `Execute the first part of the plan`,
+      `Execute the second part`,
+      `Verify the results`,
+      `Make any necessary corrections`
+    ];
+  }
+}
+async function executeStep(step, context, cwd, sessionMessages, client, options) {
+  const toolDefs = getToolDefinitions();
+  const toolCalls = [];
+  let shouldContinue2 = true;
+  const stepContext = `
+Current step: ${step.description}
+Working directory: ${cwd}
+Files created so far: ${context.filesCreated.join(", ") || "none"}
+Errors so far: ${context.errorsEncountered.length}
+
+${step.retryCount > 0 ? buildRetryContext({ steps: [step], context }, 0) : ""}
+`.trim();
+  try {
+    const result = await client.chat([
+      ...sessionMessages.slice(-20),
+      { role: "user", content: `
+
+TASK: ${step.description}
+
+Context:
+${stepContext}
+
+What tools should I use to complete this step? Respond with specific tool calls.` }
+    ], { tools: toolDefs, max_tokens: 2000, temperature: 0 });
+    if (result.toolCalls && result.toolCalls.length > 0) {
+      for (const tc of result.toolCalls) {
+        if (options.verbose) {
+          console.log(`  ${dim("→")} ${tc.name}(${JSON.stringify(tc.input).slice(0, 50)}...)`);
+        }
+        try {
+          const execResult = await executeTool(tc.name, tc.input, { cwd, sessionId: "loop" });
+          toolCalls.push({
+            name: tc.name,
+            input: tc.input,
+            result: execResult.content,
+            success: !execResult.isError
+          });
+          if (execResult.isError) {
+            context.errorsEncountered.push({
+              step: step.id,
+              error: execResult.content,
+              timestamp: new Date().toISOString()
+            });
+            shouldContinue2 = false;
+            break;
+          }
+          sessionMessages.push({
+            role: "assistant",
+            content: `Used ${tc.name} to ${tc.input.description || tc.input.command || "execute task"}`,
+            tool_calls: [{ id: tc.id, name: tc.name, input: tc.input }]
+          });
+          sessionMessages.push({
+            role: "tool",
+            content: execResult.content.slice(0, 500),
+            tool_call_id: tc.id,
+            name: tc.name
+          });
+        } catch (err) {
+          toolCalls.push({
+            name: tc.name,
+            input: tc.input,
+            result: String(err),
+            success: false
+          });
+          shouldContinue2 = false;
+          break;
+        }
+      }
+    } else {
+      if (result.content) {
+        toolCalls.push({
+          name: "Response",
+          input: {},
+          result: result.content,
+          success: true
+        });
+      }
+    }
+  } catch (err) {
+    toolCalls.push({
+      name: "Error",
+      input: {},
+      result: String(err),
+      success: false
+    });
+    shouldContinue2 = false;
+  }
+  return { toolCalls, shouldContinue: shouldContinue2 };
+}
+async function runLoop(options) {
+  const startTime = Date.now();
+  const cwd = options.cwd || process.cwd();
+  console.log(`
+${c.cyan("◉")} ${bold("Starting autonomous loop")}`);
+  console.log(`  ${dim("Goal:")} ${options.goal.slice(0, 70)}`);
+  console.log(`  ${dim("CWD:")} ${cwd}`);
+  console.log(dim("─".repeat(70)));
+  let checkpoint;
+  if (options.checkpointId) {
+    const loaded = loadCheckpoint(options.checkpointId);
+    if (!loaded) {
+      return { success: false, checkpoint: null, message: `Checkpoint ${options.checkpointId} not found` };
+    }
+    checkpoint = loaded;
+    console.log(`  ${dim("Resuming checkpoint:")} ${checkpoint.id}`);
+  } else {
+    checkpoint = createCheckpoint(options.goal, cwd, {
+      maxRetries: options.maxSteps ? 2 : 2
+    });
+  }
+  const settings = loadSettings();
+  const { getMiniMaxToken: getMiniMaxToken2 } = await Promise.resolve().then(() => (init_src(), exports_src));
+  const token = getMiniMaxToken2();
+  const client = new LLMClient(token, settings.model || "MiniMax-M2.7");
+  const sessionMessages = [];
+  if (checkpoint.state === "pending" || checkpoint.steps.length === 0) {
+    console.log(`
+  ${dim("Planning...")}`);
+    checkpoint.state = "running";
+    const steps = await planSteps(options.goal, client, cwd);
+    setSteps(checkpoint, steps);
+    console.log(`  ${dim(`Created ${steps.length} steps`)}`);
+  }
+  while (shouldContinue(checkpoint).continue) {
+    const currentStepId = checkpoint.currentStep;
+    if (currentStepId >= checkpoint.steps.length) {
+      completeCheckpoint(checkpoint);
+      break;
+    }
+    const step = checkpoint.steps[currentStepId];
+    startStep(checkpoint, currentStepId);
+    printProgress(checkpoint);
+    const stepStartTime = Date.now();
+    const { toolCalls, shouldContinue: stepShouldContinue } = await executeStep(step, checkpoint.context, cwd, sessionMessages, client, { verbose: options.verbose });
+    const stepMs = Date.now() - stepStartTime;
+    if (!stepShouldContinue) {
+      if (step.retryCount >= checkpoint.settings.maxRetries) {
+        failStep(checkpoint, currentStepId, step.error || "Max retries exceeded", toolCalls);
+        printStepFailed(currentStepId, step, step.error || "Max retries exceeded");
+        abortCheckpoint(checkpoint);
+        break;
+      }
+      failStep(checkpoint, currentStepId, step.error || "Step failed", toolCalls);
+      printStepFailed(currentStepId, step, step.error || "Step failed");
+      console.log(`  ${c.yellow("↻")} Retrying step ${currentStepId + 1} (attempt ${step.retryCount + 1}/${checkpoint.settings.maxRetries})`);
+      continue;
+    }
+    completeStep(checkpoint, currentStepId, toolCalls);
+    printStepComplete(currentStepId, step, stepMs);
+    if ((currentStepId + 1) % checkpoint.settings.reportEveryNSteps === 0) {
+      printProgress(checkpoint);
+    }
+  }
+  const totalMs = Date.now() - startTime;
+  printSummary(checkpoint, totalMs);
+  return {
+    success: checkpoint.state === "complete",
+    checkpoint,
+    message: checkpoint.state === "complete" ? `Completed ${checkpoint.steps.length} steps in ${(totalMs / 1000).toFixed(0)}s` : `Stopped at step ${checkpoint.currentStep + 1}: ${checkpoint.state}`
+  };
+}
+function pauseLoop2(checkpoint) {
+  pauseCheckpoint(checkpoint);
+  console.log(`
+${c.yellow("⏸")} Loop paused. Resume with /resume ${checkpoint.id}`);
+}
+async function resumeLoop2(checkpointId) {
+  const checkpoint = loadCheckpoint(checkpointId);
+  if (!checkpoint) {
+    return { success: false, checkpoint: null, message: "Checkpoint not found" };
+  }
+  resumeCheckpoint(checkpoint);
+  return runLoop({ goal: checkpoint.goal, checkpointId, cwd: checkpoint.context.cwd });
+}
+var init_executor = __esm(() => {
+  init_checkpoint();
+  init_llm();
+  init_registry();
+  init_onboarding();
+  init_styles();
+});
+
+// src/loop/agent.ts
+function emit(event) {
+  process.stdout.write(JSON.stringify(event) + `
+`);
+}
+var lastCheckpoint = null;
+var stepCheckInterval = null;
+function startStepWatcher(checkpointId) {
+  stepCheckInterval = setInterval(async () => {
+    const { loadCheckpoint: loadCheckpoint2 } = await Promise.resolve().then(() => (init_checkpoint(), exports_checkpoint));
+    const cp = loadCheckpoint2(checkpointId);
+    if (!cp)
+      return;
+    const total = cp.steps.length;
+    for (let i = 0;i < cp.steps.length; i++) {
+      const step = cp.steps[i];
+      const lastStep = lastCheckpoint?.steps[i];
+      if (step.status === "running" && lastStep?.status !== "running") {
+        emit({
+          type: "step_start",
+          step: i,
+          total,
+          description: step.description
+        });
+      }
+      if (step.status === "complete" && lastStep?.status !== "complete") {
+        const started = step.startedAt ? new Date(step.startedAt).getTime() : 0;
+        const completed = step.completedAt ? new Date(step.completedAt).getTime() : Date.now();
+        emit({
+          type: "step_complete",
+          step: i,
+          duration: completed - started,
+          description: step.description
+        });
+      }
+      if (step.status === "failed" && lastStep?.status !== "failed") {
+        emit({
+          type: "step_failed",
+          step: i,
+          error: step.error || "Unknown error",
+          retry: step.retryCount,
+          maxRetries: cp.settings.maxRetries
+        });
+      }
+      if (step.status === "skipped" && lastStep?.status !== "skipped") {
+        emit({
+          type: "step_skipped",
+          step: i,
+          reason: step.error || "User skipped"
+        });
+      }
+    }
+    if (lastCheckpoint && cp.state !== lastCheckpoint.state) {
+      if (cp.state === "complete") {
+        emit({
+          type: "loop_complete",
+          steps: total,
+          duration: Date.now() - new Date(cp.createdAt).getTime(),
+          errors: cp.context.errorsEncountered.length
+        });
+        cleanup();
+      } else if (cp.state === "paused") {
+        emit({
+          type: "loop_paused",
+          reason: "Checkpoint saved",
+          checkpointId: cp.id
+        });
+        cleanup();
+      } else if (cp.state === "aborted") {
+        emit({
+          type: "loop_aborted",
+          reason: cp.context.errorsEncountered.length > 0 ? "Max retries exceeded" : "User aborted",
+          checkpointId: cp.id
+        });
+        cleanup();
+      }
+    }
+    lastCheckpoint = cp;
+    if (cp.state === "complete" || cp.state === "aborted" || cp.state === "paused") {
+      cleanup();
+    }
+  }, 500);
+}
+function cleanup() {
+  if (stepCheckInterval) {
+    clearInterval(stepCheckInterval);
+    stepCheckInterval = null;
+  }
+}
+function setupSignalHandlers(checkpointId) {
+  const { pauseCheckpoint: pauseCheckpoint2, saveCheckpoint: saveCheckpoint3, loadCheckpoint: loadCheckpoint2 } = (init_checkpoint(), __toCommonJS(exports_checkpoint));
+  process.on("SIGTERM", () => {
+    cleanup();
+    const cp = loadCheckpoint2(checkpointId);
+    if (cp) {
+      saveCheckpoint3({ ...cp, state: "paused" });
+      emit({
+        type: "loop_paused",
+        reason: "SIGTERM received",
+        checkpointId: cp.id
+      });
+    }
+    process.exit(0);
+  });
+  process.on("SIGINT", () => {
+    cleanup();
+    const cp = loadCheckpoint2(checkpointId);
+    if (cp) {
+      saveCheckpoint3({ ...cp, state: "paused" });
+      emit({
+        type: "loop_paused",
+        reason: "SIGINT received",
+        checkpointId: cp.id
+      });
+    }
+    process.exit(0);
+  });
+}
+async function main2() {
+  const args = process.argv.slice(2);
+  if (args[0] === "--resume") {
+    const checkpointId = args[1];
+    if (!checkpointId) {
+      emit({ type: "error", message: "Missing checkpoint ID" });
+      process.exit(1);
+    }
+    setupSignalHandlers(checkpointId);
+    startStepWatcher(checkpointId);
+    try {
+      const { resumeLoop: resumeLoop3 } = await Promise.resolve().then(() => (init_executor(), exports_executor));
+      await resumeLoop3(checkpointId);
+    } catch (err) {
+      emit({ type: "error", message: String(err) });
+      process.exit(1);
+    }
+  } else if (args[0] === "--goal") {
+    const goal = args.slice(1).join(" ");
+    if (!goal) {
+      emit({ type: "error", message: "Missing goal" });
+      process.exit(1);
+    }
+    const cwd = process.cwd();
+    try {
+      const { createCheckpoint: createCheckpoint2, setSteps: setSteps2 } = await Promise.resolve().then(() => (init_checkpoint(), exports_checkpoint));
+      const { getMiniMaxToken: getMiniMaxToken2 } = await Promise.resolve().then(() => (init_src(), exports_src));
+      const { LLMClient: LLMClient2 } = await Promise.resolve().then(() => (init_llm(), exports_llm));
+      const { loadSettings: loadSettings2 } = await Promise.resolve().then(() => (init_onboarding(), exports_onboarding));
+      const settings = loadSettings2();
+      const token = getMiniMaxToken2();
+      const client = new LLMClient2(token, settings.model || "MiniMax-M2.7");
+      const cp = createCheckpoint2(goal, cwd);
+      emit({ type: "checkpoint_saved", checkpointId: cp.id });
+      const { planSteps: planSteps2 } = await Promise.resolve().then(() => (init_executor(), exports_executor));
+      const steps = await planSteps2(goal, client, cwd);
+      setSteps2(cp, steps);
+      setupSignalHandlers(cp.id);
+      startStepWatcher(cp.id);
+      const { runLoop: runLoop2 } = await Promise.resolve().then(() => (init_executor(), exports_executor));
+      await runLoop2({ goal, cwd, checkpointId: cp.id });
+    } catch (err) {
+      emit({ type: "error", message: String(err) });
+      process.exit(1);
+    }
+  } else {
+    emit({ type: "error", message: "Usage: loop-agent --goal <goal> or --resume <checkpointId>" });
+    process.exit(1);
+  }
+  cleanup();
+  process.exit(0);
+}
+main2();

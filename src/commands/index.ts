@@ -729,7 +729,7 @@ registerCommand({
         // List checkpoints
         const { listCheckpoints } = await import('../loop/checkpoint.js')
         const checkpoints = listCheckpoints(10)
-        if (checkpoints.length === 0) return 'No checkpoints found.'
+        if (checkpoints.length === 0) return 'No checkpoints found.\nStart a loop with /loop <goal>'
         const lines = ['Available checkpoints:\n']
         for (const cp of checkpoints) {
           const progress = `${cp.currentStep}/${cp.steps.length}`
@@ -739,17 +739,21 @@ registerCommand({
         return lines.join('\n') + '\n\nUse /loop --resume <id> to continue'
       }
       
-      const { resumeLoop } = await import('../loop/executor.js')
-      const result = await resumeLoop(id)
-      return result.message
+      const { resumeLoop } = await import('../loop/spawner.js')
+      resumeLoop(id)
+      return `Resuming loop ${id} in background...\nUse /progress to check status.`
     }
     
     const goal = args.join(' ')
-    if (!goal) return 'Usage: /loop <goal>\nExample: /loop build a REST API with authentication\n\nResume: /loop --resume <checkpoint-id>'
+    if (!goal) return 'Usage: /loop <goal>\nExample: /loop build a REST API with authentication\n\nResume: /loop --resume <checkpoint-id>\nPause: /pause\nAbort: /abort'
     
-    const { runLoop } = await import('../loop/executor.js')
-    const result = await runLoop({ goal, cwd: ctx.cwd })
-    return result.message
+    const { spawnLoop, isLoopRunning } = await import('../loop/spawner.js')
+    if (isLoopRunning()) {
+      return 'Loop already running. Use /pause or /abort first.'
+    }
+    
+    const checkpointId = spawnLoop(goal, ctx.cwd)
+    return `Starting loop in background...\nCheckpoint: ${checkpointId}\n\nUse /progress to check status.\nPause: /pause  |  Abort: /abort`
   },
 })
 
@@ -818,5 +822,39 @@ registerCommand({
     }
     
     return lines.join('\n')
+  },
+})
+
+registerCommand({
+  name: 'pause',
+  description: 'Pause running loop (SIGTERM, 2s to checkpoint)',
+  aliases: ['suspend'],
+  execute: async (args, ctx) => {
+    const { pauseLoop, isLoopRunning, getActiveLoop } = await import('../loop/spawner.js')
+    
+    if (!isLoopRunning()) {
+      return 'No loop running.'
+    }
+    
+    const loop = getActiveLoop()
+    pauseLoop()
+    return `Pausing loop... checkpoint will be saved.\\nResume with: /loop --resume ${loop?.checkpointId}`
+  },
+})
+
+registerCommand({
+  name: 'abort',
+  description: 'Abort running loop immediately (SIGKILL)',
+  aliases: ['kill', 'stop'],
+  execute: async (args, ctx) => {
+    const { abortLoop, isLoopRunning, getActiveLoop } = await import('../loop/spawner.js')
+    
+    if (!isLoopRunning()) {
+      return 'No loop running.'
+    }
+    
+    const loop = getActiveLoop()
+    abortLoop()
+    return `Aborted loop.\\nCheckpoint saved at: ${loop?.checkpointId}\\nResume with: /loop --resume ${loop?.checkpointId}`
   },
 })
