@@ -20183,7 +20183,7 @@ function displayProgress(event) {
       break;
     case "step_complete":
       const elapsed = event.duration > 1000 ? `${(event.duration / 1000).toFixed(1)}s` : `${event.duration}ms`;
-      process.stdout.write(`${c2.cyan("◉")} ${event.description.slice(0, 50)} ` + `[${event.step}/${event.total}] ` + `${c2.green("✓")} ${dim(elapsed)}`);
+      process.stdout.write(`${c2.cyan("◉")} ${event.description.slice(0, 50)} ` + `[${event.step}/${event.total || "?"}] ` + `${c2.green("✓")} ${dim(elapsed)}`);
       break;
     case "step_failed":
       process.stdout.write(`${c2.cyan("◉")} Step ${event.step} ` + `${c2.red("✗")} ${event.error.slice(0, 50)} ` + dim(`retry ${event.retry}/${event.maxRetries}`));

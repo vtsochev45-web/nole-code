@@ -20187,7 +20187,7 @@ function displayProgress(event) {
       break;
     case "step_complete":
       const elapsed = event.duration > 1000 ? `${(event.duration / 1000).toFixed(1)}s` : `${event.duration}ms`;
-      process.stdout.write(`${c.cyan("◉")} ${event.description.slice(0, 50)} ` + `[${event.step}/${event.total}] ` + `${c.green("✓")} ${dim(elapsed)}`);
+      process.stdout.write(`${c.cyan("◉")} ${event.description.slice(0, 50)} ` + `[${event.step}/${event.total || "?"}] ` + `${c.green("✓")} ${dim(elapsed)}`);
       break;
     case "step_failed":
       process.stdout.write(`${c.cyan("◉")} Step ${event.step} ` + `${c.red("✗")} ${event.error.slice(0, 50)} ` + dim(`retry ${event.retry}/${event.maxRetries}`));
@@ -23456,6 +23456,26 @@ async function main2() {
       startStepWatcher(cp.id);
       const { runLoop: runLoop2 } = await Promise.resolve().then(() => (init_executor(), exports_executor));
       await runLoop2({ goal, cwd, checkpointId: cp.id });
+      const { loadCheckpoint: loadCheckpoint2 } = await Promise.resolve().then(() => (init_checkpoint(), exports_checkpoint));
+      const final = loadCheckpoint2(cp.id);
+      if (final) {
+        if (final.state === "complete") {
+          emit({
+            type: "loop_complete",
+            steps: final.steps.length,
+            duration: Date.now() - new Date(final.createdAt).getTime(),
+            errors: final.context.errorsEncountered.length
+          });
+        } else if (final.state === "paused") {
+          emit({ type: "loop_paused", reason: "Checkpoint saved", checkpointId: cp.id });
+        } else if (final.state === "aborted") {
+          emit({
+            type: "loop_aborted",
+            reason: final.context.errorsEncountered.length > 0 ? "Max retries exceeded" : "User aborted",
+            checkpointId: cp.id
+          });
+        }
+      }
     } catch (err) {
       emit({ type: "error", message: String(err) });
       process.exit(1);

@@ -81,7 +81,7 @@ function displayProgress(event: IPCEvent): void {
         : `${event.duration}ms`
       process.stdout.write(
         `${c.cyan('◉')} ${event.description.slice(0, 50)} ` +
-        `[${event.step}/${event.total}] ` +
+        `[${event.step}/${event.total || '?'}] ` +
         `${c.green('✓')} ${dim(elapsed)}`
       )
       break

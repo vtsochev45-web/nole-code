@@ -240,6 +240,28 @@ async function main(): Promise<void> {
       
       const { runLoop } = await import('./executor.js')
       await runLoop({ goal, cwd, checkpointId: cp.id })
+      
+      // Emit final state before exit (loop_complete may have been missed by polling cleanup)
+      const { loadCheckpoint } = await import('./checkpoint.js')
+      const final = loadCheckpoint(cp.id)
+      if (final) {
+        if (final.state === 'complete') {
+          emit({
+            type: 'loop_complete',
+            steps: final.steps.length,
+            duration: Date.now() - new Date(final.createdAt).getTime(),
+            errors: final.context.errorsEncountered.length,
+          })
+        } else if (final.state === 'paused') {
+          emit({ type: 'loop_paused', reason: 'Checkpoint saved', checkpointId: cp.id })
+        } else if (final.state === 'aborted') {
+          emit({
+            type: 'loop_aborted',
+            reason: final.context.errorsEncountered.length > 0 ? 'Max retries exceeded' : 'User aborted',
+            checkpointId: cp.id,
+          })
+        }
+      }
     } catch (err) {
       emit({ type: 'error', message: String(err) })
       process.exit(1)
