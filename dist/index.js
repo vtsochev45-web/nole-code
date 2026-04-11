@@ -22220,6 +22220,215 @@ var init_skills2 = __esm(() => {
   });
 });
 
+// src/commands/clipboard.ts
+var exports_clipboard = {};
+import { execSync as execSync2 } from "child_process";
+function readClipboard() {
+  try {
+    if (process.platform === "darwin") {
+      return execSync2("pbpaste", { encoding: "utf-8" }).trim();
+    } else {
+      return execSync2("xclip -selection clipboard -o", { encoding: "utf-8" }).trim();
+    }
+  } catch {
+    throw new Error("Clipboard unavailable or empty");
+  }
+}
+function writeClipboard(text) {
+  if (process.platform === "darwin") {
+    execSync2(`echo -n "${text.replace(/"/g, "\\\"")}" | pbcopy`);
+  } else {
+    execSync2(`echo -n "${text.replace(/"/g, "\\\"")}" | xclip -selection clipboard -i`);
+  }
+}
+var init_clipboard = __esm(() => {
+  init_commands2();
+  registerCommand({
+    name: "clipboard",
+    description: "Read or write clipboard. Usage: /clipboard [text]",
+    aliases: ["cb", "copy"],
+    execute: async (args2) => {
+      if (args2.length === 0) {
+        try {
+          const content = readClipboard();
+          const preview = content.length > 300 ? content.slice(0, 300) + "..." : content;
+          return `\uD83D\uDCCB Clipboard:
+${preview || "(empty)"}`;
+        } catch (e) {
+          return `\uD83D\uDCCB Clipboard unavailable or empty`;
+        }
+      }
+      const text = args2.join(" ");
+      try {
+        writeClipboard(text);
+        return `✅ Copied ${text.length} chars to clipboard`;
+      } catch (e) {
+        return `❌ Failed to write to clipboard`;
+      }
+    }
+  });
+});
+
+// src/commands/calc.ts
+var exports_calc = {};
+function convertUnits(expr2) {
+  const lower = expr2.toLowerCase().trim();
+  for (const [pattern, [factor, unit]] of Object.entries(conversions)) {
+    if (lower.includes(pattern)) {
+      const numMatch = expr2.match(/[\d.]+/);
+      if (!numMatch)
+        return null;
+      const num = parseFloat(numMatch[0]);
+      let result2 = num * factor;
+      if (pattern === "c in f") {
+        result2 = num * 9 / 5 + 32;
+        return { value: Math.round(result2 * 100) / 100, unit };
+      }
+      if (pattern === "f in c") {
+        result2 = (num - 32) * 5 / 9;
+        return { value: Math.round(result2 * 100) / 100, unit };
+      }
+      return { value: Math.round(result2 * 100) / 100, unit };
+    }
+  }
+  return null;
+}
+function calc(expr2) {
+  const conv = convertUnits(expr2);
+  if (conv) {
+    const numMatch = expr2.match(/[\d.]+/);
+    const num = parseFloat(numMatch[0]);
+    return `${num} → ${conv.value} ${conv.unit}`;
+  }
+  try {
+    const result2 = new Function(`"use strict"; return (${expr2})`)();
+    if (typeof result2 === "number") {
+      const formatted = Number.isInteger(result2) ? result2.toString() : result2.toFixed(6).replace(/\.?0+$/, "");
+      return `${formatted}`;
+    }
+    return `${result2}`;
+  } catch (e) {
+    return `Error: ${e.message}`;
+  }
+}
+var conversions;
+var init_calc = __esm(() => {
+  init_commands2();
+  conversions = {
+    "kg in lb": [2.20462, "lb"],
+    "lb in kg": [0.453592, "kg"],
+    "km in miles": [0.621371, "miles"],
+    "miles in km": [1.60934, "km"],
+    "c in f": [1, "°F"],
+    "f in c": [1, "°C"],
+    "hectares in acres": [2.47105, "acres"],
+    "acres in hectares": [0.404686, "ha"],
+    "m in feet": [3.28084, "feet"],
+    "feet in m": [0.3048, "m"],
+    "litres in gallons": [0.264172, "gallons"],
+    "gallons in litres": [3.78541, "L"],
+    "kg in tonnes": [0.001, "tonnes"],
+    "tonnes in kg": [1000, "kg"]
+  };
+  registerCommand({
+    name: "calc",
+    description: "Evaluate math. Usage: /calc <expr>  e.g. /calc 150 * 0.85",
+    aliases: ["math"],
+    execute: async (args2) => {
+      if (!args2.length) {
+        return `Usage: /calc <expression>
+Examples:
+  /calc 150 * 0.85
+  /calc (10**6) / 60
+  /calc 10 kg in lb
+  /calc 100 km in miles
+  /calc 25 c in f`;
+      }
+      const expr2 = args2.join(" ");
+      const result2 = calc(expr2);
+      return result2.startsWith("Error") ? result2 : `${expr2} = ${result2}`;
+    }
+  });
+});
+
+// src/commands/changelog.ts
+var exports_changelog = {};
+import { execSync as execSync3 } from "child_process";
+function getLastTag() {
+  try {
+    return execSync3("git describe --tags --abbrev=0 2>/dev/null", { encoding: "utf-8" }).trim();
+  } catch {
+    return null;
+  }
+}
+function generateChangelog() {
+  const lastTag = getLastTag();
+  const tagRange = lastTag ? `${lastTag}..HEAD` : "-50";
+  let log;
+  try {
+    log = execSync3(`git log --oneline ${tagRange} 2>/dev/null`, { encoding: "utf-8" }).trim();
+  } catch {
+    return "No git commits found";
+  }
+  if (!log)
+    return "No commits since last tag";
+  const lines = log.split(`
+`).filter(Boolean);
+  const groups = {
+    Features: [],
+    Bugfixes: [],
+    Refactors: [],
+    Docs: [],
+    Other: []
+  };
+  for (const line of lines) {
+    const match = line.match(/^([a-f0-9]+)\s+(.+)$/);
+    if (!match)
+      continue;
+    const [, hash, msg] = match;
+    const lower = msg.toLowerCase();
+    if (lower.startsWith("feat") || lower.startsWith("add") || lower.startsWith("improve")) {
+      groups["Features"].push(`- ${msg} (\`${hash.slice(0, 7)}\`)`);
+    } else if (lower.startsWith("fix")) {
+      groups["Bugfixes"].push(`- ${msg} (\`${hash.slice(0, 7)}\`)`);
+    } else if (lower.startsWith("refactor") || lower.startsWith("perf")) {
+      groups["Refactors"].push(`- ${msg} (\`${hash.slice(0, 7)}\`)`);
+    } else if (lower.startsWith("docs") || lower.startsWith("readme") || lower.startsWith("changelog")) {
+      groups["Docs"].push(`- ${msg} (\`${hash.slice(0, 7)}\`)`);
+    } else {
+      groups["Other"].push(`- ${msg} (\`${hash.slice(0, 7)}\`)`);
+    }
+  }
+  const parts = [];
+  if (lastTag)
+    parts.push(`## ${lastTag} (unreleased)
+`);
+  else
+    parts.push(`## Current
+`);
+  for (const [section, items] of Object.entries(groups)) {
+    if (items.length === 0)
+      continue;
+    parts.push(`### ${section}
+${items.join(`
+`)}
+`);
+  }
+  return parts.join(`
+`);
+}
+var init_changelog = __esm(() => {
+  init_commands2();
+  registerCommand({
+    name: "changelog",
+    description: "Generate changelog from git commits",
+    aliases: ["chg"],
+    execute: async () => {
+      return generateChangelog();
+    }
+  });
+});
+
 // node_modules/glob/dist/esm/index.min.js
 var exports_index_min = {};
 __export(exports_index_min, {
@@ -27106,10 +27315,10 @@ var exports_port = {};
 __export(exports_port, {
   registerPortCommand: () => registerPortCommand
 });
-import { execSync as execSync3 } from "child_process";
+import { execSync as execSync5 } from "child_process";
 function parseListeningPorts() {
   try {
-    const output = execSync3("ss -tlnp", { encoding: "utf-8" });
+    const output = execSync5("ss -tlnp", { encoding: "utf-8" });
     const lines = output.split(`
 `).slice(1);
     const ports = [];
@@ -27125,7 +27334,7 @@ function parseListeningPorts() {
       let processName = "";
       if (pid) {
         try {
-          const procOutput = execSync3(`ps -p ${pid} -o comm=`, { encoding: "utf-8" });
+          const procOutput = execSync5(`ps -p ${pid} -o comm=`, { encoding: "utf-8" });
           processName = procOutput.trim();
         } catch {}
       }
@@ -27138,7 +27347,7 @@ function parseListeningPorts() {
 }
 function getPortProcess(port) {
   try {
-    const output = execSync3(`ss -tlnp | grep :${port}`, { encoding: "utf-8" });
+    const output = execSync5(`ss -tlnp | grep :${port}`, { encoding: "utf-8" });
     const lines = output.trim().split(`
 `);
     if (lines.length === 0 || lines[0] === "")
@@ -27151,7 +27360,7 @@ function getPortProcess(port) {
     let processName = "";
     if (pid) {
       try {
-        const procOutput = execSync3(`ps -p ${pid} -o comm=`, { encoding: "utf-8" });
+        const procOutput = execSync5(`ps -p ${pid} -o comm=`, { encoding: "utf-8" });
         processName = procOutput.trim();
       } catch {}
     }
@@ -27162,7 +27371,7 @@ function getPortProcess(port) {
 }
 function killProcess(pid) {
   try {
-    execSync3(`kill ${pid}`, { encoding: "utf-8" });
+    execSync5(`kill ${pid}`, { encoding: "utf-8" });
     return true;
   } catch {
     return false;
@@ -28558,6 +28767,9 @@ Start one with /loop <goal>`;
     Promise.resolve().then(() => (init_server(), exports_server)).then((m) => m.registerServerCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_commands(), exports_commands)).then((m) => m.registerBuddyCommands(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_skills2(), exports_skills)).then((m) => m.registerSkillCommands(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_clipboard(), exports_clipboard)).then((m) => m.registerCommand).catch(() => {});
+    Promise.resolve().then(() => (init_calc(), exports_calc)).then((m) => m.registerCommand).catch(() => {});
+    Promise.resolve().then(() => (init_changelog(), exports_changelog)).then((m) => m.registerCommand).catch(() => {});
     Promise.resolve().then(() => (init_read(), exports_read)).then((m) => m.registerReadCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_grep(), exports_grep)).then((m) => m.registerGrepCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_test(), exports_test)).then((m) => m.registerTestCommand(registerCommand)).catch(() => {});
@@ -29662,8 +29874,8 @@ ${memorySummary}` : ""}${resumeContext}`;
       const cmd = line.slice(1).trim();
       if (cmd) {
         try {
-          const { execSync: execSync4 } = __require("child_process");
-          const completions = execSync4(`compgen -c ${cmd}`, { encoding: "utf-8" }).split(`
+          const { execSync: execSync6 } = __require("child_process");
+          const completions = execSync6(`compgen -c ${cmd}`, { encoding: "utf-8" }).split(`
 `).filter(Boolean).slice(0, 20);
           return [completions, line];
         } catch {}
