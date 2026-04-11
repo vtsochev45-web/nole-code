@@ -20130,17 +20130,17 @@ function printProgress(checkpoint) {
   const state = checkpoint.state.toUpperCase();
   let stateColor = dim;
   if (checkpoint.state === "running")
-    stateColor = yellow;
+    stateColor = c2.yellow;
   if (checkpoint.state === "complete")
     stateColor = green;
   if (checkpoint.state === "failed" || checkpoint.state === "aborted")
-    stateColor = red;
+    stateColor = c2.red;
   clearLine();
   process.stdout.write(`\r${c2.cyan("◉")} ${bold(checkpoint.goal.slice(0, 60))} ` + `[${progress.current}/${progress.total}] ` + `${stateColor(state)}`);
   if (progress.currentStep) {
     const step = progress.currentStep;
     const prefix = step.status === "running" ? "▶" : step.status === "failed" ? "✗" : "○";
-    const stepColor = step.status === "running" ? yellow : step.status === "failed" ? red : dim;
+    const stepColor = step.status === "running" ? c2.yellow : step.status === "failed" ? c2.red : dim;
     process.stdout.write(`
   ${stepColor(prefix)} ${step.description.slice(0, 70)}`);
   }
@@ -20277,11 +20277,13 @@ What tools should I use to complete this step? Respond with specific tool calls.
           }
           sessionMessages.push({
             role: "assistant",
-            content: `Used ${tc.name} to ${tc.input.description || tc.input.command || "execute task"}`
+            content: `Used ${tc.name} to ${tc.input.description || tc.input.command || "execute task"}`,
+            tool_calls: [{ id: tc.id, name: tc.name, input: tc.input }]
           });
           sessionMessages.push({
             role: "tool",
             content: execResult.content.slice(0, 500),
+            tool_call_id: tc.id,
             name: tc.name
           });
         } catch (err) {
@@ -21678,11 +21680,11 @@ function formatVerboseResult(toolName, result, options = {}) {
   } = options;
   const parts = [];
   const green2 = "\x1B[32m";
-  const red2 = "\x1B[31m";
+  const red = "\x1B[31m";
   const dim2 = "\x1B[2m";
   const reset = "\x1B[0m";
   const bold2 = "\x1B[1m";
-  const status = isError ? `${red2}✗${reset}` : `${green2}✓${reset}`;
+  const status = isError ? `${red}✗${reset}` : `${green2}✓${reset}`;
   let timingStr = "";
   if (timestamp !== undefined) {
     const elapsed = Date.now() - timestamp;
@@ -21712,12 +21714,12 @@ var init_spinner = __esm(() => {
 
 // src/ui/output/streaming.ts
 function formatCancelled(reason) {
-  return `${yellow2}${CANCELLED}: ${reason}${reset}`;
+  return `${yellow}${CANCELLED}: ${reason}${reset}`;
 }
 function formatShortcuts() {
   return `${dim2}Esc to cancel · ctrl+e to explain · ctrl+o to expand${reset}`;
 }
-var CANCELLED = "⏱ Cancelled", dim2 = "\x1B[2m", reset = "\x1B[0m", yellow2 = "\x1B[33m";
+var CANCELLED = "⏱ Cancelled", dim2 = "\x1B[2m", reset = "\x1B[0m", yellow = "\x1B[33m";
 var init_streaming = __esm(() => {
   init_spinner();
 });
@@ -22060,6 +22062,7 @@ ${summary}`,
 // src/index.ts
 var exports_src = {};
 __export(exports_src, {
+  getMiniMaxToken: () => getMiniMaxToken,
   activeClient: () => activeClient
 });
 import { existsSync as existsSync16, readFileSync as readFileSync15, mkdirSync as mkdirSync9 } from "fs";
@@ -22925,5 +22928,6 @@ var init_src = __esm(() => {
 init_src();
 
 export {
+  getMiniMaxToken,
   activeClient
 };

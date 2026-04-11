@@ -76,7 +76,7 @@ async function streamOutput(lines: string[], maxLines: number, delayMs = 10): Pr
 }
 
 // ============ Token Loading ============
-function getMiniMaxToken(): string {
+export function getMiniMaxToken(): string {
   try {
     const authPath = join(homedir(), '.openclaw', 'agents', 'main', 'agent', 'auth-profiles.json')
     if (existsSync(authPath)) {

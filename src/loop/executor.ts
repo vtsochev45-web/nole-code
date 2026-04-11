@@ -61,9 +61,9 @@ function printProgress(checkpoint: Checkpoint): void {
   
   // State color
   let stateColor = dim
-  if (checkpoint.state === 'running') stateColor = yellow
+  if (checkpoint.state === 'running') stateColor = c.yellow
   if (checkpoint.state === 'complete') stateColor = green
-  if (checkpoint.state === 'failed' || checkpoint.state === 'aborted') stateColor = red
+  if (checkpoint.state === 'failed' || checkpoint.state === 'aborted') stateColor = c.red
   
   // Header
   clearLine()
@@ -77,7 +77,7 @@ function printProgress(checkpoint: Checkpoint): void {
   if (progress.currentStep) {
     const step = progress.currentStep
     const prefix = step.status === 'running' ? '▶' : step.status === 'failed' ? '✗' : '○'
-    const stepColor = step.status === 'running' ? yellow : step.status === 'failed' ? red : dim
+    const stepColor = step.status === 'running' ? c.yellow : step.status === 'failed' ? c.red : dim
     process.stdout.write(`\n  ${stepColor(prefix)} ${step.description.slice(0, 70)}`)
   }
   
@@ -251,10 +251,12 @@ ${step.retryCount > 0 ? buildRetryContext({ steps: [step], context } as Checkpoi
           sessionMessages.push({
             role: 'assistant',
             content: `Used ${tc.name} to ${tc.input.description || tc.input.command || 'execute task'}`,
+            tool_calls: [{ id: tc.id, name: tc.name, input: tc.input }]
           })
           sessionMessages.push({
             role: 'tool',
             content: execResult.content.slice(0, 500), // Truncate for context
+            tool_call_id: tc.id,
             name: tc.name,
           })
           
