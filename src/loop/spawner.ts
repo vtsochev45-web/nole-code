@@ -344,11 +344,38 @@ async function notifyComplete(checkpointId: string, success: boolean, errors: nu
     fs.writeFileSync(logPath, existing + entry)
   } catch {}
   
-  // Send Telegram notification
+  // Auto-commit on successful loop completion
+  let commitHash = ''
+  if (success) {
+    try {
+      const { execSync } = require('child_process')
+      const cwd = cp.cwd || process.cwd()
+      
+      // Check for changes
+      const status = execSync('git status --short', { encoding: 'utf-8', cwd }).trim()
+      if (status) {
+        execSync('git add -A', { cwd })
+        const commitMsg = `feat: complete loop ${checkpointId}`
+        commitHash = execSync(`git commit -m "${commitMsg}"`, { encoding: 'utf-8', cwd }).trim()
+        
+        // Get the actual commit hash
+        const hashResult = execSync('git rev-parse HEAD', { encoding: 'utf-8', cwd }).trim()
+        commitHash = hashResult.slice(0, 7)
+        console.log(dim(`  Auto-committed: ${commitHash}`))
+      }
+    } catch (e) {
+      // Git commit failed (no changes or not a repo) - ignore
+    }
+  }
+  
+  // Send Telegram notification (include commit hash if available)
   const tgToken = process.env.TELEGRAM_BOT_TOKEN
   const tgChat = process.env.TELEGRAM_CHAT_ID
   if (tgToken && tgChat) {
+    const fullMsg = commitHash 
+      ? `${msg}\nCommit: ${commitHash}` 
+      : msg
     const url = `https://api.telegram.org/bot${tgToken}/sendMessage`
-    fetch(`${url}?chat_id=${tgChat}&text=${encodeURIComponent(msg)}`).catch(() => {})
+    fetch(`${url}?chat_id=${tgChat}&text=${encodeURIComponent(fullMsg)}`).catch(() => {})
   }
 }

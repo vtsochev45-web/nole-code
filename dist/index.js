@@ -20485,11 +20485,29 @@ Steps: ${cp.steps.length} | Errors: ${errors3} | Duration: ${elapsed}s
     const existing = fs.existsSync(logPath) ? fs.readFileSync(logPath, "utf8") : "";
     fs.writeFileSync(logPath, existing + entry);
   } catch {}
+  let commitHash = "";
+  if (success) {
+    try {
+      const { execSync: execSync2 } = __require("child_process");
+      const cwd = cp.cwd || process.cwd();
+      const status2 = execSync2("git status --short", { encoding: "utf-8", cwd }).trim();
+      if (status2) {
+        execSync2("git add -A", { cwd });
+        const commitMsg = `feat: complete loop ${checkpointId}`;
+        commitHash = execSync2(`git commit -m "${commitMsg}"`, { encoding: "utf-8", cwd }).trim();
+        const hashResult = execSync2("git rev-parse HEAD", { encoding: "utf-8", cwd }).trim();
+        commitHash = hashResult.slice(0, 7);
+        console.log(dim(`  Auto-committed: ${commitHash}`));
+      }
+    } catch (e) {}
+  }
   const tgToken = process.env.TELEGRAM_BOT_TOKEN;
   const tgChat = process.env.TELEGRAM_CHAT_ID;
   if (tgToken && tgChat) {
+    const fullMsg = commitHash ? `${msg}
+Commit: ${commitHash}` : msg;
     const url2 = `https://api.telegram.org/bot${tgToken}/sendMessage`;
-    fetch(`${url2}?chat_id=${tgChat}&text=${encodeURIComponent(msg)}`).catch(() => {});
+    fetch(`${url2}?chat_id=${tgChat}&text=${encodeURIComponent(fullMsg)}`).catch(() => {});
   }
 }
 var activeLoop = null, currentTotal = 0;
@@ -28173,7 +28191,19 @@ ${divider()}
           break;
         const { estimateTotalTokens: estTokens } = await Promise.resolve().then(() => exports_count_tokens);
         const currentTokens = estTokens(session.messages);
-        if (currentTokens > 1e5) {
+        const maxCtx2 = 128000;
+        const ctxPercent = currentTokens / maxCtx2 * 100;
+        if (ctxPercent > 70) {
+          console.log(dim(`  Auto-compacting context (${ctxPercent.toFixed(0)}% full)...`));
+          try {
+            const { maybeCompact: maybeCompact3 } = await Promise.resolve().then(() => (init_compact(), exports_compact));
+            maybeCompact3(session.messages, session.id);
+            saveSession(session);
+            console.log(dim(`  Compaction complete`));
+          } catch (e) {
+            console.log(dim(`  Compaction failed: ${e}`));
+          }
+        } else if (currentTokens > 1e5) {
           console.log(dim(`  Context large (~${(currentTokens / 1000).toFixed(0)}K tokens), summarizing...`));
           try {
             const { summarizeMessages: summarizeMessages2 } = await Promise.resolve().then(() => exports_summarize);
