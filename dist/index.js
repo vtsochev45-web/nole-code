@@ -18341,9 +18341,9 @@ var init_registry = __esm(() => {
         return `Access denied: ${pathCheck.reason}`;
       if (!existsSync8(path))
         return `File not found: ${path}`;
-      const { getCachedFileRead, cacheFileRead } = await Promise.resolve().then(() => (init_compact(), exports_compact));
+      const { getCachedFile: getCachedFile2, cacheFile: cacheFile2 } = await Promise.resolve().then(() => (init_compact(), exports_compact));
       if (!input.offset && !input.limit) {
-        const cached2 = getCachedFileRead(path);
+        const cached2 = getCachedFile2(path);
         if (cached2)
           return cached2 + `
 [cached — same file read recently]`;
@@ -18402,7 +18402,7 @@ ${content}`;
           content = content.slice(0, 1e5) + `
 ... (truncated)`;
         if (!input.offset && !input.limit)
-          cacheFileRead(path, content);
+          cacheFile2(path, content);
         return content;
       } catch (err) {
         return `Error reading ${path}: ${err}`;
@@ -18430,6 +18430,8 @@ ${content}`;
         if (!existsSync8(dir))
           mkdirSync4(dir, { recursive: true });
         writeFileSync4(path, input.content, "utf-8");
+        const { invalidateCache: invalidateCache2 } = await Promise.resolve().then(() => (init_compact(), exports_compact));
+        invalidateCache2(path);
         return `Written ${input.content.length} chars to ${path}`;
       } catch (err) {
         return `Error writing ${path}: ${err}`;
@@ -18475,6 +18477,8 @@ ${content}`;
                 const actualOld = content.slice(lineIdx, endIdx + lastLine.length);
                 content = content.replace(actualOld, newText);
                 writeFileSync4(path, content, "utf-8");
+                const { invalidateCache: invalidateCache2 } = await Promise.resolve().then(() => (init_compact(), exports_compact));
+                invalidateCache2(path);
                 const relPath2 = relative2(process.cwd(), path) || path;
                 const diffLines2 = [`${relPath2} (fuzzy match — whitespace differences):`];
                 for (const l of actualOld.split(`
@@ -18506,6 +18510,8 @@ Tip: Use Read to check the exact content first.`;
         }
         content = content.replace(oldText, newText);
         writeFileSync4(path, content, "utf-8");
+        const { invalidateCache: invalidateEdit } = await Promise.resolve().then(() => (init_compact(), exports_compact));
+        invalidateEdit(path);
         const relPath = relative2(process.cwd(), path) || path;
         const oldLines = oldText.split(`
 `);
@@ -18873,6 +18879,8 @@ Manage with /team list or /team send`;
         if (input.cell_type)
           nb.cells[idx].cell_type = input.cell_type;
         writeFileSync4(path, JSON.stringify(nb, null, 2));
+        const { invalidateCache: invalidateNb } = await Promise.resolve().then(() => (init_compact(), exports_compact));
+        invalidateNb(path);
         return `Edited cell ${idx} in ${path}`;
       } catch (err) {
         return `Error: ${err}`;
@@ -19100,6 +19108,8 @@ ${dirCount} directories, ${fileCount} files`);
         diffs.push("");
       }
       writeFileSync4(filePath, content, "utf-8");
+      const { invalidateCache: invalidateMulti } = await Promise.resolve().then(() => (init_compact(), exports_compact));
+      invalidateMulti(filePath);
       const verify = readFileSync8(filePath, "utf-8");
       let verified = 0;
       for (const edit of edits) {
@@ -19209,6 +19219,8 @@ ${responseBody}`;
             if (!dryRun) {
               const newContent = content.split(pattern).join(replacement);
               writeFileSync4(file, newContent, "utf-8");
+              const { invalidateCache: invalidateFind } = await Promise.resolve().then(() => (init_compact(), exports_compact));
+              invalidateFind(file);
             }
             changes.push(`  ${relPath}: ${matches.length} match${matches.length > 1 ? "es" : ""}`);
           }

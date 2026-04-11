@@ -375,9 +375,9 @@ registerTool({
     if (!existsSync(path)) return `File not found: ${path}`
 
     // Dedup: if this exact file was read recently (same path, no offset/limit), return cached
-    const { getCachedFileRead, cacheFileRead } = await import('../services/compact/index.js')
+    const { getCachedFile, cacheFile } = await import('../services/compact/index.js')
     if (!input.offset && !input.limit) {
-      const cached = getCachedFileRead(path)
+      const cached = getCachedFile(path)
       if (cached) return cached + '\n[cached — same file read recently]'
     }
 
@@ -432,7 +432,7 @@ registerTool({
       if (content.length > 100000) content = content.slice(0, 100000) + '\n... (truncated)'
 
       // Cache full reads (no offset/limit) for dedup
-      if (!input.offset && !input.limit) cacheFileRead(path, content)
+      if (!input.offset && !input.limit) cacheFile(path, content)
 
       return content
     } catch (err) {
@@ -460,6 +460,9 @@ registerTool({
       const dir = join(path, '..')
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
       writeFileSync(path, input.content as string, 'utf-8')
+      // Invalidate file cache since file was modified
+      const { invalidateCache } = await import('../services/compact/index.js')
+      invalidateCache(path)
       return `Written ${(input.content as string).length} chars to ${path}`
     } catch (err) {
       return `Error writing ${path}: ${err}`
@@ -508,6 +511,8 @@ registerTool({
               const actualOld = content.slice(lineIdx, endIdx + lastLine.length)
               content = content.replace(actualOld, newText)
               writeFileSync(path, content, 'utf-8')
+              const { invalidateCache } = await import('../services/compact/index.js')
+              invalidateCache(path)
               const relPath = relative(process.cwd(), path) || path
               const diffLines = [`${relPath} (fuzzy match — whitespace differences):`]
               for (const l of actualOld.split('\n')) diffLines.push(`\x1b[31m- ${l}\x1b[0m`)
@@ -530,6 +535,8 @@ registerTool({
       }
       content = content.replace(oldText, newText)
       writeFileSync(path, content, 'utf-8')
+      const { invalidateCache: invalidateEdit } = await import('../services/compact/index.js')
+      invalidateEdit(path)
 
       // Show colored diff
       const relPath = relative(process.cwd(), path) || path
@@ -956,6 +963,8 @@ registerTool({
       if (input.cell_type) nb.cells[idx].cell_type = input.cell_type
 
       writeFileSync(path, JSON.stringify(nb, null, 2))
+      const { invalidateCache: invalidateNb } = await import('../services/compact/index.js')
+      invalidateNb(path)
       return `Edited cell ${idx} in ${path}`
     } catch (err) {
       return `Error: ${err}`
@@ -1198,6 +1207,8 @@ registerTool({
     }
 
     writeFileSync(filePath, content, 'utf-8')
+    const { invalidateCache: invalidateMulti } = await import('../services/compact/index.js')
+    invalidateMulti(filePath)
 
     // Self-verify: re-read and confirm all new_text fragments exist
     const verify = readFileSync(filePath, 'utf-8')
@@ -1314,6 +1325,8 @@ registerTool({
           if (!dryRun) {
             const newContent = content.split(pattern).join(replacement)
             writeFileSync(file, newContent, 'utf-8')
+            const { invalidateCache: invalidateFind } = await import('../services/compact/index.js')
+            invalidateFind(file)
           }
 
           changes.push(`  ${relPath}: ${matches.length} match${matches.length > 1 ? 'es' : ''}`)
