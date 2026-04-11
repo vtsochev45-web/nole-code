@@ -28,6 +28,8 @@ export const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || ''
 export const MINIMAX_BASE_URL = process.env.MINIMAX_BASE_URL || 'https://api.minimax.chat/v1'
 export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || ''
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY || ''
+export const API_KEY = process.env.API_KEY || ''
+export const SERVER_PORT = parseInt(process.env.SERVER_PORT || '18792', 10)
 
 export function isEnvTruthy(key: string): boolean {
   const val = process.env[key]

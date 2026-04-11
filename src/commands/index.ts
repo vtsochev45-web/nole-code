@@ -909,6 +909,10 @@ registerCommand({
   },
 })
 
+// Server commands
+import { registerServerCommand } from './server.js'
+registerServerCommand(registerCommand)
+
 // Buddy commands
 import { registerBuddyCommands } from '../buddy/commands.js'
 registerBuddyCommands(registerCommand)
