@@ -19567,7 +19567,40 @@ function loadSession(id) {
   if (!existsSync9(file))
     return null;
   try {
-    return JSON.parse(readFileSync9(file, "utf-8"));
+    const session = JSON.parse(readFileSync9(file, "utf-8"));
+    if (session.messages && Array.isArray(session.messages)) {
+      const toolUseIds = new Set;
+      for (const msg of session.messages) {
+        if (msg.role === "assistant" && msg.tool_calls) {
+          for (const tc of msg.tool_calls) {
+            if (tc.id)
+              toolUseIds.add(tc.id);
+          }
+        }
+      }
+      const before = session.messages.length;
+      session.messages = session.messages.filter((msg) => {
+        if (msg.role === "tool" && msg.tool_call_id && !toolUseIds.has(msg.tool_call_id))
+          return false;
+        return true;
+      });
+      const toolResultIds = new Set;
+      for (const msg of session.messages) {
+        if (msg.role === "tool" && msg.tool_call_id)
+          toolResultIds.add(msg.tool_call_id);
+      }
+      for (const msg of session.messages) {
+        if (msg.role === "assistant" && msg.tool_calls) {
+          msg.tool_calls = msg.tool_calls.filter((tc) => tc.id && toolResultIds.has(tc.id));
+          if (msg.tool_calls.length === 0)
+            delete msg.tool_calls;
+        }
+      }
+      if (session.messages.length < before) {
+        console.error(`[session] Cleaned ${before - session.messages.length} orphaned tool messages from session ${id}`);
+      }
+    }
+    return session;
   } catch {
     return null;
   }
