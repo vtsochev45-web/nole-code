@@ -20624,6 +20624,7 @@ __export(exports_checkpoint, {
   createCheckpoint: () => createCheckpoint,
   completeStep: () => completeStep,
   completeCheckpoint: () => completeCheckpoint,
+  checkpointEvents: () => checkpointEvents,
   buildRetryContext: () => buildRetryContext,
   addStep: () => addStep,
   abortCheckpoint: () => abortCheckpoint
@@ -20639,6 +20640,7 @@ import {
 } from "fs";
 import { join as join13 } from "path";
 import { homedir as homedir12 } from "os";
+import { EventEmitter as EventEmitter3 } from "events";
 function ensureCheckpointDir() {
   mkdirSync8(CHECKPOINT_DIR, { recursive: true });
 }
@@ -20694,6 +20696,7 @@ function saveCheckpoint(checkpoint) {
   const tmp = file + `.tmp.${Date.now()}`;
   writeFileSync8(tmp, JSON.stringify(checkpoint, null, 2), "utf-8");
   renameSync2(tmp, file);
+  checkpointEvents.emit("save", checkpoint);
 }
 function deleteCheckpoint(id) {
   const file = join13(CHECKPOINT_DIR, `${id}.json`);
@@ -20904,8 +20907,10 @@ function inferErrorHint(error2) {
   }
   return null;
 }
-var CHECKPOINT_DIR;
+var checkpointEvents, CHECKPOINT_DIR;
 var init_checkpoint = __esm(() => {
+  checkpointEvents = new EventEmitter3;
+  checkpointEvents.setMaxListeners(20);
   CHECKPOINT_DIR = join13(homedir12(), ".nole-code", "checkpoints");
 });
 
@@ -21603,13 +21608,13 @@ var init_loop = __esm(() => {
 
 // src/tasks/LocalShellTask/index.ts
 import { spawn as spawn4 } from "child_process";
-import { EventEmitter as EventEmitter3 } from "events";
+import { EventEmitter as EventEmitter4 } from "events";
 function createShellTask(options) {
   return new LocalShellTask(options);
 }
 var LocalShellTask;
 var init_LocalShellTask = __esm(() => {
-  LocalShellTask = class LocalShellTask extends EventEmitter3 {
+  LocalShellTask = class LocalShellTask extends EventEmitter4 {
     task;
     proc;
     startTime;
@@ -21707,13 +21712,13 @@ var init_LocalShellTask = __esm(() => {
 // src/tasks/LocalAgentTask/index.ts
 import { spawn as spawn5 } from "child_process";
 import { join as join14 } from "path";
-import { EventEmitter as EventEmitter4 } from "events";
+import { EventEmitter as EventEmitter5 } from "events";
 function createAgentTask(options) {
   return new LocalAgentTask(options);
 }
 var LocalAgentTask;
 var init_LocalAgentTask = __esm(() => {
-  LocalAgentTask = class LocalAgentTask extends EventEmitter4 {
+  LocalAgentTask = class LocalAgentTask extends EventEmitter5 {
     task;
     proc;
     constructor(options) {
@@ -21815,13 +21820,13 @@ var init_LocalAgentTask = __esm(() => {
 });
 
 // src/tasks/DreamTask/index.ts
-import { EventEmitter as EventEmitter5 } from "events";
+import { EventEmitter as EventEmitter6 } from "events";
 function createDreamTask(options) {
   return new DreamTask(options);
 }
 var DreamTask;
 var init_DreamTask = __esm(() => {
-  DreamTask = class DreamTask extends EventEmitter5 {
+  DreamTask = class DreamTask extends EventEmitter6 {
     task;
     running = false;
     constructor(options) {
@@ -21900,7 +21905,7 @@ var init_DreamTask = __esm(() => {
 import { existsSync as existsSync13, readFileSync as readFileSync13, writeFileSync as writeFileSync9, mkdirSync as mkdirSync9 } from "fs";
 import { dirname as dirname5, join as join15 } from "path";
 import { homedir as homedir13 } from "os";
-import { EventEmitter as EventEmitter6 } from "events";
+import { EventEmitter as EventEmitter7 } from "events";
 function ensureTasksFile() {
   const dir = dirname5(TASKS_FILE2);
   if (!existsSync13(dir)) {
@@ -21929,7 +21934,7 @@ var init_manager2 = __esm(() => {
   init_LocalAgentTask();
   init_DreamTask();
   TASKS_FILE2 = join15(homedir13(), ".nole-code", "tasks.json");
-  TaskManager = class TaskManager extends EventEmitter6 {
+  TaskManager = class TaskManager extends EventEmitter7 {
     tasks = new Map;
     runners = new Map;
     fileData = {};

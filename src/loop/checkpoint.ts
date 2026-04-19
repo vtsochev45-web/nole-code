@@ -16,6 +16,13 @@ import {
 } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
+import { EventEmitter } from 'events'
+
+// In-process event bus — fires on every saveCheckpoint. Consumers (loop/agent)
+// subscribe here instead of polling the checkpoint file, which eliminates the
+// 500ms window where fast state transitions could be missed.
+export const checkpointEvents = new EventEmitter()
+checkpointEvents.setMaxListeners(20)
 
 // ============ Types ============
 
@@ -155,12 +162,16 @@ export function loadLatestCheckpoint(): Checkpoint | null {
 export function saveCheckpoint(checkpoint: Checkpoint): void {
   ensureCheckpointDir()
   checkpoint.updatedAt = new Date().toISOString()
-  
+
   const file = join(CHECKPOINT_DIR, `${checkpoint.id}.json`)
   const tmp = file + `.tmp.${Date.now()}`
-  
+
   writeFileSync(tmp, JSON.stringify(checkpoint, null, 2), 'utf-8')
   renameSync(tmp, file)
+
+  // Emit after the atomic rename so subscribers see the persisted state.
+  // Freeze a shallow copy so listeners can't mutate the in-flight object.
+  checkpointEvents.emit('save', checkpoint)
 }
 
 /**

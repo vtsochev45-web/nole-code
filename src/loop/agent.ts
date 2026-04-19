@@ -6,7 +6,7 @@
  */
 
 import { runLoop } from './executor.js'
-import { Checkpoint } from './checkpoint.js'
+import { Checkpoint, checkpointEvents } from './checkpoint.js'
 
 // ============ IPC Protocol ============
 
@@ -28,50 +28,30 @@ function emit(event: IPCEvent): void {
 
 // ============ Intercept Executor ============
 
-// We need to intercept executor events. Since executor is synchronous-ish,
-// we'll wrap the checkpoint loading to detect step transitions.
-
+// Event-driven watcher: subscribe to checkpointEvents.save instead of polling.
+// Every call to saveCheckpoint fires the handler with the just-persisted state,
+// so we can't miss transitions and we don't burn CPU polling when nothing changes.
 let lastCheckpoint: Checkpoint | null = null
-let stepCheckInterval: ReturnType<typeof setInterval> | null = null
+let saveHandler: ((cp: Checkpoint) => void) | null = null
 
 function startStepWatcher(checkpointId: string): void {
-  // Poll checkpoint every 500ms and detect changes
-  stepCheckInterval = setInterval(async () => {
-    const { loadCheckpoint } = await import('./checkpoint.js')
-    const cp = loadCheckpoint(checkpointId)
-    if (!cp) return
-    
+  saveHandler = (cp: Checkpoint) => {
+    if (cp.id !== checkpointId) return
     const total = cp.steps.length
-    
+
     // Check each step for status changes
     for (let i = 0; i < cp.steps.length; i++) {
       const step = cp.steps[i]
       const lastStep = lastCheckpoint?.steps[i]
-      
-      // Detect new running state
+
       if (step.status === 'running' && lastStep?.status !== 'running') {
-        emit({
-          type: 'step_start',
-          step: i,
-          total,
-          description: step.description,
-        })
+        emit({ type: 'step_start', step: i, total, description: step.description })
       }
-      
-      // Detect completion
       if (step.status === 'complete' && lastStep?.status !== 'complete') {
         const started = step.startedAt ? new Date(step.startedAt).getTime() : 0
         const completed = step.completedAt ? new Date(step.completedAt).getTime() : Date.now()
-        emit({
-          type: 'step_complete',
-          step: i,
-          total,
-          duration: completed - started,
-          description: step.description,
-        })
+        emit({ type: 'step_complete', step: i, duration: completed - started, description: step.description })
       }
-      
-      // Detect failure
       if (step.status === 'failed' && lastStep?.status !== 'failed') {
         emit({
           type: 'step_failed',
@@ -81,17 +61,11 @@ function startStepWatcher(checkpointId: string): void {
           maxRetries: (cp.settings?.maxRetries ?? 2),
         })
       }
-      
-      // Detect skip
       if (step.status === 'skipped' && lastStep?.status !== 'skipped') {
-        emit({
-          type: 'step_skipped',
-          step: i,
-          reason: step.error || 'User skipped',
-        })
+        emit({ type: 'step_skipped', step: i, reason: step.error || 'User skipped' })
       }
     }
-    
+
     // Detect state changes
     if (lastCheckpoint && cp.state !== lastCheckpoint.state) {
       if (cp.state === 'complete') {
@@ -101,39 +75,30 @@ function startStepWatcher(checkpointId: string): void {
           duration: Date.now() - new Date(cp.createdAt).getTime(),
           errors: cp.context.errorsEncountered.length,
         })
-        cleanup()
       } else if (cp.state === 'paused') {
-        emit({
-          type: 'loop_paused',
-          reason: 'Checkpoint saved',
-          checkpointId: cp.id,
-        })
-        cleanup()
+        emit({ type: 'loop_paused', reason: 'Checkpoint saved', checkpointId: cp.id })
       } else if (cp.state === 'aborted') {
         emit({
           type: 'loop_aborted',
-          reason: cp.context.errorsEncountered.length > 0 
-            ? 'Max retries exceeded' 
-            : 'User aborted',
+          reason: cp.context.errorsEncountered.length > 0 ? 'Max retries exceeded' : 'User aborted',
           checkpointId: cp.id,
         })
-        cleanup()
       }
     }
-    
+
     lastCheckpoint = cp
-    
-    // Check if done
+
     if (cp.state === 'complete' || cp.state === 'aborted' || cp.state === 'paused') {
       cleanup()
     }
-  }, 500)
+  }
+  checkpointEvents.on('save', saveHandler)
 }
 
 function cleanup(): void {
-  if (stepCheckInterval) {
-    clearInterval(stepCheckInterval)
-    stepCheckInterval = null
+  if (saveHandler) {
+    checkpointEvents.off('save', saveHandler)
+    saveHandler = null
   }
 }
 
