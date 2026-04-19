@@ -1,6 +1,8 @@
 // Nole Code - Web Tools
 // Web search and fetch utilities
 
+import { checkUrlSafety } from '../utils/url-safety.js'
+
 export async function webSearch(query: string, count = 5): Promise<string> {
   // Handle time queries specially
   const timeMatch = query.match(/(?:current )?time (?:is )?in ([A-Za-z_\s]+?)(?:\?|$)/i)
@@ -108,6 +110,10 @@ async function ddgHtmlSearch(query: string, count: number): Promise<string[]> {
 }
 
 export async function webFetch(url: string, maxChars = 10000): Promise<string> {
+  const safety = checkUrlSafety(url)
+  if (!safety.safe) {
+    return `WebFetch blocked: ${safety.reason}`
+  }
   try {
     const response = await fetch(url, {
       headers: {

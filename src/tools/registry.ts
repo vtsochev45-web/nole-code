@@ -12,6 +12,7 @@ import { mcpRegistry } from '../mcp/client.js'
 import { spawnAgent, onAgentMessage } from '../agents/spawner.js'
 import { createTeam } from '../agents/team.js'
 import { checkCommandSecurity, validatePath } from '../permissions/bash-security.js'
+import { checkUrlSafety } from '../utils/url-safety.js'
 import { logToolCall } from '../utils/audit.js'
 import { getPreHooks, getPostHooks, runHooks } from '../hooks/index.js'
 import { checkPermission, type PermissionContext } from '../permissions/rules-engine.js'
@@ -207,6 +208,13 @@ export async function executeTool(
       return {
         content: `Blocked: ${security.reason}\nDangerous patterns: ${security.dangerousPatterns?.join(', ') || 'unknown'}`,
         isError: true,
+      }
+    }
+    // Non-critical but not on the safe list — require user confirmation.
+    if (!security.allowed && security.requiresConfirmation) {
+      const allowed = await promptPermission('Bash', input, security.reason)
+      if (!allowed) {
+        return { content: `Blocked by user: ${security.reason}`, isError: true }
       }
     }
   }
@@ -985,10 +993,11 @@ registerTool({
     required: ['pattern', 'path'],
   },
   execute: async (input, _ctx) => {
-    const ctx = input.context ? `-C ${input.context}` : '-C 2'
-    const pattern = (input.pattern as string).replace(/'/g, "'\\''")
-    const path = resolve(process.cwd(), input.path as string)
-    return runBash(`grep ${ctx} -r -- "${pattern}" "${path}" 2>/dev/null | head -50`)
+    const ctxN = Number(input.context)
+    const ctx = Number.isFinite(ctxN) && ctxN >= 0 ? `-C ${Math.min(ctxN, 20)}` : '-C 2'
+    const safePattern = String(input.pattern).replace(/'/g, "'\"'\"'")
+    const safePath = resolve(process.cwd(), String(input.path)).replace(/'/g, "'\"'\"'")
+    return runBash(`grep ${ctx} -r -- '${safePattern}' '${safePath}' 2>/dev/null | head -50`)
   },
 })
 
@@ -1004,9 +1013,9 @@ registerTool({
     required: ['pattern'],
   },
   execute: async (input, _ctx) => {
-    const cwd = (input.cwd as string) || process.cwd()
-    const pattern = input.pattern as string
-    return runBash(`find "${cwd}" -type f -name "${pattern}" 2>/dev/null | head -100`)
+    const safeCwd = String(input.cwd || process.cwd()).replace(/'/g, "'\"'\"'")
+    const safePattern = String(input.pattern).replace(/'/g, "'\"'\"'")
+    return runBash(`find '${safeCwd}' -type f -name '${safePattern}' 2>/dev/null | head -100`)
   },
 })
 
@@ -1241,6 +1250,10 @@ registerTool({
   },
   execute: async (input, _ctx) => {
     const url = input.url as string
+    const urlCheck = checkUrlSafety(url)
+    if (!urlCheck.safe) {
+      return `HttpRequest blocked: ${urlCheck.reason}`
+    }
     const method = (input.method as string) || 'GET'
     const headers: Record<string, string> = {
       'User-Agent': 'Nole-Code/1.12',

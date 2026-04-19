@@ -303,7 +303,10 @@ class MCPClientManager {
         })
         .join('\n')
 
-      const isError = result.isError || content.includes('error') || content.includes('Error')
+      // Trust the MCP server's authoritative `isError` flag. Heuristic
+      // substring matching on "error" misclassifies content like "0 errors
+      // found" and aborts healthy steps.
+      const isError = Boolean(result.isError)
 
       return { content, isError }
 

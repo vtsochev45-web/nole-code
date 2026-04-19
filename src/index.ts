@@ -1,9 +1,17 @@
 #!/usr/bin/env node
 // Load .env before any modules that need it
-import { existsSync, readFileSync } from 'fs'
-import { join, dirname } from 'path'
-import { homedir } from 'os'
-function _loadEnv(path) {
+// NOTE: These imports must stay at the top - ES modules hoist all imports
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { join, resolve, dirname } from 'node:path'
+import { homedir } from 'node:os'
+import * as readline from 'readline'
+import { LLMClient } from './api/llm.js'
+import { getToolDefinitions, executeTool } from './tools/registry.js'
+import { loadMCPServers } from './mcp/client.js'
+import { parseCommand, getCommand } from './commands/index.js'
+
+// Load .env before running - must happen after imports are processed
+function _loadEnv(path: string): void {
   if (!existsSync(path)) return
   try {
     const content = readFileSync(path, 'utf-8')
@@ -18,21 +26,10 @@ function _loadEnv(path) {
   } catch {}
 }
 // Load both locations first so other modules see the vars
-// Load .env from known locations — prefer ~/nole-code/.env
 _loadEnv(join(homedir(), 'nole-code', '.env'))  // ~/nole-code/.env (primary)
 _loadEnv(join(homedir(), '.nole-code', '.env'))  // ~/.nole-code/.env (fallback)
 _loadEnv(join(process.cwd(), '.env'))            // cwd/.env (override if exists)
-// Nole Code - Main Entry Point
-// Rich terminal UI inspired by Nole Code's REPL
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
-import * as readline from 'readline'
-import { LLMClient } from './api/llm.js'
-import { getToolDefinitions, executeTool } from './tools/registry.js'
-import { loadMCPServers } from './mcp/client.js'
-import { parseCommand, getCommand } from './commands/index.js'
 import { spawnAgent, onAgentMessage } from './agents/spawner.js'
 import { createTeam } from './agents/team.js'
 import { loadSession, saveSession, createSession, listSessions, deleteSession, forkSession, compactSession } from './session/manager.js'
@@ -160,7 +157,7 @@ function detectPlanIntent(input: string): string | null {
 function getBanner(cwd: string, verbose = false) {
   const v = verbose ? `${dim('· ')}verbose` : ''
   return `
-${bold(c.cyan('▐▛███▜▌'))} ${bold('Nole Code v1.19')} ${dim('· MiniMax')}
+${bold(c.cyan('▐▛███▜▌'))} ${bold('Nole Code v1.20')} ${dim('· MiniMax')}
 ${dim('▝▜█████▛▘')} ${dim(cwd)} ${v}
 
 ${divider()}
@@ -484,9 +481,16 @@ ${projectContext ? `\n# Project Context (from NOLE.md)\n${projectContext}` : ''}
 ${projectInstructions ? `\n# Project Instructions\n${projectInstructions}` : ''}
 ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
 
-  // Initialize messages
+  // Initialize or update system prompt
   if (session.messages.length === 0) {
     session.messages.push({ role: 'system', content: systemPrompt, timestamp: new Date().toISOString() })
+  } else {
+    // Update stale system prompt on resumed sessions
+    const systemMsg = session.messages.find(m => m.role === 'system')
+    if (systemMsg) {
+      systemMsg.content = systemPrompt
+      systemMsg.timestamp = new Date().toISOString()
+    }
   }
 
   saveSession(session)
@@ -774,7 +778,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
 
     const toolDefs = getToolDefinitions(expandedInput)
     let responseText = ''
-    let toolCalls: Array<{ id: string; name: string; input: Record<string, unknown> }> = []
+    let toolCalls: Array<{ id?: string; name: string; input: Record<string, unknown> }> = []
 
     // Stream response
     console.log(`\n${divider()}\n`)

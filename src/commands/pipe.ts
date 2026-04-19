@@ -1,10 +1,7 @@
 // /pipe <cmd> — Pipe last output through shell command
-import { exec } from 'child_process'
-import { promisify } from 'util'
+import { spawn } from 'child_process'
 import { Command, CommandContext, registerCommand } from './index.js'
 import * as indexModule from '../index.js'
-
-const execAsync = promisify(exec)
 
 export function registerPipeCommand(register: typeof registerCommand) {
   register({
@@ -23,20 +20,25 @@ export function registerPipeCommand(register: typeof registerCommand) {
 
       const shellCmd = args.join(' ')
 
-      try {
-        const { stdout, stderr } = await execAsync(shellCmd, {
-          input: lastOutput,
-          encoding: 'utf-8',
-          timeout: 10000,
-        })
+      return new Promise((resolve) => {
+        const child = spawn('sh', ['-c', shellCmd], { timeout: 10000 })
+        let stdout = ''
+        let stderr = ''
 
-        if (stdout) return stdout
-        if (stderr) return stderr
-        return '(no output)'
-      } catch (err: unknown) {
-        const error = err as { message?: string; stdout?: string; stderr?: string }
-        return error.stdout || error.stderr || `Error: ${error.message || String(err)}`
-      }
+        child.stdout?.on('data', (data) => { stdout += data })
+        child.stderr?.on('data', (data) => { stderr += data })
+        
+        child.on('close', (code) => {
+          if (stdout) resolve(stdout)
+          else if (stderr) resolve(stderr)
+          else resolve(code === 0 ? '(no output)' : `Exit code: ${code}`)
+        })
+        
+        child.on('error', (err) => resolve(`Error: ${err.message}`))
+        
+        child.stdin?.write(lastOutput)
+        child.stdin?.end()
+      })
     },
   })
 }

@@ -27,6 +27,7 @@ import {
   type LoopState,
 } from './checkpoint.js'
 
+import { randomUUID } from 'crypto'
 import { LLMClient } from '../api/llm.js'
 import { getToolDefinitions, executeTool } from '../tools/registry.js'
 import { loadSettings } from '../project/onboarding.js'
@@ -285,16 +286,19 @@ ${step.retryCount > 0 ? buildRetryContext({ steps: [step], context } as Checkpoi
             break
           }
           
-          // Add to session messages
+          // Add to session messages — guarantee a non-undefined id, otherwise
+          // the next turn's tool_result lacks a matching tool_use and the API
+          // returns 400.
+          const callId = tc.id || `call_${randomUUID()}`
           sessionMessages.push({
             role: 'assistant',
             content: `Used ${tc.name} to ${tc.input.description || tc.input.command || 'execute task'}`,
-            tool_calls: [{ id: tc.id, name: tc.name, input: tc.input }]
+            tool_calls: [{ id: callId, name: tc.name, input: tc.input }]
           })
           sessionMessages.push({
             role: 'tool',
             content: execResult.content.slice(0, 500), // Truncate for context
-            tool_call_id: tc.id,
+            tool_call_id: callId,
             name: tc.name,
           })
           
@@ -413,18 +417,22 @@ export async function runLoop(options: ExecutorOptions): Promise<ExecutionResult
     
     // Handle step result
     if (!stepShouldContinue) {
-      // Check retry count
-      if (step.retryCount >= (checkpoint.settings?.maxRetries ?? 2)) {
-        failStep(checkpoint, currentStepId, step.error || 'Max retries exceeded', toolCalls)
-        printStepFailed(currentStepId, step, step.error || 'Max retries exceeded')
+      // Record failure (increments retryCount)
+      failStep(checkpoint, currentStepId, step.error || 'Step failed', toolCalls)
+
+      // Re-read step after failStep incremented retryCount
+      const updatedStep = checkpoint.steps[currentStepId]
+      const maxRetries = checkpoint.settings?.maxRetries ?? 2
+
+      if (updatedStep.retryCount >= maxRetries) {
+        printStepFailed(currentStepId, updatedStep, updatedStep.error || 'Max retries exceeded')
         abortCheckpoint(checkpoint)
         break
       }
-      
+
       // Retry the same step
-      failStep(checkpoint, currentStepId, step.error || 'Step failed', toolCalls)
-      printStepFailed(currentStepId, step, step.error || 'Step failed')
-      console.log(`  ${c.yellow('↻')} Retrying step ${currentStepId + 1} (attempt ${step.retryCount + 1}/${checkpoint.settings.maxRetries})`)
+      printStepFailed(currentStepId, updatedStep, updatedStep.error || 'Step failed')
+      console.log(`  ${c.yellow('↻')} Retrying step ${currentStepId + 1} (attempt ${updatedStep.retryCount + 1}/${maxRetries})`)
       continue
     }
     

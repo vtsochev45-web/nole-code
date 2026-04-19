@@ -388,6 +388,14 @@ export function shouldContinue(checkpoint: Checkpoint): { continue: boolean; rea
   if (checkpoint.state === 'aborted') {
     return { continue: false, reason: 'Checkpoint aborted' }
   }
+
+  if (checkpoint.state === 'paused') {
+    return { continue: false, reason: 'Checkpoint paused' }
+  }
+
+  if (checkpoint.state === 'waiting') {
+    return { continue: false, reason: 'Checkpoint waiting' }
+  }
   
   return { continue: true }
 }

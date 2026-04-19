@@ -13,18 +13,30 @@
  *   }
  */
 
-// Feature registry
+// Feature registry — security-sensitive flags ON by default. Can be turned off
+// explicitly via NOLE_FEATURES_DISABLE env var if someone needs the legacy behavior.
 const ENABLED_FEATURES = new Set<string>([
   'TOOL_RESULT_STREAMING',  // Stream tool results to UI as they arrive
   'VERBOSE_OUTPUT',         // Show detailed tool execution info
+  'PERMISSION_RULES',       // Pattern-based permission rules (gates Bash / Write / Edit)
+  'COMMAND_ANALYSIS',       // Parse and analyze bash commands
+  'PATH_VALIDATION',        // Validate paths against project boundaries
+  'DESTRUCTIVE_CONFIRM',    // Confirm destructive operations
 ])
 
-// Environment override
+// Environment override — NOLE_FEATURES adds; NOLE_FEATURES_DISABLE removes.
 const envFeatures = process.env.NOLE_FEATURES
 if (envFeatures) {
   for (const f of envFeatures.split(',')) {
     const trimmed = f.trim()
     if (trimmed) ENABLED_FEATURES.add(trimmed)
+  }
+}
+const envDisable = process.env.NOLE_FEATURES_DISABLE
+if (envDisable) {
+  for (const f of envDisable.split(',')) {
+    const trimmed = f.trim()
+    if (trimmed) ENABLED_FEATURES.delete(trimmed)
   }
 }
 

@@ -162,6 +162,7 @@ __export(exports_llm, {
   parseXmlToolCalls: () => parseXmlToolCalls,
   LLMClient: () => LLMClient
 });
+import { randomUUID } from "crypto";
 function parseApiError(raw) {
   try {
     const data = JSON.parse(raw);
@@ -177,13 +178,35 @@ function parseApiError(raw) {
       return "Invalid API key. Check MINIMAX_API_KEY.";
     return msg;
   } catch {
-    return raw.slice(0, 200);
+    const trimmed = raw.trim();
+    return trimmed.length > 500 ? `${trimmed.slice(0, 500)}… (truncated)` : trimmed;
   }
 }
 async function fetchWithRetry(url, init, retries = MAX_RETRIES) {
   let lastResponse = null;
   for (let attempt = 0;attempt < retries; attempt++) {
-    const response = await fetch(url, init);
+    const controller = new AbortController;
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let response;
+    try {
+      response = await fetch(url, { ...init, signal: controller.signal });
+    } catch (err) {
+      clearTimeout(timer);
+      const isAbort = err instanceof Error && (err.name === "AbortError" || /abort/i.test(err.message));
+      const isLast = attempt === retries - 1;
+      if (isLast) {
+        if (isAbort) {
+          throw new Error(`API request timed out after ${REQUEST_TIMEOUT_MS}ms (set NOLE_FETCH_TIMEOUT_MS to adjust)`);
+        }
+        throw err;
+      }
+      const delay2 = BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * 1000;
+      process.stderr.write(`\x1B[33m⟳ API ${isAbort ? "timeout" : "network error"}, retrying in ${(delay2 / 1000).toFixed(1)}s (${attempt + 1}/${retries})\x1B[0m
+`);
+      await new Promise((r) => setTimeout(r, delay2));
+      continue;
+    }
+    clearTimeout(timer);
     lastResponse = response;
     if (response.ok || !RETRY_STATUS.has(response.status)) {
       return response;
@@ -217,7 +240,7 @@ function parseXmlToolCalls(text) {
       }
     }
     calls.push({
-      id: `xml_${Date.now()}_${calls.length}`,
+      id: `xml_${randomUUID()}`,
       name: toolName,
       input
     });
@@ -590,7 +613,11 @@ class LLMClient {
         }
       }
       return usage;
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isFatalApi = /\bAPI error 4\d\d\b/.test(msg) && !/ 408| 429/.test(msg);
+      if (isFatalApi)
+        throw err;
       const result = await this.chat(messages, options);
       onChunk(result.content);
       for (const tc of result.toolCalls)
@@ -685,11 +712,79 @@ class LLMClient {
     };
   }
 }
-var RETRY_STATUS, MAX_RETRIES = 3, BASE_DELAY_MS = 2000;
+var RETRY_STATUS, MAX_RETRIES = 3, BASE_DELAY_MS = 2000, REQUEST_TIMEOUT_MS;
 var init_llm = __esm(() => {
   init_env();
   RETRY_STATUS = new Set([429, 500, 502, 503, 529]);
+  REQUEST_TIMEOUT_MS = Number(process.env.NOLE_FETCH_TIMEOUT_MS) || 180000;
 });
+
+// src/utils/url-safety.ts
+import { isIP } from "net";
+function isPrivateIPv4(ip) {
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255))
+    return false;
+  const [a, b] = parts;
+  if (a === 10)
+    return true;
+  if (a === 127)
+    return true;
+  if (a === 169 && b === 254)
+    return true;
+  if (a === 172 && b >= 16 && b <= 31)
+    return true;
+  if (a === 192 && b === 168)
+    return true;
+  if (a === 100 && b >= 64 && b <= 127)
+    return true;
+  if (a === 0)
+    return true;
+  return false;
+}
+function isPrivateIPv6(ip) {
+  const lower = ip.toLowerCase().replace(/^\[|\]$/g, "");
+  if (lower === "::1" || lower === "::")
+    return true;
+  if (lower.startsWith("fe80:"))
+    return true;
+  if (lower.startsWith("fc") || lower.startsWith("fd"))
+    return true;
+  if (lower.startsWith("::ffff:")) {
+    const v4 = lower.slice(7);
+    if (isIP(v4) === 4)
+      return isPrivateIPv4(v4);
+  }
+  return false;
+}
+function checkUrlSafety(raw) {
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    return { safe: false, reason: "malformed URL" };
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    return { safe: false, reason: `scheme ${u.protocol} not allowed (http/https only)` };
+  }
+  const host = u.hostname;
+  if (!host)
+    return { safe: false, reason: "empty host" };
+  const lower = host.toLowerCase();
+  if (lower === "localhost" || lower.endsWith(".localhost") || lower.endsWith(".local")) {
+    return { safe: false, reason: `host ${host} blocked (loopback)` };
+  }
+  const fam = isIP(host);
+  if (fam === 4 && isPrivateIPv4(host))
+    return { safe: false, reason: `IPv4 ${host} is private/loopback` };
+  if (fam === 6 && isPrivateIPv6(host))
+    return { safe: false, reason: `IPv6 ${host} is private/loopback` };
+  if (lower === "metadata.google.internal" || lower === "metadata") {
+    return { safe: false, reason: `host ${host} is a cloud metadata endpoint` };
+  }
+  return { safe: true };
+}
+var init_url_safety = () => {};
 
 // src/tools/web.ts
 async function webSearch(query, count = 5) {
@@ -790,6 +885,10 @@ async function ddgHtmlSearch(query, count) {
   return results;
 }
 async function webFetch(url, maxChars = 1e4) {
+  const safety = checkUrlSafety(url);
+  if (!safety.safe) {
+    return `WebFetch blocked: ${safety.reason}`;
+  }
   try {
     const response = await fetch(url, {
       headers: {
@@ -819,6 +918,9 @@ ${text}` : text || "(No readable content)";
     return `Fetch error: ${err}`;
   }
 }
+var init_web = __esm(() => {
+  init_url_safety();
+});
 
 // node_modules/zod/v4/core/core.js
 function $constructor(name, initializer, params) {
@@ -6455,7 +6557,7 @@ class Protocol {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1000;
-        await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error2) {
@@ -6467,7 +6569,7 @@ class Protocol {
   }
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve, reject) => {
       const earlyReject = (error2) => {
         reject(error2);
       };
@@ -6545,7 +6647,7 @@ class Protocol {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve2(parseResult.data);
+            resolve(parseResult.data);
           }
         } catch (error2) {
           reject(error2);
@@ -6736,12 +6838,12 @@ class Protocol {
         interval = task.pollInterval;
       }
     } catch {}
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve2, interval);
+      const timeoutId = setTimeout(resolve, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -9726,7 +9828,7 @@ var require_compile = __commonJS((exports) => {
     const schOrFunc = root.refs[ref];
     if (schOrFunc)
       return schOrFunc;
-    let _sch = resolve2.call(this, root, ref);
+    let _sch = resolve.call(this, root, ref);
     if (_sch === undefined) {
       const schema = (_a = root.localRefs) === null || _a === undefined ? undefined : _a[ref];
       const { schemaId } = this.opts;
@@ -9753,7 +9855,7 @@ var require_compile = __commonJS((exports) => {
   function sameSchemaEnv(s1, s2) {
     return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
   }
-  function resolve2(root, ref) {
+  function resolve(root, ref) {
     let sch;
     while (typeof (sch = this.refs[ref]) == "string")
       ref = sch;
@@ -10283,7 +10385,7 @@ var require_fast_uri = __commonJS((exports, module) => {
     }
     return uri;
   }
-  function resolve2(baseURI, relativeURI, options) {
+  function resolve(baseURI, relativeURI, options) {
     const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
     const resolved = resolveComponent(parse6(baseURI, schemelessOptions), parse6(relativeURI, schemelessOptions), schemelessOptions, true);
     schemelessOptions.skipEscape = true;
@@ -10432,7 +10534,7 @@ var require_fast_uri = __commonJS((exports, module) => {
       query: undefined,
       fragment: undefined
     };
-    let isIP = false;
+    let isIP2 = false;
     if (options.reference === "suffix") {
       if (options.scheme) {
         uri = options.scheme + ":" + uri;
@@ -10457,9 +10559,9 @@ var require_fast_uri = __commonJS((exports, module) => {
         if (ipv4result === false) {
           const ipv6result = normalizeIPv6(parsed.host);
           parsed.host = ipv6result.host.toLowerCase();
-          isIP = ipv6result.isIPV6;
+          isIP2 = ipv6result.isIPV6;
         } else {
-          isIP = true;
+          isIP2 = true;
         }
       }
       if (parsed.scheme === undefined && parsed.userinfo === undefined && parsed.host === undefined && parsed.port === undefined && parsed.query === undefined && !parsed.path) {
@@ -10476,7 +10578,7 @@ var require_fast_uri = __commonJS((exports, module) => {
       }
       const schemeHandler = getSchemeHandler(options.scheme || parsed.scheme);
       if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport)) {
-        if (parsed.host && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
+        if (parsed.host && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP2 === false && nonSimpleDomain(parsed.host)) {
           try {
             parsed.host = URL.domainToASCII(parsed.host.toLowerCase());
           } catch (e) {
@@ -10511,7 +10613,7 @@ var require_fast_uri = __commonJS((exports, module) => {
   var fastUri = {
     SCHEMES,
     normalize,
-    resolve: resolve2,
+    resolve,
     resolveComponent,
     equal,
     serialize,
@@ -14022,12 +14124,12 @@ var require_isexe = __commonJS((exports, module) => {
       if (typeof Promise !== "function") {
         throw new TypeError("callback not provided");
       }
-      return new Promise(function(resolve2, reject) {
+      return new Promise(function(resolve, reject) {
         isexe(path, options || {}, function(er, is) {
           if (er) {
             reject(er);
           } else {
-            resolve2(is);
+            resolve(is);
           }
         });
       });
@@ -14089,27 +14191,27 @@ var require_which = __commonJS((exports, module) => {
       opt = {};
     const { pathEnv, pathExt, pathExtExe } = getPathInfo(cmd, opt);
     const found = [];
-    const step = (i) => new Promise((resolve2, reject) => {
+    const step = (i) => new Promise((resolve, reject) => {
       if (i === pathEnv.length)
-        return opt.all && found.length ? resolve2(found) : reject(getNotFoundError(cmd));
+        return opt.all && found.length ? resolve(found) : reject(getNotFoundError(cmd));
       const ppRaw = pathEnv[i];
       const pathPart = /^".*"$/.test(ppRaw) ? ppRaw.slice(1, -1) : ppRaw;
       const pCmd = path.join(pathPart, cmd);
       const p = !pathPart && /^\.[\\\/]/.test(cmd) ? cmd.slice(0, 2) + pCmd : pCmd;
-      resolve2(subStep(p, i, 0));
+      resolve(subStep(p, i, 0));
     });
-    const subStep = (p, i, ii) => new Promise((resolve2, reject) => {
+    const subStep = (p, i, ii) => new Promise((resolve, reject) => {
       if (ii === pathExt.length)
-        return resolve2(step(i + 1));
+        return resolve(step(i + 1));
       const ext = pathExt[ii];
       isexe(p + ext, { pathExt: pathExtExe }, (er, is) => {
         if (!er && is) {
           if (opt.all)
             found.push(p + ext);
           else
-            return resolve2(p + ext);
+            return resolve(p + ext);
         }
-        return resolve2(subStep(p, i, ii + 1));
+        return resolve(subStep(p, i, ii + 1));
       });
     });
     return cb ? step(0).then((res) => cb(null, res), cb) : step(0);
@@ -14453,7 +14555,7 @@ class StdioClientTransport {
     if (this._process) {
       throw new Error("StdioClientTransport already started! If using Client class, note that connect() calls start() automatically.");
     }
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve, reject) => {
       this._process = import_cross_spawn.default(this._serverParams.command, this._serverParams.args ?? [], {
         env: {
           ...getDefaultEnvironment(),
@@ -14469,7 +14571,7 @@ class StdioClientTransport {
         this.onerror?.(error2);
       });
       this._process.on("spawn", () => {
-        resolve2();
+        resolve();
       });
       this._process.on("close", (_code) => {
         this._process = undefined;
@@ -14516,20 +14618,20 @@ class StdioClientTransport {
     if (this._process) {
       const processToClose = this._process;
       this._process = undefined;
-      const closePromise = new Promise((resolve2) => {
+      const closePromise = new Promise((resolve) => {
         processToClose.once("close", () => {
-          resolve2();
+          resolve();
         });
       });
       try {
         processToClose.stdin?.end();
       } catch {}
-      await Promise.race([closePromise, new Promise((resolve2) => setTimeout(resolve2, 2000).unref())]);
+      await Promise.race([closePromise, new Promise((resolve) => setTimeout(resolve, 2000).unref())]);
       if (processToClose.exitCode === null) {
         try {
           processToClose.kill("SIGTERM");
         } catch {}
-        await Promise.race([closePromise, new Promise((resolve2) => setTimeout(resolve2, 2000).unref())]);
+        await Promise.race([closePromise, new Promise((resolve) => setTimeout(resolve, 2000).unref())]);
       }
       if (processToClose.exitCode === null) {
         try {
@@ -14540,15 +14642,15 @@ class StdioClientTransport {
     this._readBuffer.clear();
   }
   send(message) {
-    return new Promise((resolve2) => {
+    return new Promise((resolve) => {
       if (!this._process?.stdin) {
         throw new Error("Not connected");
       }
       const json = serializeMessage(message);
       if (this._process.stdin.write(json)) {
-        resolve2();
+        resolve();
       } else {
-        this._process.stdin.once("drain", resolve2);
+        this._process.stdin.once("drain", resolve);
       }
     });
   }
@@ -15763,7 +15865,7 @@ class SSEClientTransport {
   }
   _startOrAuth() {
     const fetchImpl = this?._eventSourceInit?.fetch ?? this._fetch ?? fetch;
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve, reject) => {
       this._eventSource = new EventSource(this._url.href, {
         ...this._eventSourceInit,
         fetch: async (url2, init) => {
@@ -15784,7 +15886,7 @@ class SSEClientTransport {
       this._abortController = new AbortController;
       this._eventSource.onerror = (event) => {
         if (event.code === 401 && this._authProvider) {
-          this._authThenStart().then(resolve2, reject);
+          this._authThenStart().then(resolve, reject);
           return;
         }
         const error2 = new SseError(event.code, event.message, event);
@@ -15805,7 +15907,7 @@ class SSEClientTransport {
           this.close();
           return;
         }
-        resolve2();
+        resolve();
       });
       this._eventSource.onmessage = (event) => {
         const messageEvent = event;
@@ -16477,7 +16579,7 @@ class MCPClientManager {
         return JSON.stringify(block);
       }).join(`
 `);
-      const isError = result.isError || content.includes("error") || content.includes("Error");
+      const isError = Boolean(result.isError);
       return { content, isError };
     } catch (error2) {
       return {
@@ -16581,7 +16683,7 @@ __export(exports_spawner, {
 });
 import { spawn as spawn2, execSync } from "child_process";
 import { EventEmitter } from "events";
-import { randomUUID } from "crypto";
+import { randomUUID as randomUUID2 } from "crypto";
 import { join as join3 } from "path";
 import { writeFileSync, mkdirSync, existsSync as existsSync3 } from "fs";
 import { homedir as homedir3 } from "os";
@@ -16615,7 +16717,7 @@ function onAgentMessage(cb) {
   return () => agentEmitter.off("message", cb);
 }
 async function spawnAgent(options) {
-  const id = `agent_${randomUUID().slice(0, 8)}`;
+  const id = `agent_${randomUUID2().slice(0, 8)}`;
   const workDir = options.cwd || process.cwd();
   let actualCwd = workDir;
   if (options.isolation === "worktree") {
@@ -16847,9 +16949,9 @@ __export(exports_team, {
   TEAM_ROLES: () => TEAM_ROLES
 });
 import { EventEmitter as EventEmitter2 } from "events";
-import { randomUUID as randomUUID2 } from "crypto";
+import { randomUUID as randomUUID3 } from "crypto";
 async function createTeam(opts) {
-  const id = `team_${randomUUID2().slice(0, 8)}`;
+  const id = `team_${randomUUID3().slice(0, 8)}`;
   const team = {
     id,
     name: opts.name,
@@ -16866,7 +16968,7 @@ async function createTeam(opts) {
       background: true
     });
     const tm = {
-      id: randomUUID2().slice(0, 8),
+      id: randomUUID3().slice(0, 8),
       name: member.name,
       role: member.role,
       agentId: agent.id,
@@ -16899,7 +17001,7 @@ function sendTeamMessage(opts) {
   if (!team)
     return null;
   const message = {
-    id: `msg_${randomUUID2().slice(0, 8)}`,
+    id: `msg_${randomUUID3().slice(0, 8)}`,
     from: opts.from,
     to: opts.to,
     content: opts.content,
@@ -16988,11 +17090,15 @@ function setFeature(name, enabled) {
     ENABLED_FEATURES.delete(name);
   }
 }
-var ENABLED_FEATURES, envFeatures;
+var ENABLED_FEATURES, envFeatures, envDisable;
 var init_feature_flags = __esm(() => {
   ENABLED_FEATURES = new Set([
     "TOOL_RESULT_STREAMING",
-    "VERBOSE_OUTPUT"
+    "VERBOSE_OUTPUT",
+    "PERMISSION_RULES",
+    "COMMAND_ANALYSIS",
+    "PATH_VALIDATION",
+    "DESTRUCTIVE_CONFIRM"
   ]);
   envFeatures = process.env.NOLE_FEATURES;
   if (envFeatures) {
@@ -17002,10 +17108,18 @@ var init_feature_flags = __esm(() => {
         ENABLED_FEATURES.add(trimmed);
     }
   }
+  envDisable = process.env.NOLE_FEATURES_DISABLE;
+  if (envDisable) {
+    for (const f of envDisable.split(",")) {
+      const trimmed = f.trim();
+      if (trimmed)
+        ENABLED_FEATURES.delete(trimmed);
+    }
+  }
 });
 
 // src/permissions/bash-security.ts
-import { resolve as resolve2, normalize, isAbsolute } from "path";
+import { resolve, normalize, isAbsolute } from "path";
 function checkCommandSecurity(command) {
   for (const pattern of SAFE_PATTERNS) {
     if (pattern.test(command.trim())) {
@@ -17034,16 +17148,16 @@ function checkCommandSecurity(command) {
     };
   }
   return {
-    allowed: true,
-    reason: "Command not in safe list - proceeding with caution",
+    allowed: false,
+    reason: "Command not in safe list — user confirmation required",
     risk: "medium",
-    requiresConfirmation: false
+    requiresConfirmation: true
   };
 }
 function validatePath(path, cwd, allowedPaths) {
   let resolvedPath;
   try {
-    resolvedPath = isAbsolute(path) ? normalize(path) : resolve2(cwd, path);
+    resolvedPath = isAbsolute(path) ? normalize(path) : resolve(cwd, path);
   } catch {
     return {
       valid: false,
@@ -17117,24 +17231,24 @@ var init_bash_security = __esm(() => {
     { pattern: /\bchmod\s+\+[sx]/, name: "chmod +x (add executable)" },
     { pattern: /\bwget\s+http/, name: "wget HTTP download" },
     { pattern: /\bcurl\s+http/, name: "curl HTTP request" },
-    { pattern: /\bgit\s+clone\s+http/, name: "git clone over HTTP" }
+    { pattern: /\bgit\s+clone\s+http/, name: "git clone over HTTP" },
+    { pattern: /\b(bash|sh|zsh|ksh|dash|python|python3|node|ruby|perl|php)\s*<<[-']?/, name: "heredoc shell/interpreter execution" },
+    { pattern: /\b(bash|sh|zsh|ksh|dash|python|python3|node|ruby|perl|php)\s*<<</, name: "here-string shell/interpreter execution" },
+    { pattern: /\bexec\s*<</, name: "exec heredoc execution" },
+    { pattern: /\bsource\s*<</, name: "source heredoc execution" }
   ];
   SAFE_PATTERNS = [
-    /^(ls|ll|la|dir|tree)\s/,
-    /^(cd|pwd|mkdir|rmdir)\s/,
-    /^(cat|head|tail|grep|find|locate)\s/,
-    /^(wc|sort|uniq|cut|tr|awk|sed)\s/,
-    /^(git\s+(status|log|diff|branch))\s/,
-    /^(npm\s+(install|run|test|build|start))\s/,
-    /^(bun\s+(install|run|add|dev|build))\s/,
-    /^(yarn\s+(install|run|start|build))\s/,
-    /^(pnpm\s+(install|run|dev|build))\s/,
-    /^(python[3]?\s+(-m\s+)?(pip|venv|http\.server))\s/,
-    /^(docker\s+(ps|images|logs|exec))\s/,
+    /^(ls|ll|la|dir|tree)(\s|$)/,
+    /^(pwd)(\s|$)/,
+    /^(cat|head|tail|wc|sort|uniq|cut|tr)\s/,
+    /^(git\s+(status|log|diff|branch|show|remote))(\s|$)/,
+    /^(npm\s+(list|run|test))\s/,
+    /^(bun\s+(test|run))\s/,
+    /^(yarn\s+(list|test|run))\s/,
+    /^(pnpm\s+(list|test|run))\s/,
+    /^(docker\s+(ps|images|logs))(\s|$)/,
     /^(kubectl\s+(get|describe|logs))\s/,
-    /^(curl\s+-s\s+(http|https):\/\/)/,
-    /^(echo|printf|true|false|:)\s/,
-    /^(cp|mv|rm|ln)\s+/
+    /^(echo|printf|true|false|:)(\s|$)/
   ];
   DENIED_PATTERNS = [
     /^\/etc\/passwd$/,
@@ -17383,9 +17497,10 @@ function checkPermission(context) {
     return { result: "allow", reason: "Bypass mode enabled" };
   }
   if (currentMode === "readonly") {
-    const readOnlyTools = ["Read", "Glob", "Grep", "WebSearch", "WebFetch", "Bash"];
-    const isReadOnly = readOnlyTools.includes(context.toolName) && context.toolName !== "Bash" || context.toolName === "Bash" && /^(ls|cat|grep|find|pwd|git status|git log|git diff)/.test(context.input.command || "");
-    if (!isReadOnly) {
+    const readOnlyTools = ["Read", "Glob", "Grep", "WebSearch", "WebFetch", "LS"];
+    const isReadOnlyTool = readOnlyTools.includes(context.toolName);
+    const isReadOnlyBash = context.toolName === "Bash" && /^(ls|cat|grep|find|pwd|git status|git log|git diff)/.test(context.input.command || "");
+    if (!isReadOnlyTool && !isReadOnlyBash) {
       return { result: "deny", reason: "Read-only mode enabled" };
     }
   }
@@ -17795,7 +17910,6 @@ function compactSession(messages, sessionId) {
     }
     return msg;
   });
-  sanitizeToolPairs(compressedRecent);
   const compactedMessages = [
     ...systemMessages,
     {
@@ -17934,13 +18048,13 @@ function extractErrors(messages) {
   }
   return errors3;
 }
-function compressToolResult(content) {
+function compressToolResult(content, keepLines = 5) {
   const lines = content.split(`
 `);
   if (lines.length <= 20)
     return content;
-  const keptLines = lines.slice(0, 5);
-  const droppedLines = lines.slice(5);
+  const keptLines = lines.slice(0, keepLines);
+  const droppedLines = lines.slice(keepLines);
   const lastLines = lines.slice(-3);
   const summary = `[... ${droppedLines.length} lines omitted ...]
 ` + `Last ${lastLines.length} lines: ${lastLines.join(" | ").slice(0, 150)}`;
@@ -17948,9 +18062,9 @@ function compressToolResult(content) {
 `);
 }
 function maybeCompact(messages, sessionId) {
-  if (!feature("AUTO_COMPACT"))
+  if (!needsCompaction(messages) && !feature("AUTO_COMPACT"))
     return false;
-  if (!needsCompaction(messages))
+  if (estimateTotalTokens(messages) < COMPACT_CONFIG.targetTokens)
     return false;
   const result = compactSession(messages, sessionId);
   if (needsCompaction(messages)) {
@@ -17987,7 +18101,7 @@ __export(exports_registry, {
 import { exec } from "child_process";
 import { promisify } from "util";
 import { readFileSync as readFileSync8, writeFileSync as writeFileSync4, existsSync as existsSync8, mkdirSync as mkdirSync4, readdirSync, statSync as statSync2 } from "fs";
-import { join as join9, relative as relative2, resolve as resolve3 } from "path";
+import { join as join9, relative as relative2, resolve as resolve2 } from "path";
 import { homedir as homedir8 } from "os";
 async function promptPermission(toolName, input, reason) {
   if (!process.stdin.isTTY) {
@@ -17996,13 +18110,13 @@ async function promptPermission(toolName, input, reason) {
     return true;
   }
   const preview = toolName === "Bash" && input.command ? String(input.command).slice(0, 80) : JSON.stringify(input).slice(0, 80);
-  return new Promise((resolve4) => {
+  return new Promise((resolve3) => {
     const rl = __require("readline").createInterface({ input: process.stdin, output: process.stdout });
     const timeout = setTimeout(() => {
       rl.close();
       process.stderr.write(`\x1B[33m⚠ Permission timeout, auto-allowed: ${toolName}\x1B[0m
 `);
-      resolve4(true);
+      resolve3(true);
     }, 30000);
     const prompt = `
 \x1B[33m⚠ Permission required:\x1B[0m ${toolName}(${preview})
@@ -18015,10 +18129,10 @@ async function promptPermission(toolName, input, reason) {
       if (a === "a" || a === "always") {
         const { addRule: addRule2 } = (init_rules_engine(), __toCommonJS(exports_rules_engine));
         addRule2({ pattern: `${toolName}(*)`, action: "allow", reason: "User chose always-allow" });
-        resolve4(true);
+        resolve3(true);
         return;
       }
-      resolve4(["y", "yes", ""].includes(a));
+      resolve3(["y", "yes", ""].includes(a));
     });
   });
 }
@@ -18110,6 +18224,12 @@ async function executeTool(name, input, ctx) {
 Dangerous patterns: ${security.dangerousPatterns?.join(", ") || "unknown"}`,
         isError: true
       };
+    }
+    if (!security.allowed && security.requiresConfirmation) {
+      const allowed = await promptPermission("Bash", input, security.reason);
+      if (!allowed) {
+        return { content: `Blocked by user: ${security.reason}`, isError: true };
+      }
     }
   }
   let result;
@@ -18259,10 +18379,12 @@ function formatSize(bytes) {
 }
 var execAsync, tools, CORE_TOOLS, TOOL_KEYWORDS, TASKS_FILE;
 var init_registry = __esm(() => {
+  init_web();
   init_client3();
   init_spawner();
   init_team();
   init_bash_security();
+  init_url_safety();
   init_audit();
   init_hooks();
   init_rules_engine();
@@ -18312,7 +18434,7 @@ var init_registry = __esm(() => {
       required: ["command"]
     },
     execute: async (input, ctx) => {
-      const bashCwd = input.cwd ? resolve3(process.cwd(), input.cwd) : ctx.cwd || process.cwd();
+      const bashCwd = input.cwd ? resolve2(process.cwd(), input.cwd) : ctx.cwd || process.cwd();
       const origCwd = process.cwd();
       try {
         process.chdir(bashCwd);
@@ -18335,7 +18457,7 @@ var init_registry = __esm(() => {
       required: ["path"]
     },
     execute: async (input, _ctx) => {
-      const path = resolve3(process.cwd(), input.path);
+      const path = resolve2(process.cwd(), input.path);
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
@@ -18421,7 +18543,7 @@ ${content}`;
       required: ["path", "content"]
     },
     execute: async (input, _ctx) => {
-      const path = resolve3(process.cwd(), input.path);
+      const path = resolve2(process.cwd(), input.path);
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
@@ -18451,7 +18573,7 @@ ${content}`;
       required: ["path", "old_text", "new_text"]
     },
     execute: async (input, _ctx) => {
-      const path = resolve3(process.cwd(), input.path);
+      const path = resolve2(process.cwd(), input.path);
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
@@ -18578,7 +18700,7 @@ Tip: Use Read to check the exact content first.`;
       const flags = input.file_only ? "-rl" : "-rn";
       const ctxFlag = input.context ? `-C ${Number(input.context)}` : "";
       const pattern = input.pattern;
-      const searchPath = resolve3(process.cwd(), input.path);
+      const searchPath = resolve2(process.cwd(), input.path);
       const safePattern = pattern.replace(/'/g, `'"'"'`);
       const cmd = `grep ${flags} ${ctxFlag} -- '${safePattern}' '${searchPath}' 2>/dev/null | head -100`;
       return runBash(cmd);
@@ -18785,13 +18907,13 @@ Agent ID: ${agent.id}
 PID: ${agent.pid}
 Running in background. Check status with /agents`;
         }
-        const result = await new Promise((resolve4) => {
-          const timeout = setTimeout(() => resolve4(`Agent ${agent.id} timed out after 120s`), 120000);
+        const result = await new Promise((resolve3) => {
+          const timeout = setTimeout(() => resolve3(`Agent ${agent.id} timed out after 120s`), 120000);
           const unsub = onAgentMessage((msg) => {
             if (msg.agentId === agent.id && (msg.type === "done" || msg.type === "error")) {
               clearTimeout(timeout);
               unsub();
-              resolve4(String(msg.payload || "Agent completed"));
+              resolve3(String(msg.payload || "Agent completed"));
             }
           });
         });
@@ -18867,7 +18989,7 @@ Manage with /team list or /team send`;
       required: ["path", "cell_index", "new_text"]
     },
     execute: async (input, _ctx) => {
-      const path = resolve3(process.cwd(), input.path);
+      const path = resolve2(process.cwd(), input.path);
       if (!existsSync8(path))
         return `Notebook not found: ${path}`;
       try {
@@ -18900,10 +19022,11 @@ Manage with /team list or /team send`;
       required: ["pattern", "path"]
     },
     execute: async (input, _ctx) => {
-      const ctx = input.context ? `-C ${input.context}` : "-C 2";
-      const pattern = input.pattern.replace(/'/g, "'\\''");
-      const path = resolve3(process.cwd(), input.path);
-      return runBash(`grep ${ctx} -r -- "${pattern}" "${path}" 2>/dev/null | head -50`);
+      const ctxN = Number(input.context);
+      const ctx = Number.isFinite(ctxN) && ctxN >= 0 ? `-C ${Math.min(ctxN, 20)}` : "-C 2";
+      const safePattern = String(input.pattern).replace(/'/g, `'"'"'`);
+      const safePath = resolve2(process.cwd(), String(input.path)).replace(/'/g, `'"'"'`);
+      return runBash(`grep ${ctx} -r -- '${safePattern}' '${safePath}' 2>/dev/null | head -50`);
     }
   });
   registerTool({
@@ -18918,9 +19041,9 @@ Manage with /team list or /team send`;
       required: ["pattern"]
     },
     execute: async (input, _ctx) => {
-      const cwd = input.cwd || process.cwd();
-      const pattern = input.pattern;
-      return runBash(`find "${cwd}" -type f -name "${pattern}" 2>/dev/null | head -100`);
+      const safeCwd = String(input.cwd || process.cwd()).replace(/'/g, `'"'"'`);
+      const safePattern = String(input.pattern).replace(/'/g, `'"'"'`);
+      return runBash(`find '${safeCwd}' -type f -name '${safePattern}' 2>/dev/null | head -100`);
     }
   });
   registerTool({
@@ -18963,7 +19086,7 @@ Manage with /team list or /team send`;
       required: []
     },
     execute: async (input, _ctx) => {
-      const dir = resolve3(process.cwd(), input.path || ".");
+      const dir = resolve2(process.cwd(), input.path || ".");
       if (!existsSync8(dir))
         return `Directory not found: ${dir}`;
       try {
@@ -19009,7 +19132,7 @@ Manage with /team list or /team send`;
       required: []
     },
     execute: async (input, _ctx) => {
-      const root = resolve3(process.cwd(), input.path || ".");
+      const root = resolve2(process.cwd(), input.path || ".");
       const maxDepth = input.depth || 3;
       const pattern = input.pattern;
       const lines = [];
@@ -19080,7 +19203,7 @@ ${dirCount} directories, ${fileCount} files`);
       required: ["path", "edits"]
     },
     execute: async (input, _ctx) => {
-      const filePath = resolve3(process.cwd(), input.path);
+      const filePath = resolve2(process.cwd(), input.path);
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
@@ -19142,6 +19265,10 @@ ${diffs.join(`
     },
     execute: async (input, _ctx) => {
       const url2 = input.url;
+      const urlCheck = checkUrlSafety(url2);
+      if (!urlCheck.safe) {
+        return `HttpRequest blocked: ${urlCheck.reason}`;
+      }
       const method = input.method || "GET";
       const headers = {
         "User-Agent": "Nole-Code/1.12",
@@ -19198,7 +19325,7 @@ ${responseBody}`;
       required: ["pattern", "replacement"]
     },
     execute: async (input, _ctx) => {
-      const searchDir = resolve3(process.cwd(), input.path || ".");
+      const searchDir = resolve2(process.cwd(), input.path || ".");
       const pattern = input.pattern;
       const replacement = input.replacement;
       const fileGlob = input.glob || "*";
@@ -19448,8 +19575,8 @@ ${output.slice(0, 500) || "(no output yet)"}`;
       required: ["file1", "file2"]
     },
     execute: async (input, _ctx) => {
-      const f1 = resolve3(process.cwd(), input.file1);
-      const f2 = resolve3(process.cwd(), input.file2);
+      const f1 = resolve2(process.cwd(), input.file1);
+      const f2 = resolve2(process.cwd(), input.file2);
       if (!existsSync8(f1))
         return `File not found: ${f1}`;
       if (!existsSync8(f2))
@@ -19483,8 +19610,8 @@ ${output.slice(0, 500) || "(no output yet)"}`;
       required: ["from", "to"]
     },
     execute: async (input, _ctx) => {
-      const from = resolve3(process.cwd(), input.from);
-      const to = resolve3(process.cwd(), input.to);
+      const from = resolve2(process.cwd(), input.from);
+      const to = resolve2(process.cwd(), input.to);
       if (!existsSync8(from))
         return `Not found: ${from}`;
       if (existsSync8(to))
@@ -19510,7 +19637,7 @@ ${output.slice(0, 500) || "(no output yet)"}`;
       required: ["path"]
     },
     execute: async (input, _ctx) => {
-      const targetPath = resolve3(process.cwd(), input.path);
+      const targetPath = resolve2(process.cwd(), input.path);
       const pathCheck = validatePath(input.path, process.cwd());
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
@@ -20136,14 +20263,14 @@ function abortPlan() {
   return plan;
 }
 async function promptForPlanAction() {
-  return new Promise((resolve5) => {
+  return new Promise((resolve4) => {
     rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout
     });
     rl.question(`
 Plan action: `, (answer) => {
-      resolve5(answer.trim().toLowerCase());
+      resolve4(answer.trim().toLowerCase());
     });
   });
 }
@@ -20712,6 +20839,12 @@ function shouldContinue(checkpoint) {
   if (checkpoint.state === "aborted") {
     return { continue: false, reason: "Checkpoint aborted" };
   }
+  if (checkpoint.state === "paused") {
+    return { continue: false, reason: "Checkpoint paused" };
+  }
+  if (checkpoint.state === "waiting") {
+    return { continue: false, reason: "Checkpoint waiting" };
+  }
   return { continue: true };
 }
 function buildRetryContext(checkpoint, stepId) {
@@ -21104,6 +21237,7 @@ var init_spawner2 = __esm(() => {
 });
 
 // src/loop/executor.ts
+import { randomUUID as randomUUID4 } from "crypto";
 function isActualFailure(result) {
   return FAILURE_SIGNATURES.some((r) => r.test(result));
 }
@@ -21272,15 +21406,16 @@ What tools should I use to complete this step? Respond with specific tool calls.
             shouldContinue2 = false;
             break;
           }
+          const callId = tc.id || `call_${randomUUID4()}`;
           sessionMessages.push({
             role: "assistant",
             content: `Used ${tc.name} to ${tc.input.description || tc.input.command || "execute task"}`,
-            tool_calls: [{ id: tc.id, name: tc.name, input: tc.input }]
+            tool_calls: [{ id: callId, name: tc.name, input: tc.input }]
           });
           sessionMessages.push({
             role: "tool",
             content: execResult.content.slice(0, 500),
-            tool_call_id: tc.id,
+            tool_call_id: callId,
             name: tc.name
           });
         } catch (err) {
@@ -21362,15 +21497,16 @@ ${c2.cyan("◉")} ${bold("Starting autonomous loop")}`);
     const { toolCalls, shouldContinue: stepShouldContinue } = await executeStep(step, checkpoint.context, cwd, sessionMessages, client, { verbose: options.verbose });
     const stepMs = Date.now() - stepStartTime;
     if (!stepShouldContinue) {
-      if (step.retryCount >= (checkpoint.settings?.maxRetries ?? 2)) {
-        failStep(checkpoint, currentStepId, step.error || "Max retries exceeded", toolCalls);
-        printStepFailed(currentStepId, step, step.error || "Max retries exceeded");
+      failStep(checkpoint, currentStepId, step.error || "Step failed", toolCalls);
+      const updatedStep = checkpoint.steps[currentStepId];
+      const maxRetries = checkpoint.settings?.maxRetries ?? 2;
+      if (updatedStep.retryCount >= maxRetries) {
+        printStepFailed(currentStepId, updatedStep, updatedStep.error || "Max retries exceeded");
         abortCheckpoint(checkpoint);
         break;
       }
-      failStep(checkpoint, currentStepId, step.error || "Step failed", toolCalls);
-      printStepFailed(currentStepId, step, step.error || "Step failed");
-      console.log(`  ${c2.yellow("↻")} Retrying step ${currentStepId + 1} (attempt ${step.retryCount + 1}/${checkpoint.settings.maxRetries})`);
+      printStepFailed(currentStepId, updatedStep, updatedStep.error || "Step failed");
+      console.log(`  ${c2.yellow("↻")} Retrying step ${currentStepId + 1} (attempt ${updatedStep.retryCount + 1}/${maxRetries})`);
       continue;
     }
     completeStep(checkpoint, currentStepId, toolCalls);
@@ -22008,7 +22144,7 @@ function registerServerCommand(register) {
             stdio: "ignore"
           });
           child.unref();
-          await new Promise((resolve5) => setTimeout(resolve5, 500));
+          await new Promise((resolve4) => setTimeout(resolve4, 500));
           const status = checkServerStatus();
           if (status.running) {
             return `Server started (PID: ${status.pid})`;
@@ -27450,7 +27586,7 @@ Fetch a result? (enter number 1-5 or skip)`;
   });
 }
 var execAsync5;
-var init_web = __esm(() => {
+var init_web2 = __esm(() => {
   execAsync5 = promisify5(exec5);
 });
 
@@ -28003,8 +28139,7 @@ var exports_pipe = {};
 __export(exports_pipe, {
   registerPipeCommand: () => registerPipeCommand
 });
-import { exec as exec8 } from "child_process";
-import { promisify as promisify8 } from "util";
+import { spawn as spawn7 } from "child_process";
 function registerPipeCommand(register) {
   register({
     name: "pipe",
@@ -28021,28 +28156,33 @@ Example: /pipe wc -l
 Example: /pipe head -5`;
       }
       const shellCmd = args.join(" ");
-      try {
-        const { stdout, stderr } = await execAsync8(shellCmd, {
-          input: lastOutput2,
-          encoding: "utf-8",
-          timeout: 1e4
+      return new Promise((resolve4) => {
+        const child = spawn7("sh", ["-c", shellCmd], { timeout: 1e4 });
+        let stdout = "";
+        let stderr = "";
+        child.stdout?.on("data", (data) => {
+          stdout += data;
         });
-        if (stdout)
-          return stdout;
-        if (stderr)
-          return stderr;
-        return "(no output)";
-      } catch (err) {
-        const error2 = err;
-        return error2.stdout || error2.stderr || `Error: ${error2.message || String(err)}`;
-      }
+        child.stderr?.on("data", (data) => {
+          stderr += data;
+        });
+        child.on("close", (code) => {
+          if (stdout)
+            resolve4(stdout);
+          else if (stderr)
+            resolve4(stderr);
+          else
+            resolve4(code === 0 ? "(no output)" : `Exit code: ${code}`);
+        });
+        child.on("error", (err) => resolve4(`Error: ${err.message}`));
+        child.stdin?.write(lastOutput2);
+        child.stdin?.end();
+      });
     }
   });
 }
-var execAsync8;
 var init_pipe = __esm(() => {
   init_src();
-  execAsync8 = promisify8(exec8);
 });
 
 // src/ui/markdown.ts
@@ -28323,10 +28463,10 @@ var exports_recent = {};
 __export(exports_recent, {
   registerRecentCommand: () => registerRecentCommand
 });
-import { exec as exec9 } from "child_process";
+import { exec as exec8 } from "child_process";
 import { statSync as statSync6 } from "fs";
-import { resolve as resolve5 } from "path";
-import { promisify as promisify9 } from "util";
+import { resolve as resolve4 } from "path";
+import { promisify as promisify8 } from "util";
 function registerRecentCommand(register) {
   register({
     name: "recent",
@@ -28338,7 +28478,7 @@ function registerRecentCommand(register) {
       }
       try {
         const findCmd = `find . -type f \\( -path '*/.git/*' -o -path '*/node_modules/*' -o -path '*/.nole-code/*' -o -path '*/dist/*' -o -path '*/build/*' \\) -prune -o -type f -mtime -7 -print`;
-        const { stdout: findOutput } = await execAsync9(findCmd, {
+        const { stdout: findOutput } = await execAsync8(findCmd, {
           encoding: "utf-8",
           cwd: ctx.cwd,
           timeout: 1e4
@@ -28350,7 +28490,7 @@ function registerRecentCommand(register) {
 `).filter(Boolean);
         const sortedFiles = files.map((f) => {
           try {
-            const stat = statSync6(resolve5(ctx.cwd, f));
+            const stat = statSync6(resolve4(ctx.cwd, f));
             return {
               path: f,
               mtime: stat.mtime,
@@ -28365,7 +28505,7 @@ function registerRecentCommand(register) {
         }
         const gitStatus = {};
         try {
-          const { stdout: gitOut } = await execAsync9("git status --short", {
+          const { stdout: gitOut } = await execAsync8("git status --short", {
             encoding: "utf-8",
             cwd: ctx.cwd,
             timeout: 5000
@@ -28419,9 +28559,9 @@ function registerRecentCommand(register) {
     }
   });
 }
-var execAsync9;
+var execAsync8;
 var init_recent = __esm(() => {
-  execAsync9 = promisify9(exec9);
+  execAsync8 = promisify8(exec8);
 });
 
 // src/commands/index.ts
@@ -28432,8 +28572,8 @@ __export(exports_commands2, {
   getCommand: () => getCommand,
   getAllCommands: () => getAllCommands
 });
-import { exec as exec10 } from "child_process";
-import { promisify as promisify10 } from "util";
+import { exec as exec9 } from "child_process";
+import { promisify as promisify9 } from "util";
 import { existsSync as existsSync25, readFileSync as readFileSync25 } from "fs";
 import { join as join24 } from "path";
 import { homedir as homedir20 } from "os";
@@ -28463,10 +28603,10 @@ function parseCommand(input) {
   const parts = input.slice(1).split(/\s+/);
   return { cmd: parts[0], args: parts.slice(1) };
 }
-var execAsync10, commands;
+var execAsync9, commands;
 var init_commands2 = __esm(() => {
   init_env();
-  execAsync10 = promisify10(exec10);
+  execAsync9 = promisify9(exec9);
   commands = new Map;
   registerCommand({
     name: "help",
@@ -28535,8 +28675,8 @@ ${lines.join(`
       if (args.length === 0)
         return "Usage: /commit <message>";
       const msg = args.join(" ");
-      await execAsync10("git add -A", { cwd: process.cwd() });
-      const { stdout, stderr } = await execAsync10('git commit -m "$COMMIT_MSG"', {
+      await execAsync9("git add -A", { cwd: process.cwd() });
+      const { stdout, stderr } = await execAsync9('git commit -m "$COMMIT_MSG"', {
         cwd: process.cwd(),
         env: { ...process.env, COMMIT_MSG: msg }
       });
@@ -28549,7 +28689,7 @@ ${lines.join(`
     aliases: ["d"],
     execute: async (args) => {
       const target = args[0] || "";
-      const { stdout } = await execAsync10("git diff -- " + (target ? `"${target.replace(/'/g, `'"'"'`)}"` : ""), { cwd: process.cwd() });
+      const { stdout } = await execAsync9("git diff -- " + (target ? `"${target.replace(/'/g, `'"'"'`)}"` : ""), { cwd: process.cwd() });
       return stdout || "No changes";
     }
   });
@@ -28558,7 +28698,7 @@ ${lines.join(`
     description: "Show git status",
     aliases: ["st"],
     execute: async () => {
-      const { stdout } = await execAsync10("git status --short", { cwd: process.cwd() });
+      const { stdout } = await execAsync9("git status --short", { cwd: process.cwd() });
       return stdout || "Clean working tree";
     }
   });
@@ -28568,7 +28708,7 @@ ${lines.join(`
     aliases: ["lg"],
     execute: async (args) => {
       const n7 = args[0] || "10";
-      const { stdout } = await execAsync10("git log --oneline -n " + String(n7), { cwd: process.cwd() });
+      const { stdout } = await execAsync9("git log --oneline -n " + String(n7), { cwd: process.cwd() });
       return stdout || "No commits";
     }
   });
@@ -28577,7 +28717,7 @@ ${lines.join(`
     description: "Show git branches",
     aliases: ["br"],
     execute: async () => {
-      const { stdout } = await execAsync10("git branch -v", { cwd: process.cwd() });
+      const { stdout } = await execAsync9("git branch -v", { cwd: process.cwd() });
       return stdout || "No branches";
     }
   });
@@ -28588,7 +28728,7 @@ ${lines.join(`
       if (args.length === 0)
         return "Usage: /checkout <branch|file>";
       try {
-        const { stdout, stderr } = await execAsync10("git checkout -- " + args.map((a) => `'${a.replace(/'/g, `'"'"'`)}'`).join(" "), { cwd: process.cwd() });
+        const { stdout, stderr } = await execAsync9("git checkout -- " + args.map((a) => `'${a.replace(/'/g, `'"'"'`)}'`).join(" "), { cwd: process.cwd() });
         return (stdout + stderr).trim() || `Checked out ${args[0]}`;
       } catch (e) {
         const err = e;
@@ -28603,7 +28743,7 @@ ${lines.join(`
       const port = args[0] || "";
       const cmd = port ? `lsof -i :${port}` : "lsof -i -P";
       try {
-        const { stdout } = await execAsync10(cmd);
+        const { stdout } = await execAsync9(cmd);
         return stdout || "No results";
       } catch {
         return "lsof not available";
@@ -28615,7 +28755,7 @@ ${lines.join(`
     description: "Show running processes",
     execute: async (args) => {
       const filter = args.join(" ") || "aux";
-      const { stdout } = await execAsync10(`ps ${filter} | head -20`);
+      const { stdout } = await execAsync9(`ps ${filter} | head -20`);
       return stdout || "No processes";
     }
   });
@@ -29327,16 +29467,16 @@ Start one with /loop <goal>`;
     Promise.resolve().then(() => (init_server(), exports_server)).then((m) => m.registerServerCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_commands(), exports_commands)).then((m) => m.registerBuddyCommands(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_skills2(), exports_skills)).then((m) => m.registerSkillCommands(registerCommand)).catch(() => {});
-    Promise.resolve().then(() => (init_clipboard(), exports_clipboard)).then((m) => m.registerCommand).catch(() => {});
-    Promise.resolve().then(() => (init_calc(), exports_calc)).then((m) => m.registerCommand).catch(() => {});
-    Promise.resolve().then(() => (init_changelog(), exports_changelog)).then((m) => m.registerCommand).catch(() => {});
+    Promise.resolve().then(() => (init_clipboard(), exports_clipboard)).catch(() => {});
+    Promise.resolve().then(() => (init_calc(), exports_calc)).catch(() => {});
+    Promise.resolve().then(() => (init_changelog(), exports_changelog)).catch(() => {});
     Promise.resolve().then(() => (init_read(), exports_read)).then((m) => m.registerReadCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_grep(), exports_grep)).then((m) => m.registerGrepCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_test(), exports_test)).then((m) => m.registerTestCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_debug(), exports_debug)).then((m) => m.registerDebugCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_multi(), exports_multi)).then((m) => m.registerMultiCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_mcp(), exports_mcp)).then((m) => m.registerMCPCommand(registerCommand)).catch(() => {});
-    Promise.resolve().then(() => (init_web(), exports_web)).then((m) => m.registerWebCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_web2(), exports_web)).then((m) => m.registerWebCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_context(), exports_context)).then((m) => m.registerContextCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_git(), exports_git)).then((m) => m.registerGitCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_send(), exports_send)).then((m) => m.registerSendCommand(registerCommand)).catch(() => {});
@@ -29708,8 +29848,8 @@ __export(exports_src, {
   activeClient: () => activeClient
 });
 import { existsSync as existsSync28, readFileSync as readFileSync27, writeFileSync as writeFileSync12, mkdirSync as mkdirSync11 } from "fs";
+import { join as join27, resolve as resolve5 } from "node:path";
 import { homedir as homedir22 } from "node:os";
-import { join as join27 } from "node:path";
 import * as readline3 from "readline";
 function _loadEnv(path) {
   if (!existsSync28(path))
@@ -29780,7 +29920,7 @@ function detectPlanIntent(input) {
 function getBanner(cwd3, verbose = false) {
   const v2 = verbose ? `${dim("· ")}verbose` : "";
   return `
-${bold(c2.cyan("▐▛███▜▌"))} ${bold("Nole Code v1.19")} ${dim("· MiniMax")}
+${bold(c2.cyan("▐▛███▜▌"))} ${bold("Nole Code v1.20")} ${dim("· MiniMax")}
 ${dim("▝▜█████▛▘")} ${dim(cwd3)} ${v2}
 
 ${divider()}
@@ -30054,6 +30194,12 @@ ${memorySummary ? `
 ${memorySummary}` : ""}${resumeContext}`;
   if (session.messages.length === 0) {
     session.messages.push({ role: "system", content: systemPrompt, timestamp: new Date().toISOString() });
+  } else {
+    const systemMsg = session.messages.find((m) => m.role === "system");
+    if (systemMsg) {
+      systemMsg.content = systemPrompt;
+      systemMsg.timestamp = new Date().toISOString();
+    }
   }
   saveSession(session);
   console.clear();
@@ -30290,7 +30436,7 @@ ${c2.yellow("❓ Unknown command:")} /${parsed.cmd}`);
     if (fileRefs) {
       for (const ref of fileRefs) {
         const filePath = ref.slice(1);
-        const fullPath = resolve(opts.cwd || process.cwd(), filePath);
+        const fullPath = resolve5(opts.cwd || process.cwd(), filePath);
         if (existsSync28(fullPath)) {
           try {
             const content = readFileSync27(fullPath, "utf-8");

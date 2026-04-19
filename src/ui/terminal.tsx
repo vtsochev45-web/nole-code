@@ -53,8 +53,10 @@ export function Terminal({ onSend, messages, isLoading, onInterrupt }: TerminalP
         setCursorPos(0)
       }
     } else if (key.backspace) {
-      setInput(prev => prev.slice(0, -1))
-      setCursorPos(prev => Math.max(0, prev - 1))
+      if (cursorPos > 0) {
+        setInput(prev => prev.slice(0, cursorPos - 1) + prev.slice(cursorPos))
+        setCursorPos(prev => prev - 1)
+      }
     } else if (key.delete) {
       setInput(prev => prev.slice(0, cursorPos) + prev.slice(cursorPos + 1))
     } else if (key.leftArrow) {

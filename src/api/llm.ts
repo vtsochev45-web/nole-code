@@ -1,12 +1,16 @@
 // Nole Code - MiniMax API Client (Anthropic-compatible)
 // Uses the same API endpoint as openclaw's lib/tools.py
 
+import { randomUUID } from 'crypto'
 import { MINIMAX_API_KEY, getProviders, type ProviderConfig } from '../utils/env.js'
 
 // Retry config for transient errors (429, 529, 500, 502, 503)
 const RETRY_STATUS = new Set([429, 500, 502, 503, 529])
 const MAX_RETRIES = 3
 const BASE_DELAY_MS = 2000
+// Per-request timeout. Tunable via NOLE_FETCH_TIMEOUT_MS. Default: 180s is long
+// enough for large coding responses without letting a hung socket freeze the agent.
+const REQUEST_TIMEOUT_MS = Number(process.env.NOLE_FETCH_TIMEOUT_MS) || 180_000
 
 function parseApiError(raw: string): string {
   try {
@@ -19,14 +23,37 @@ function parseApiError(raw: string): string {
     if (type === 'authentication_error') return 'Invalid API key. Check MINIMAX_API_KEY.'
     return msg
   } catch {
-    return raw.slice(0, 200)
+    // Not JSON — return raw (truncated) so callers see the real upstream text
+    // rather than a vague "unparsable" message.
+    const trimmed = raw.trim()
+    return trimmed.length > 500 ? `${trimmed.slice(0, 500)}… (truncated)` : trimmed
   }
 }
 
 async function fetchWithRetry(url: string, init: RequestInit, retries = MAX_RETRIES): Promise<Response> {
   let lastResponse: Response | null = null
   for (let attempt = 0; attempt < retries; attempt++) {
-    const response = await fetch(url, init)
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    let response: Response
+    try {
+      response = await fetch(url, { ...init, signal: controller.signal })
+    } catch (err) {
+      clearTimeout(timer)
+      const isAbort = err instanceof Error && (err.name === 'AbortError' || /abort/i.test(err.message))
+      const isLast = attempt === retries - 1
+      if (isLast) {
+        if (isAbort) {
+          throw new Error(`API request timed out after ${REQUEST_TIMEOUT_MS}ms (set NOLE_FETCH_TIMEOUT_MS to adjust)`)
+        }
+        throw err
+      }
+      const delay = BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * 1000
+      process.stderr.write(`\x1b[33m⟳ API ${isAbort ? 'timeout' : 'network error'}, retrying in ${(delay / 1000).toFixed(1)}s (${attempt + 1}/${retries})\x1b[0m\n`)
+      await new Promise(r => setTimeout(r, delay))
+      continue
+    }
+    clearTimeout(timer)
     lastResponse = response
 
     if (response.ok || !RETRY_STATUS.has(response.status)) {
@@ -68,7 +95,7 @@ export function parseXmlToolCalls(text: string): ToolCall[] {
     }
 
     calls.push({
-      id: `xml_${Date.now()}_${calls.length}`,
+      id: `xml_${randomUUID()}`,
       name: toolName,
       input,
     })
@@ -540,7 +567,13 @@ export class LLMClient {
         }
       }
       return usage
-    } catch {
+    } catch (err) {
+      // Only fall back to non-streaming for transport-level errors (network,
+      // abort, JSON parse). Authentication / invalid-model errors must surface
+      // — silently retrying them eats the real cause.
+      const msg = err instanceof Error ? err.message : String(err)
+      const isFatalApi = /\bAPI error 4\d\d\b/.test(msg) && !/ 408| 429/.test(msg)
+      if (isFatalApi) throw err
       const result = await this.chat(messages, options)
       onChunk(result.content)
       for (const tc of result.toolCalls) onToolCall?.(tc)

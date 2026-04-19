@@ -93,7 +93,7 @@ async function attachNodejs(pid: number): Promise<string> {
     const wsUrl = 'http://localhost:9229/json'
     const response = await fetch(wsUrl, { signal: AbortSignal.timeout(2000) })
     if (response.ok) {
-      const data = await response.json()
+      const data = await response.json() as Array<{ webSocketDebuggerUrl?: string; type?: string; title?: string }>
       if (data && data[0]) {
         const info = data[0]
         return `✅ Node.js Inspector Attached

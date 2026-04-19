@@ -87,7 +87,7 @@ export function Terminal({ messages, toolCalls, onSend, onInterrupt, isLoading }
     } else if (key.ctrlL) {
       setScrollOffset(0)
     } else if (key.pageUp) {
-      setScrollOffset(prev => Math.min(prev + maxVisible, messages.length))
+      setScrollOffset(prev => Math.min(prev + maxVisible, Math.max(0, messages.length - maxVisible)))
     } else if (key.pageDown) {
       setScrollOffset(prev => Math.max(0, prev - maxVisible))
     } else if (input && !key.ctrl && !key.meta) {
@@ -95,7 +95,9 @@ export function Terminal({ messages, toolCalls, onSend, onInterrupt, isLoading }
     }
   })
 
-  const visibleMessages = messages.slice(scrollOffset, scrollOffset + maxVisible)
+  // scrollOffset 0 = show latest messages (bottom), increasing = scroll toward older
+  const start = Math.max(0, messages.length - maxVisible - scrollOffset)
+  const visibleMessages = messages.slice(start, start + maxVisible)
 
   return (
     <Box flexDirection="column" flexGrow={1}>

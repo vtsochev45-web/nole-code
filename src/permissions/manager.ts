@@ -128,12 +128,14 @@ class PermissionManager {
       // Store the pending request
       this.pendingRequests.set(requestId, { resolve, reject: () => {} })
 
-      // Timeout after 60 seconds - FIXED: clear pending request on timeout
+      // Timeout after 60 seconds — deny (fail-closed) rather than returning the
+      // off-type boolean `false`, which the enforcer compares !== 'allow' and
+      // treated as deny-by-accident anyway; this makes the intent explicit.
       const timeoutId = setTimeout(() => {
         if (this.pendingRequests.has(requestId)) {
           this.pendingRequests.delete(requestId)
           console.warn(`[Permissions] Request timed out for tool: ${tool}`)
-          resolve(false)
+          resolve('deny')
         }
       }, 60000)
 
@@ -162,7 +164,7 @@ class PermissionManager {
         clearTimeout(pending.timeoutId)
       }
       this.pendingRequests.delete(requestId)
-      pending.resolve(approved)
+      pending.resolve(approved ? 'allow' : 'deny')
     }
   }
 
@@ -177,13 +179,13 @@ class PermissionManager {
     return () => this.emitter.off('permission-request', handler)
   }
 
-  // Clear all pending requests (for cleanup)
+  // Clear all pending requests (for cleanup) — deny all outstanding.
   clearPendingRequests(): void {
-    for (const [id, pending] of this.pendingRequests) {
+    for (const [, pending] of this.pendingRequests) {
       if (pending.timeoutId) {
         clearTimeout(pending.timeoutId)
       }
-      pending.resolve(false)
+      pending.resolve('deny')
     }
     this.pendingRequests.clear()
   }

@@ -918,9 +918,10 @@ setTimeout(() => {
   import('../buddy/commands.js').then(m => m.registerBuddyCommands(registerCommand)).catch(() => {})
   // Skills commands
   import('./skills.js').then(m => m.registerSkillCommands(registerCommand)).catch(() => {})
-  import('./clipboard.js').then(m => m.registerCommand).catch(() => {})
-  import('./calc.js').then(m => m.registerCommand).catch(() => {})
-  import('./changelog.js').then(m => m.registerCommand).catch(() => {})
+  // clipboard, calc, changelog self-register on import
+  import('./clipboard.js').catch(() => {})
+  import('./calc.js').catch(() => {})
+  import('./changelog.js').catch(() => {})
   // New file commands
   import('./read.js').then(m => m.registerReadCommand(registerCommand)).catch(() => {})
   import('./grep.js').then(m => m.registerGrepCommand(registerCommand)).catch(() => {})

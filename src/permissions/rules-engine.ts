@@ -195,14 +195,13 @@ export function checkPermission(context: PermissionContext): {
   }
   
   if (currentMode === 'readonly') {
-    const readOnlyTools = ['Read', 'Glob', 'Grep', 'WebSearch', 'WebFetch', 'Bash']
-    const isReadOnly = readOnlyTools.includes(context.toolName) &&
-      context.toolName !== 'Bash' ||
-      (context.toolName === 'Bash' && /^(ls|cat|grep|find|pwd|git status|git log|git diff)/.test(
+    const readOnlyTools = ['Read', 'Glob', 'Grep', 'WebSearch', 'WebFetch', 'LS']
+    const isReadOnlyTool = readOnlyTools.includes(context.toolName)
+    const isReadOnlyBash = context.toolName === 'Bash' &&
+      /^(ls|cat|grep|find|pwd|git status|git log|git diff)/.test(
         (context.input.command as string) || ''
-      ))
-    
-    if (!isReadOnly) {
+      )
+    if (!isReadOnlyTool && !isReadOnlyBash) {
       return { result: 'deny', reason: 'Read-only mode enabled' }
     }
   }

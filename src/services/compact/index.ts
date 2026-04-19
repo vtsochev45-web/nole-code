@@ -186,10 +186,7 @@ export function compactSession(
     return msg
   })
 
-  // Sanitize recent messages — remove orphaned tool results at the boundary
-  sanitizeToolPairs(compressedRecent)
-
-  // Build new message list
+  // Build new message list (sanitize AFTER assembly so tool pairs are checked across the full set)
   const compactedMessages = [
     ...systemMessages,
     {
@@ -393,15 +390,15 @@ function extractErrors(messages: Array<{ content: string; isError?: boolean }>):
  * Compress long tool results
  * Keep the beginning (most informative) and summarize the rest
  */
-function compressToolResult(content: string): string {
+function compressToolResult(content: string, keepLines = 5): string {
   const lines = content.split('\n')
 
   // If content is short enough, keep it as-is
   if (lines.length <= 20) return content
 
-  // Keep first 5 lines as context (command/header)
-  const keptLines = lines.slice(0, 5)
-  const droppedLines = lines.slice(5)
+  // Keep first N lines as context (command/header)
+  const keptLines = lines.slice(0, keepLines)
+  const droppedLines = lines.slice(keepLines)
 
   // Build a concise summary of the truncated portion
   const lastLines = lines.slice(-3)
@@ -425,8 +422,10 @@ export function maybeCompact(
   }>,
   sessionId: string
 ): boolean {
-  if (!feature('AUTO_COMPACT')) return false
-  if (!needsCompaction(messages)) return false
+  // Allow compaction when called directly (e.g. from auto-compact in index.ts)
+  // even if AUTO_COMPACT flag isn't set — the caller already decided to compact
+  if (!needsCompaction(messages) && !feature('AUTO_COMPACT')) return false
+  if (estimateTotalTokens(messages) < COMPACT_CONFIG.targetTokens) return false
 
   const result = compactSession(messages, sessionId)
 

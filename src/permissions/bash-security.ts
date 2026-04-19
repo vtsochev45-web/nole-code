@@ -50,25 +50,32 @@ const DANGEROUS_PATTERNS = [
   { pattern: /\bwget\s+http/, name: 'wget HTTP download' },
   { pattern: /\bcurl\s+http/, name: 'curl HTTP request' },
   { pattern: /\bgit\s+clone\s+http/, name: 'git clone over HTTP' },
+
+  // Heredoc / here-string fed into a shell or interpreter — smuggles multi-line
+  // code execution without needing -c, so the existing `bash -c` / `python -c`
+  // patterns miss it. Classified as execution → critical risk.
+  { pattern: /\b(bash|sh|zsh|ksh|dash|python|python3|node|ruby|perl|php)\s*<<[-']?/, name: 'heredoc shell/interpreter execution' },
+  { pattern: /\b(bash|sh|zsh|ksh|dash|python|python3|node|ruby|perl|php)\s*<<</, name: 'here-string shell/interpreter execution' },
+  { pattern: /\bexec\s*<</, name: 'exec heredoc execution' },
+  { pattern: /\bsource\s*<</, name: 'source heredoc execution' },
 ]
 
-// Patterns that are safe to auto-allow
+// Patterns that are safe to auto-allow.
+// IMPORTANT: Keep this list to genuinely read-only / idempotent commands.
+// Destructive file ops (rm, mv, cp, ln) and arbitrary `find ... -exec` are NOT safe here —
+// they must go through the permission layer.
 const SAFE_PATTERNS = [
-  /^(ls|ll|la|dir|tree)\s/,
-  /^(cd|pwd|mkdir|rmdir)\s/,
-  /^(cat|head|tail|grep|find|locate)\s/,
-  /^(wc|sort|uniq|cut|tr|awk|sed)\s/,
-  /^(git\s+(status|log|diff|branch))\s/,
-  /^(npm\s+(install|run|test|build|start))\s/,
-  /^(bun\s+(install|run|add|dev|build))\s/,
-  /^(yarn\s+(install|run|start|build))\s/,
-  /^(pnpm\s+(install|run|dev|build))\s/,
-  /^(python[3]?\s+(-m\s+)?(pip|venv|http\.server))\s/,
-  /^(docker\s+(ps|images|logs|exec))\s/,
+  /^(ls|ll|la|dir|tree)(\s|$)/,
+  /^(pwd)(\s|$)/,
+  /^(cat|head|tail|wc|sort|uniq|cut|tr)\s/,
+  /^(git\s+(status|log|diff|branch|show|remote))(\s|$)/,
+  /^(npm\s+(list|run|test))\s/,
+  /^(bun\s+(test|run))\s/,
+  /^(yarn\s+(list|test|run))\s/,
+  /^(pnpm\s+(list|test|run))\s/,
+  /^(docker\s+(ps|images|logs))(\s|$)/,
   /^(kubectl\s+(get|describe|logs))\s/,
-  /^(curl\s+-s\s+(http|https):\/\/)/,  // Safe curl for HTTP GET only
-  /^(echo|printf|true|false|:)\s/,
-  /^(cp|mv|rm|ln)\s+/,  // File operations (need path validation)
+  /^(echo|printf|true|false|:)(\s|$)/,
 ]
 
 // Paths that are always denied
@@ -136,12 +143,12 @@ export function checkCommandSecurity(command: string): SecurityCheckResult {
     }
   }
   
-  // Unknown command - medium risk
+  // Unknown command — default to requiring confirmation rather than silently allowing.
   return {
-    allowed: true,
-    reason: 'Command not in safe list - proceeding with caution',
+    allowed: false,
+    reason: 'Command not in safe list — user confirmation required',
     risk: 'medium',
-    requiresConfirmation: false,
+    requiresConfirmation: true,
   }
 }
 

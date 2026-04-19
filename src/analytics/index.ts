@@ -3,7 +3,8 @@
 // Option to disable completely
 
 import { existsSync, readFileSync, appendFileSync, mkdirSync } from 'fs'
-import { join, homedir } from 'path'
+import { join } from 'node:path'
+import { homedir } from 'node:os'
 
 interface AnalyticsEvent {
   event: string
