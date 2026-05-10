@@ -18107,7 +18107,7 @@ async function promptPermission(toolName, input, reason) {
     return true;
   }
   const preview = toolName === "Bash" && input.command ? String(input.command).slice(0, 80) : JSON.stringify(input).slice(0, 80);
-  return new Promise((resolve3) => {
+  const next = promptChain.then(() => new Promise((resolve3) => {
     const rl = __require("readline").createInterface({ input: process.stdin, output: process.stdout });
     const timeout = setTimeout(() => {
       rl.close();
@@ -18131,7 +18131,11 @@ async function promptPermission(toolName, input, reason) {
       }
       resolve3(["y", "yes", ""].includes(a));
     });
+  }));
+  promptChain = next.catch(() => {
+    return;
   });
+  return next;
 }
 function registerTool(tool) {
   tools.set(tool.name, tool);
@@ -18393,7 +18397,7 @@ function formatSize(bytes) {
     return `${(bytes / 1048576).toFixed(1)}M`;
   return `${(bytes / 1073741824).toFixed(1)}G`;
 }
-var execAsync, tools, CORE_TOOLS, TOOL_KEYWORDS, TASKS_FILE;
+var execAsync, promptChain, tools, CORE_TOOLS, TOOL_KEYWORDS, TASKS_FILE;
 var init_registry = __esm(() => {
   init_web();
   init_client3();
@@ -18406,6 +18410,7 @@ var init_registry = __esm(() => {
   init_rules_engine();
   init_feature_flags();
   execAsync = promisify(exec);
+  promptChain = Promise.resolve();
   tools = new Map;
   CORE_TOOLS = new Set([
     "Bash",
@@ -30817,6 +30822,7 @@ ${divider()}
           }
           saveSession(session);
         }
+        const isTTY = !!process.stdout.isTTY;
         let spinnerInterval = null;
         let hasOutput = false;
         const SPINNER_CHARS = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -30849,7 +30855,7 @@ ${divider()}
         let currentVerbIdx = Math.floor(Math.random() * VERBS.length);
         const spinnerStartTime = Date.now();
         let lastVerbChange = Date.now();
-        spinnerInterval = setInterval(() => {
+        spinnerInterval = isTTY ? setInterval(() => {
           if (!hasOutput && process.stdout.writable) {
             const frame = SPINNER_CHARS[spinFrame % SPINNER_CHARS.length];
             if (Date.now() - lastVerbChange > 5000 + Math.random() * 3000) {
@@ -30863,7 +30869,7 @@ ${divider()}
             } catch {}
             spinFrame++;
           }
-        }, 120);
+        }, 120) : null;
         const mdStream = createStreamingMarkdown();
         let xmlBuffer = "";
         let xmlBufferTimer = null;
@@ -31022,7 +31028,7 @@ ${divider()}
           } else {
             if (result.isError)
               toolErrorCount++;
-            streamOutput(displayLines, maxLines, displayLines.length > 20 ? 5 : 0);
+            await streamOutput(displayLines, maxLines, displayLines.length > 20 ? 5 : 0);
           }
           const status = result.isError ? "❌" : "✅";
           console.log(`  ${status} ${tc.name} ${dim(`[${elapsed2}]`)}

@@ -832,7 +832,10 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
           saveSession(session!)
         }
 
-        // Animated spinner during LLM call
+        // Animated spinner during LLM call — only on a real TTY, since the
+        // \r-based overwrite turns into hundreds of accumulated frames when
+        // piped or captured in -m / CI / log mode.
+        const isTTY = !!process.stdout.isTTY
         let spinnerInterval: ReturnType<typeof setInterval> | null = null
         let hasOutput = false
         const SPINNER_CHARS = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
@@ -851,7 +854,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
         let currentVerbIdx = Math.floor(Math.random() * VERBS.length)
         const spinnerStartTime = Date.now()
         let lastVerbChange = Date.now()
-        spinnerInterval = setInterval(() => {
+        spinnerInterval = isTTY ? setInterval(() => {
           if (!hasOutput && process.stdout.writable) {
             const frame = SPINNER_CHARS[spinFrame % SPINNER_CHARS.length]
             // Change verb every 5-8 seconds (like Claude Code), not every 750ms
@@ -866,7 +869,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
             } catch {}
             spinFrame++
           }
-        }, 120)
+        }, 120) : null
 
         const mdStream = createStreamingMarkdown()
 
@@ -1078,7 +1081,10 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
             }))
           } else {
             if (result.isError) toolErrorCount++
-            void streamOutput(displayLines, maxLines, displayLines.length > 20 ? 5 : 0)
+            // Await so concurrent tool outputs don't interleave line-by-line.
+            // The for-loop serialises display; streamOutput's per-line delays
+            // would otherwise interleave with the next iteration's writes.
+            await streamOutput(displayLines, maxLines, displayLines.length > 20 ? 5 : 0)
           }
 
           const status = result.isError ? '❌' : '✅'

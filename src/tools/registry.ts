@@ -21,7 +21,13 @@ import type { ToolDefinition } from '../api/llm.js'
 
 const execAsync = promisify(exec)
 
-// Interactive permission prompt — auto-allows in non-interactive mode
+// Serialised permission-prompt queue. Multiple parallel tool calls used to
+// each create their own readline.createInterface() on process.stdin, racing
+// for keystrokes — typing `y` could go to either prompt or get split across
+// both. Funnel every prompt through this chain so only one readline is live
+// at a time.
+let promptChain: Promise<unknown> = Promise.resolve()
+
 async function promptPermission(toolName: string, input: Record<string, unknown>, reason: string): Promise<boolean> {
   // Auto-allow when not a TTY (background mode, piped, -m flag)
   if (!process.stdin.isTTY) {
@@ -33,7 +39,7 @@ async function promptPermission(toolName: string, input: Record<string, unknown>
     ? String(input.command).slice(0, 80)
     : JSON.stringify(input).slice(0, 80)
 
-  return new Promise((resolve) => {
+  const next = promptChain.then(() => new Promise<boolean>((resolve) => {
     const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout })
 
     // Timeout after 30s — auto-allow so it doesn't hang forever
@@ -57,7 +63,12 @@ async function promptPermission(toolName: string, input: Record<string, unknown>
       }
       resolve(['y', 'yes', ''].includes(a))
     })
-  })
+  }))
+
+  // Keep the chain alive even if a prompt rejects, so one bad prompt doesn't
+  // poison every later one.
+  promptChain = next.catch(() => undefined)
+  return next
 }
 
 // ============ Tool Definitions ============
