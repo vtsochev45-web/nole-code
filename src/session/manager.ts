@@ -48,8 +48,8 @@ export function listSessions(limit = 20): Session[] {
         return JSON.parse(readFileSync(join(SESSION_DIR, f), 'utf-8')) as Session
       } catch { return null }
     })
-    .filter((a: Session | null) => Boolean(a))
-    .sort((a: Session, b: Session) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .filter((a): a is Session => a !== null)
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
 
   return sessions.slice(0, limit)
 }
@@ -240,7 +240,7 @@ export function exportSession(id: string): string | null {
   for (const msg of session.messages) {
     if (msg.role === 'system') continue
 
-    const label = msg.role === 'user' ? '➜ you' : msg.role === 'nole' ? '🤖 nole' : '🔧 tool'
+    const label = msg.role === 'user' ? '➜ you' : msg.role === 'assistant' ? '🤖 nole' : '🔧 tool'
     lines.push(`**${label}**`)
     lines.push(msg.content.slice(0, 2000)) // Truncate long outputs
     lines.push('')

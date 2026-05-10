@@ -27,7 +27,7 @@ export interface LoopProcess {
 type IPCEvent =
   | { type: 'plan_ready'; total: number; goal: string }
   | { type: 'step_start'; step: number; total: number; description: string }
-  | { type: 'step_complete'; step: number; duration: number; description: string }
+  | { type: 'step_complete'; step: number; duration: number; description: string; total?: number }
   | { type: 'step_failed'; step: number; error: string; retry: number; maxRetries: number }
   | { type: 'step_skipped'; step: number; reason: string }
   | { type: 'checkpoint_saved'; checkpointId: string }
@@ -278,8 +278,9 @@ export function pauseLoop(): boolean {
 
   // Send SIGTERM to process group (child + detached grandchild)
   // -pid sends to entire group, catching the detached loop-agent
+  const childPid = activeLoop.child.pid
   try {
-    process.kill(-activeLoop.child.pid, 'SIGTERM')
+    if (childPid !== undefined) process.kill(-childPid, 'SIGTERM')
   } catch (e) {
     // Fallback to direct kill if group kill fails
     activeLoop.child.kill('SIGTERM')
@@ -288,8 +289,9 @@ export function pauseLoop(): boolean {
   // If still alive after 5s, SIGKILL
   const killTimeout = setTimeout(() => {
     if (activeLoop && !activeLoop.child.killed) {
+      const pid = activeLoop.child.pid
       try {
-        process.kill(-activeLoop.child.pid, 'SIGKILL')
+        if (pid !== undefined) process.kill(-pid, 'SIGKILL')
       } catch (error) {
         console.error(`[Loop] Failed to kill process group:`, error instanceof Error ? error.message : String(error))
         activeLoop.child.kill('SIGKILL')
@@ -353,7 +355,7 @@ async function notifyComplete(checkpointId: string, success: boolean, errors: nu
   if (success) {
     try {
       const { execSync } = require('child_process')
-      const cwd = cp.cwd || process.cwd()
+      const cwd = cp.context?.cwd || process.cwd()
       
       // Check for changes
       const status = execSync('git status --short', { encoding: 'utf-8', cwd }).trim()

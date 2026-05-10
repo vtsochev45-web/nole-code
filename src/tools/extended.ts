@@ -5,6 +5,7 @@ import { execSync, spawn } from 'child_process'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { homedir } from 'os'
+import type { ToolContext } from './registry.js'
 
 // ============ Brief Tool (SendUserMessage) ============
 // Send a message directly to the user

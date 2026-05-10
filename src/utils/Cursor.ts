@@ -136,7 +136,7 @@ export class Cursor {
     _count: number,
   ): number | null {
     const dir = findType === 'f' || findType === 't' ? 1 : -1
-    const searchText = dir > 0 ? this.text.slice(this.offset + 1) : this.text.slice(0, this.offset).reverse()
+    const searchText = dir > 0 ? this.text.slice(this.offset + 1) : this.text.slice(0, this.offset).split('').reverse().join('')
     const idx = dir > 0 ? searchText.indexOf(char) : searchText.indexOf(char)
     return idx === -1 ? null : this.offset + (dir > 0 ? idx + 1 : -idx)
   }

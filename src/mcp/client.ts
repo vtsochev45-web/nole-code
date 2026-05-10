@@ -7,9 +7,9 @@ import { spawn, execSync, type ChildProcess } from 'child_process'
 import { readFileSync, existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { 
-  StdioClientTransport, 
-  type StdioClientTransportOptions 
+import {
+  StdioClientTransport,
+  type StdioServerParameters,
 } from '@modelcontextprotocol/sdk/client/stdio.js'
 import {
   SSEClientTransport,
@@ -163,17 +163,17 @@ class MCPClientManager {
       throw new Error('stdio transport requires command')
     }
 
-    const options: StdioClientTransportOptions = {
+    const params: StdioServerParameters = {
       command: config.command,
       args: config.args || [],
       env: {
         ...process.env,
         ...config.env,
-      },
+      } as Record<string, string>,
       stderr: 'pipe',
     }
 
-    const transport = new StdioClientTransport(options)
+    const transport = new StdioClientTransport(params)
     server.transport = transport
 
     // Handle stderr output (often useful for debugging)
@@ -194,8 +194,10 @@ class MCPClientManager {
 
     await server.client.connect(transport)
 
-    // Store the process for cleanup
-    server.process = transport.stdin ? (transport as any)._proc : undefined
+    // Store the process for cleanup. stdin / _proc aren't in the public
+    // type but exist at runtime; cast through any.
+    const t = transport as unknown as { stdin?: unknown; _proc?: unknown }
+    server.process = t.stdin ? (t._proc as never) : undefined
   }
 
   /**
@@ -206,14 +208,11 @@ class MCPClientManager {
       throw new Error('SSE transport requires URL')
     }
 
-    const options: SSEClientTransportOptions = {
-      url: config.url,
-      eventSourceInitDict: {
-        headers: config.headers,
-      },
-    }
+    const options: SSEClientTransportOptions = config.headers
+      ? { requestInit: { headers: config.headers } }
+      : {}
 
-    const transport = new SSEClientTransport(options)
+    const transport = new SSEClientTransport(new URL(config.url), options)
     server.transport = transport
     await server.client.connect(transport)
   }
@@ -248,7 +247,7 @@ class MCPClientManager {
       },
     }
 
-    const transport = new StreamableHTTPClientTransport(config.url, options)
+    const transport = new StreamableHTTPClientTransport(new URL(config.url), options)
     server.transport = transport
     await server.client.connect(transport)
   }
@@ -298,7 +297,7 @@ class MCPClientManager {
       const content = result.content
         .map(block => {
           if (block.type === 'text') return block.text
-          if (block.type === 'image') return `[Image: ${block.source?.mimeType || 'unknown'}]`
+          if (block.type === 'image') return `[Image: ${block.mimeType || 'unknown'}]`
           if (block.type === 'resource') return `[Resource: ${block.resource?.uri || 'unknown'}]`
           return JSON.stringify(block)
         })

@@ -80,7 +80,7 @@ export class SkillLoader {
   /**
    * Parse skill.md content into a Skill object.
    */
-  private parseSkillMd(dirName: string, content: string, source: string): LoadedSkill | null {
+  private parseSkillMd(dirName: string, content: string, source: 'user' | 'builtin' | 'plugin'): LoadedSkill | null {
     const lines = content.split('\n')
     let name = dirName
     let description = ''

@@ -2,21 +2,20 @@
 
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import { existsSync } from 'fs'
-import { join } from 'path'
+import type { Command, CommandContext } from './index.js'
 
 const execAsync = promisify(exec)
 
-export function registerLintCommand(registerCommand: (cmd: any) => void) {
+export function registerLintCommand(registerCommand: (cmd: Command) => void) {
   registerCommand({
     name: 'lint',
     description: 'Run ESLint to check code quality (/lint [path|fix])',
     aliases: ['eslint', 'check'],
-    execute: async (args, ctx) => {
+    execute: async (args: string[], ctx: CommandContext) => {
       const [target, ...rest] = args
-      const cwd = (ctx as any).cwd || process.cwd()
+      const cwd = ctx.cwd || process.cwd()
       const isFix = target === 'fix' || rest.includes('fix')
-      const cleanRest = isFix ? rest.filter(a => a !== 'fix') : rest
+      const cleanRest = isFix ? rest.filter((a: string) => a !== 'fix') : rest
 
       let cmd = 'npx eslint'
       if (isFix) cmd += ' --fix'

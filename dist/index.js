@@ -16482,7 +16482,7 @@ class MCPClientManager {
     if (!config2.command) {
       throw new Error("stdio transport requires command");
     }
-    const options = {
+    const params = {
       command: config2.command,
       args: config2.args || [],
       env: {
@@ -16491,7 +16491,7 @@ class MCPClientManager {
       },
       stderr: "pipe"
     };
-    const transport = new StdioClientTransport(options);
+    const transport = new StdioClientTransport(params);
     server.transport = transport;
     transport.stderr?.on("data", (data) => {
       const lines = data.toString().trim().split(`
@@ -16507,19 +16507,15 @@ class MCPClientManager {
       server.status = "disconnected";
     };
     await server.client.connect(transport);
-    server.process = transport.stdin ? transport._proc : undefined;
+    const t = transport;
+    server.process = t.stdin ? t._proc : undefined;
   }
   async connectSSE(server, config2) {
     if (!config2.url) {
       throw new Error("SSE transport requires URL");
     }
-    const options = {
-      url: config2.url,
-      eventSourceInitDict: {
-        headers: config2.headers
-      }
-    };
-    const transport = new SSEClientTransport(options);
+    const options = config2.headers ? { requestInit: { headers: config2.headers } } : {};
+    const transport = new SSEClientTransport(new URL(config2.url), options);
     server.transport = transport;
     await server.client.connect(transport);
   }
@@ -16543,7 +16539,7 @@ class MCPClientManager {
         headers
       }
     };
-    const transport = new StreamableHTTPClientTransport(config2.url, options);
+    const transport = new StreamableHTTPClientTransport(new URL(config2.url), options);
     server.transport = transport;
     await server.client.connect(transport);
   }
@@ -16573,7 +16569,7 @@ class MCPClientManager {
         if (block.type === "text")
           return block.text;
         if (block.type === "image")
-          return `[Image: ${block.source?.mimeType || "unknown"}]`;
+          return `[Image: ${block.mimeType || "unknown"}]`;
         if (block.type === "resource")
           return `[Resource: ${block.resource?.uri || "unknown"}]`;
         return JSON.stringify(block);
@@ -19719,7 +19715,7 @@ function listSessions(limit = 20) {
     } catch {
       return null;
     }
-  }).filter((a) => Boolean(a)).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }).filter((a) => a !== null).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   return sessions.slice(0, limit);
 }
 function loadSession(id) {
@@ -19874,7 +19870,7 @@ function exportSession(id) {
   for (const msg of session.messages) {
     if (msg.role === "system")
       continue;
-    const label = msg.role === "user" ? "➜ you" : msg.role === "nole" ? "\uD83E\uDD16 nole" : "\uD83D\uDD27 tool";
+    const label = msg.role === "user" ? "➜ you" : msg.role === "assistant" ? "\uD83E\uDD16 nole" : "\uD83D\uDD27 tool";
     lines.push(`**${label}**`);
     lines.push(msg.content.slice(0, 2000));
     lines.push("");
@@ -20537,7 +20533,7 @@ function applyStyle(text, styleName) {
   return codes.join("") + text + reset;
 }
 function spinner(frame) {
-  return STYLES[frame % SPINNER_FRAMES.length];
+  return SPINNER_FRAMES[frame % SPINNER_FRAMES.length];
 }
 function box(text, options = {}) {
   const border = options.border ? "│" : "";
@@ -21168,15 +21164,19 @@ function resumeLoop(checkpointId) {
 function pauseLoop() {
   if (!activeLoop)
     return false;
+  const childPid = activeLoop.child.pid;
   try {
-    process.kill(-activeLoop.child.pid, "SIGTERM");
+    if (childPid !== undefined)
+      process.kill(-childPid, "SIGTERM");
   } catch (e) {
     activeLoop.child.kill("SIGTERM");
   }
   const killTimeout = setTimeout(() => {
     if (activeLoop && !activeLoop.child.killed) {
+      const pid = activeLoop.child.pid;
       try {
-        process.kill(-activeLoop.child.pid, "SIGKILL");
+        if (pid !== undefined)
+          process.kill(-pid, "SIGKILL");
       } catch (error2) {
         console.error(`[Loop] Failed to kill process group:`, error2 instanceof Error ? error2.message : String(error2));
         activeLoop.child.kill("SIGKILL");
@@ -21236,7 +21236,7 @@ Steps: ${cp.steps.length} | Errors: ${errors3} | Duration: ${elapsed}s
   if (success) {
     try {
       const { execSync: execSync2 } = __require("child_process");
-      const cwd = cp.cwd || process.cwd();
+      const cwd = cp.context?.cwd || process.cwd();
       const status2 = execSync2("git status --short", { encoding: "utf-8", cwd }).trim();
       if (status2) {
         execSync2("git add -A", { cwd });

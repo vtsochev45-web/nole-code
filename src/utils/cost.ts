@@ -234,7 +234,7 @@ export const c = {
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
 export function spinner(frame: number): string {
-  return STYLES[frame % SPINNER_FRAMES.length]
+  return SPINNER_FRAMES[frame % SPINNER_FRAMES.length]
 }
 
 // Box drawing helpers

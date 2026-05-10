@@ -2,7 +2,13 @@
  * Skills System — Types and interfaces for the skills framework.
  */
 
-// ToolRegistry imported from tools/registry.ts at runtime
+// Minimal shape a skill needs from the tool registry. Avoids a circular
+// import on tools/registry.ts and keeps skills decoupled from the concrete
+// registry implementation.
+export interface ToolRegistry {
+  has(name: string): boolean
+  execute(name: string, input: Record<string, unknown>): Promise<{ content: string; isError?: boolean }>
+}
 
 export interface SkillContext {
   cwd: string

@@ -187,10 +187,6 @@ class RemoteSessionManager {
     }
   }
 
-  getPort(): number {
-    return this.port
-  }
-
   getSessionCount(): number {
     return this.sessions.size
   }

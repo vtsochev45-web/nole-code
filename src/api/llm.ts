@@ -186,7 +186,15 @@ export class LLMClient {
     let systemPrompt = ''
     const anthropicMessages: Array<{
       role: string
-      content: string | Array<{ type: string; text?: string; name?: string; input?: Record<string, unknown>; id?: string }>
+      content: string | Array<{
+        type: string
+        text?: string
+        name?: string
+        input?: Record<string, unknown>
+        id?: string
+        tool_use_id?: string
+        content?: string
+      }>
     }> = []
 
     // Collect valid tool_use IDs from assistant messages so we can validate tool_results

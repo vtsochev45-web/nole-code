@@ -195,7 +195,7 @@ export async function delegateTeam(
   // Retrieve agents from the team's member registry (createTeam spawns them and assigns agentId)
   const agents = Array.from(team.members.values())
     .map(m => getAgent(m.agentId))
-    .filter(Boolean)
+    .filter((a): a is NonNullable<typeof a> => a !== undefined)
 
   return { teamId: team.id, agents }
 }

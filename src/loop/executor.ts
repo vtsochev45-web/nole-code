@@ -28,7 +28,7 @@ import {
 } from './checkpoint.js'
 
 import { randomUUID } from 'crypto'
-import { LLMClient } from '../api/llm.js'
+import { LLMClient, type Message } from '../api/llm.js'
 import { getToolDefinitions, executeTool } from '../tools/registry.js'
 import { loadSettings } from '../project/onboarding.js'
 import { c, bold, dim } from '../ui/output/styles.js'
@@ -230,7 +230,7 @@ async function executeStep(
   step: Checkpoint['steps'][0],
   context: Checkpoint['context'],
   cwd: string,
-  sessionMessages: Array<{ role: string; content: string }>,
+  sessionMessages: Message[],
   client: LLMClient,
   options: { verbose?: boolean }
 ): Promise<{ toolCalls: Checkpoint['steps'][0]['toolCalls']; shouldContinue: boolean }> {
@@ -252,7 +252,7 @@ ${step.retryCount > 0 ? buildRetryContext({ steps: [step], context } as Checkpoi
   try {
     const result = await client.chat([
       ...sessionMessages.slice(-20), // Last 20 messages for context
-      { role: 'user', content: `\n\nTASK: ${step.description}\n\nContext:\n${stepContext}\n\nWhat tools should I use to complete this step? Respond with specific tool calls.` }
+      { role: 'user' as const, content: `\n\nTASK: ${step.description}\n\nContext:\n${stepContext}\n\nWhat tools should I use to complete this step? Respond with specific tool calls.` }
     ], { tools: toolDefs, max_tokens: 2000, temperature: 0 })
 
     // Extract tool calls from response
@@ -374,7 +374,7 @@ export async function runLoop(options: ExecutorOptions): Promise<ExecutionResult
   const client = new LLMClient(token, settings.model || 'MiniMax-M2.7')
   
   // Session messages for context
-  const sessionMessages: Array<{ role: string; content: string; name?: string; tool_call_id?: string; tool_calls?: Array<{ id?: string; name: string; input: Record<string, unknown> }> }> = []
+  const sessionMessages: Message[] = []
   
   // Plan steps if pending
   if (checkpoint.state === 'pending' || checkpoint.steps.length === 0) {
