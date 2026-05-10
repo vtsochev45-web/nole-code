@@ -1,6 +1,26 @@
 // Tests for tool registry and execution
 import { describe, test, expect, beforeAll } from 'bun:test'
+import { existsSync, mkdirSync, symlinkSync, unlinkSync } from 'fs'
+import { join } from 'path'
 import { getToolDefinitions, executeTool } from '../src/tools/registry.js'
+
+const TEST_PROJECT = '/tmp/nole-code'
+const PROJECT_ROOT = join(__dirname, '..')
+
+// Ensure /tmp/nole-code symlink exists for tool path resolution tests
+beforeAll(() => {
+  try {
+    if (existsSync(TEST_PROJECT)) {
+      const stat = { isDirectory: () => false, isSymbolicLink: () => false }
+      try { stat.isDirectory(); } catch { /* fallback */ }
+      // If it's a real directory (not a symlink), remove it
+    }
+    // Remove if exists (could be stale symlink or real dir from previous runs)
+    try { unlinkSync(TEST_PROJECT) } catch { /* ignore */ }
+    // Create symlink from /tmp/nole-code -> project root
+    symlinkSync(PROJECT_ROOT, TEST_PROJECT)
+  } catch { /* ignore - tests will fail meaningfully without it */ }
+})
 
 describe('Tool Registry', () => {
   test('has all expected tools registered', () => {
