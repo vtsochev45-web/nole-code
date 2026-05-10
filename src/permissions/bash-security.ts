@@ -17,14 +17,15 @@ const DANGEROUS_PATTERNS = [
   { pattern: /<\(/, name: 'process substitution <()' },
   { pattern: />\(/, name: 'process substitution >()' },
   
-  // Parameter expansion
-  { pattern: /\$\{[^}]+\}/, name: '${} parameter expansion' },
+  // Arithmetic expansion ($[...] is deprecated bash; $((...)) is caught by $\( above)
   { pattern: /\$\[/, name: '$[] arithmetic expansion' },
-  
-  // Redirection
-  { pattern: />\s*\/dev\/null/, name: 'redirect to /dev/null (may hide output)' },
-  { pattern: /2>&1/, name: 'redirect stderr to stdout' },
-  
+
+  // Note: ${VAR} parameter expansion, > /dev/null, and 2>&1 were previously
+  // listed here but are not actually dangerous — substitution is not execution
+  // and stderr/stdout redirection hides nothing the model needs to see.
+  // Command substitution inside parameter expansion (${VAR:-$(cmd)}) is still
+  // caught by the $\( pattern above.
+
   // Dangerous commands
   { pattern: /\bcurl\s+-[A-Za-z]*\s*[A-Za-z]*\s*http/, name: 'curl HTTP request' },
   { pattern: /\bwget\s+/, name: 'wget download' },
@@ -109,7 +110,31 @@ export interface PathValidationResult {
  * Check if a command is safe to execute
  */
 export function checkCommandSecurity(command: string): SecurityCheckResult {
-  // Check safe patterns first
+  // Check dangerous patterns FIRST. A safe-looking prefix (`echo`, `cat`,
+  // `git status`, ...) does not make the rest of the command safe — e.g.
+  // `echo $(rm -rf /)` matches both lists, and dangerous must win.
+  const foundDangerous: string[] = []
+  for (const { pattern, name } of DANGEROUS_PATTERNS) {
+    if (pattern.test(command)) {
+      foundDangerous.push(name)
+    }
+  }
+
+  if (foundDangerous.length > 0) {
+    const risk = foundDangerous.some(d =>
+      d.includes('execution') || d.includes('substitution')
+    ) ? 'critical' : 'high'
+
+    return {
+      allowed: false,
+      reason: `Dangerous patterns: ${foundDangerous.join(', ')}`,
+      risk,
+      requiresConfirmation: true,
+      dangerousPatterns: foundDangerous,
+    }
+  }
+
+  // Then check safe patterns.
   for (const pattern of SAFE_PATTERNS) {
     if (pattern.test(command.trim())) {
       return {
@@ -120,29 +145,7 @@ export function checkCommandSecurity(command: string): SecurityCheckResult {
       }
     }
   }
-  
-  // Check for dangerous patterns
-  const foundDangerous: string[] = []
-  for (const { pattern, name } of DANGEROUS_PATTERNS) {
-    if (pattern.test(command)) {
-      foundDangerous.push(name)
-    }
-  }
-  
-  if (foundDangerous.length > 0) {
-    const risk = foundDangerous.some(d => 
-      d.includes('execution') || d.includes('substitution')
-    ) ? 'critical' : 'high'
-    
-    return {
-      allowed: false,
-      reason: `Dangerous patterns: ${foundDangerous.join(', ')}`,
-      risk,
-      requiresConfirmation: true,
-      dangerousPatterns: foundDangerous,
-    }
-  }
-  
+
   // Unknown command — default to requiring confirmation rather than silently allowing.
   return {
     allowed: false,

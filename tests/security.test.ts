@@ -57,6 +57,15 @@ describe('Command Security', () => {
     expect(r.allowed).toBe(false)
     expect(r.risk).toBe('critical')
   })
+
+  test('safe-looking prefix cannot smuggle command substitution', () => {
+    // Regression: `echo` matched SAFE_PATTERNS first and short-circuited the
+    // dangerous-pattern check, so `echo $(rm file)` was being classified safe.
+    const r = checkCommandSecurity('echo $(rm file)')
+    expect(r.allowed).toBe(false)
+    expect(r.risk).toBe('critical')
+    expect(r.dangerousPatterns).toContain('$() command substitution')
+  })
 })
 
 describe('Path Validation', () => {

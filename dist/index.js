@@ -17121,16 +17121,6 @@ var init_feature_flags = __esm(() => {
 // src/permissions/bash-security.ts
 import { resolve, normalize, isAbsolute } from "path";
 function checkCommandSecurity(command) {
-  for (const pattern of SAFE_PATTERNS) {
-    if (pattern.test(command.trim())) {
-      return {
-        allowed: true,
-        reason: "Matches safe command pattern",
-        risk: "safe",
-        requiresConfirmation: false
-      };
-    }
-  }
   const foundDangerous = [];
   for (const { pattern, name } of DANGEROUS_PATTERNS) {
     if (pattern.test(command)) {
@@ -17146,6 +17136,16 @@ function checkCommandSecurity(command) {
       requiresConfirmation: true,
       dangerousPatterns: foundDangerous
     };
+  }
+  for (const pattern of SAFE_PATTERNS) {
+    if (pattern.test(command.trim())) {
+      return {
+        allowed: true,
+        reason: "Matches safe command pattern",
+        risk: "safe",
+        requiresConfirmation: false
+      };
+    }
   }
   return {
     allowed: false,
@@ -17208,10 +17208,7 @@ var init_bash_security = __esm(() => {
     { pattern: /`[^`]+`/, name: "backtick command substitution" },
     { pattern: /<\(/, name: "process substitution <()" },
     { pattern: />\(/, name: "process substitution >()" },
-    { pattern: /\$\{[^}]+\}/, name: "${} parameter expansion" },
     { pattern: /\$\[/, name: "$[] arithmetic expansion" },
-    { pattern: />\s*\/dev\/null/, name: "redirect to /dev/null (may hide output)" },
-    { pattern: /2>&1/, name: "redirect stderr to stdout" },
     { pattern: /\bcurl\s+-[A-Za-z]*\s*[A-Za-z]*\s*http/, name: "curl HTTP request" },
     { pattern: /\bwget\s+/, name: "wget download" },
     { pattern: /\bnc\s+/, name: "netcat connection" },
@@ -18448,7 +18445,7 @@ var init_registry = __esm(() => {
       properties: {
         command: { type: "string", description: "Shell command to execute" },
         timeout: { type: "number", description: "Timeout in milliseconds (default: 30000)" },
-        cwd: { type: "string", description: "Working directory (default: project root)" }
+        cwd: { type: "string", description: "Optional. Omit to use the current working directory. Only set this if the user explicitly asked you to run the command somewhere else." }
       },
       required: ["command"]
     },
@@ -18681,7 +18678,7 @@ Tip: Use Read to check the exact content first.`;
       type: "object",
       properties: {
         pattern: { type: "string", description: "Glob pattern (e.g. **/*.ts, src/*.js)" },
-        cwd: { type: "string", description: "Directory to search in" }
+        cwd: { type: "string", description: "Optional. Omit to search the current working directory. Only set this if the user explicitly asked for a different directory." }
       },
       required: ["pattern"]
     },
@@ -18905,7 +18902,7 @@ ${task.result ? `Result: ${task.result}` : ""}`;
         description: { type: "string", description: "Short description of the task (3-5 words)" },
         prompt: { type: "string", description: "Detailed task for the agent to perform" },
         run_in_background: { type: "boolean", description: "Run in background (returns immediately)" },
-        cwd: { type: "string", description: "Working directory for the agent" }
+        cwd: { type: "string", description: "Optional. Omit to inherit the current working directory. Only set this if the user explicitly asked the agent to work in a different directory." }
       },
       required: ["description", "prompt"]
     },
@@ -19055,7 +19052,7 @@ Manage with /team list or /team send`;
       type: "object",
       properties: {
         pattern: { type: "string", description: "Glob pattern" },
-        cwd: { type: "string", description: "Directory to search" }
+        cwd: { type: "string", description: "Optional. Omit to search the current working directory. Only set this if the user explicitly asked for a different directory." }
       },
       required: ["pattern"]
     },

@@ -362,7 +362,7 @@ registerTool({
     properties: {
       command: { type: 'string', description: 'Shell command to execute' },
       timeout: { type: 'number', description: 'Timeout in milliseconds (default: 30000)' },
-      cwd: { type: 'string', description: 'Working directory (default: project root)' },
+      cwd: { type: 'string', description: 'Optional. Omit to use the current working directory. Only set this if the user explicitly asked you to run the command somewhere else.' },
     },
     required: ['command'],
   },
@@ -589,7 +589,7 @@ registerTool({
     type: 'object',
     properties: {
       pattern: { type: 'string', description: 'Glob pattern (e.g. **/*.ts, src/*.js)' },
-      cwd: { type: 'string', description: 'Directory to search in' },
+      cwd: { type: 'string', description: 'Optional. Omit to search the current working directory. Only set this if the user explicitly asked for a different directory.' },
     },
     required: ['pattern'],
   },
@@ -865,7 +865,7 @@ registerTool({
       description: { type: 'string', description: 'Short description of the task (3-5 words)' },
       prompt: { type: 'string', description: 'Detailed task for the agent to perform' },
       run_in_background: { type: 'boolean', description: 'Run in background (returns immediately)' },
-      cwd: { type: 'string', description: 'Working directory for the agent' },
+      cwd: { type: 'string', description: 'Optional. Omit to inherit the current working directory. Only set this if the user explicitly asked the agent to work in a different directory.' },
     },
     required: ['description', 'prompt'],
   },
@@ -1023,7 +1023,7 @@ registerTool({
     type: 'object',
     properties: {
       pattern: { type: 'string', description: 'Glob pattern' },
-      cwd: { type: 'string', description: 'Directory to search' },
+      cwd: { type: 'string', description: 'Optional. Omit to search the current working directory. Only set this if the user explicitly asked for a different directory.' },
     },
     required: ['pattern'],
   },
