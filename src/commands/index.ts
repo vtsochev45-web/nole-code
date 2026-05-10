@@ -930,9 +930,9 @@ setTimeout(() => {
   import('./debug.js').then(m => m.registerDebugCommand(registerCommand)).catch(() => {})
   import('./multi.js').then(m => m.registerMultiCommand(registerCommand)).catch(() => {})
   import('./mcp.js').then(m => m.registerMCPCommand(registerCommand)).catch(() => {})
-  // New features: /web, /context, /git, /send, /exec
+  // New features: /web, /git, /send, /exec
+  // Note: /context is registered eagerly above; src/commands/context.ts is unused.
   import('./web.js').then(m => m.registerWebCommand(registerCommand)).catch(() => {})
-  import('./context.js').then(m => m.registerContextCommand(registerCommand)).catch(() => {})
   import('./git.js').then(m => m.registerGitCommand(registerCommand)).catch(() => {})
   import('./send.js').then(m => m.registerSendCommand(registerCommand)).catch(() => {})
   import('./exec.js').then(m => m.registerExecCommand(registerCommand)).catch(() => {})

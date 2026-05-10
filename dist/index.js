@@ -5027,7 +5027,7 @@ var init_v4 = __esm(() => {
 });
 
 // node_modules/@modelcontextprotocol/sdk/dist/esm/types.js
-var LATEST_PROTOCOL_VERSION = "2025-11-25", SUPPORTED_PROTOCOL_VERSIONS, RELATED_TASK_META_KEY = "io.modelcontextprotocol/related-task", JSONRPC_VERSION = "2.0", AssertObjectSchema, ProgressTokenSchema, CursorSchema, TaskCreationParamsSchema, TaskMetadataSchema, RelatedTaskMetadataSchema, RequestMetaSchema, BaseRequestParamsSchema, TaskAugmentedRequestParamsSchema, isTaskAugmentedRequestParams = (value) => TaskAugmentedRequestParamsSchema.safeParse(value).success, RequestSchema, NotificationsParamsSchema, NotificationSchema, ResultSchema, RequestIdSchema, JSONRPCRequestSchema, isJSONRPCRequest = (value) => JSONRPCRequestSchema.safeParse(value).success, JSONRPCNotificationSchema, isJSONRPCNotification = (value) => JSONRPCNotificationSchema.safeParse(value).success, JSONRPCResultResponseSchema, isJSONRPCResultResponse = (value) => JSONRPCResultResponseSchema.safeParse(value).success, ErrorCode, JSONRPCErrorResponseSchema, isJSONRPCErrorResponse = (value) => JSONRPCErrorResponseSchema.safeParse(value).success, JSONRPCMessageSchema, JSONRPCResponseSchema, EmptyResultSchema, CancelledNotificationParamsSchema, CancelledNotificationSchema, IconSchema, IconsSchema, BaseMetadataSchema, ImplementationSchema, FormElicitationCapabilitySchema, ElicitationCapabilitySchema, ClientTasksCapabilitySchema, ServerTasksCapabilitySchema, ClientCapabilitiesSchema, InitializeRequestParamsSchema, InitializeRequestSchema, ServerCapabilitiesSchema, InitializeResultSchema, InitializedNotificationSchema, isInitializedNotification = (value) => InitializedNotificationSchema.safeParse(value).success, PingRequestSchema, ProgressSchema, ProgressNotificationParamsSchema, ProgressNotificationSchema, PaginatedRequestParamsSchema, PaginatedRequestSchema, PaginatedResultSchema, TaskStatusSchema, TaskSchema, CreateTaskResultSchema, TaskStatusNotificationParamsSchema, TaskStatusNotificationSchema, GetTaskRequestSchema, GetTaskResultSchema, GetTaskPayloadRequestSchema, GetTaskPayloadResultSchema, ListTasksRequestSchema, ListTasksResultSchema, CancelTaskRequestSchema, CancelTaskResultSchema, ResourceContentsSchema, TextResourceContentsSchema, Base64Schema, BlobResourceContentsSchema, RoleSchema, AnnotationsSchema, ResourceSchema, ResourceTemplateSchema, ListResourcesRequestSchema, ListResourcesResultSchema, ListResourceTemplatesRequestSchema, ListResourceTemplatesResultSchema, ResourceRequestParamsSchema, ReadResourceRequestParamsSchema, ReadResourceRequestSchema, ReadResourceResultSchema, ResourceListChangedNotificationSchema, SubscribeRequestParamsSchema, SubscribeRequestSchema, UnsubscribeRequestParamsSchema, UnsubscribeRequestSchema, ResourceUpdatedNotificationParamsSchema, ResourceUpdatedNotificationSchema, PromptArgumentSchema, PromptSchema, ListPromptsRequestSchema, ListPromptsResultSchema, GetPromptRequestParamsSchema, GetPromptRequestSchema, TextContentSchema, ImageContentSchema, AudioContentSchema, ToolUseContentSchema, EmbeddedResourceSchema, ResourceLinkSchema, ContentBlockSchema, PromptMessageSchema, GetPromptResultSchema, PromptListChangedNotificationSchema, ToolAnnotationsSchema, ToolExecutionSchema, ToolSchema, ListToolsRequestSchema, ListToolsResultSchema2, CallToolResultSchema, CompatibilityCallToolResultSchema, CallToolRequestParamsSchema, CallToolRequestSchema, ToolListChangedNotificationSchema, ListChangedOptionsBaseSchema, LoggingLevelSchema, SetLevelRequestParamsSchema, SetLevelRequestSchema, LoggingMessageNotificationParamsSchema, LoggingMessageNotificationSchema, ModelHintSchema, ModelPreferencesSchema, ToolChoiceSchema, ToolResultContentSchema, SamplingContentSchema, SamplingMessageContentBlockSchema, SamplingMessageSchema, CreateMessageRequestParamsSchema, CreateMessageRequestSchema, CreateMessageResultSchema, CreateMessageResultWithToolsSchema, BooleanSchemaSchema, StringSchemaSchema, NumberSchemaSchema, UntitledSingleSelectEnumSchemaSchema, TitledSingleSelectEnumSchemaSchema, LegacyTitledEnumSchemaSchema, SingleSelectEnumSchemaSchema, UntitledMultiSelectEnumSchemaSchema, TitledMultiSelectEnumSchemaSchema, MultiSelectEnumSchemaSchema, EnumSchemaSchema, PrimitiveSchemaDefinitionSchema, ElicitRequestFormParamsSchema, ElicitRequestURLParamsSchema, ElicitRequestParamsSchema, ElicitRequestSchema, ElicitationCompleteNotificationParamsSchema, ElicitationCompleteNotificationSchema, ElicitResultSchema, ResourceTemplateReferenceSchema, PromptReferenceSchema, CompleteRequestParamsSchema, CompleteRequestSchema, CompleteResultSchema, RootSchema, ListRootsRequestSchema, ListRootsResultSchema, RootsListChangedNotificationSchema, ClientRequestSchema, ClientNotificationSchema, ClientResultSchema, ServerRequestSchema, ServerNotificationSchema, ServerResultSchema, McpError, UrlElicitationRequiredError;
+var LATEST_PROTOCOL_VERSION = "2025-11-25", SUPPORTED_PROTOCOL_VERSIONS, RELATED_TASK_META_KEY = "io.modelcontextprotocol/related-task", JSONRPC_VERSION = "2.0", AssertObjectSchema, ProgressTokenSchema, CursorSchema, TaskCreationParamsSchema, TaskMetadataSchema, RelatedTaskMetadataSchema, RequestMetaSchema, BaseRequestParamsSchema, TaskAugmentedRequestParamsSchema, isTaskAugmentedRequestParams = (value) => TaskAugmentedRequestParamsSchema.safeParse(value).success, RequestSchema, NotificationsParamsSchema, NotificationSchema, ResultSchema, RequestIdSchema, JSONRPCRequestSchema, isJSONRPCRequest = (value) => JSONRPCRequestSchema.safeParse(value).success, JSONRPCNotificationSchema, isJSONRPCNotification = (value) => JSONRPCNotificationSchema.safeParse(value).success, JSONRPCResultResponseSchema, isJSONRPCResultResponse = (value) => JSONRPCResultResponseSchema.safeParse(value).success, ErrorCode, JSONRPCErrorResponseSchema, isJSONRPCErrorResponse = (value) => JSONRPCErrorResponseSchema.safeParse(value).success, JSONRPCMessageSchema, JSONRPCResponseSchema, EmptyResultSchema, CancelledNotificationParamsSchema, CancelledNotificationSchema, IconSchema, IconsSchema, BaseMetadataSchema, ImplementationSchema, FormElicitationCapabilitySchema, ElicitationCapabilitySchema, ClientTasksCapabilitySchema, ServerTasksCapabilitySchema, ClientCapabilitiesSchema, InitializeRequestParamsSchema, InitializeRequestSchema, ServerCapabilitiesSchema, InitializeResultSchema, InitializedNotificationSchema, isInitializedNotification = (value) => InitializedNotificationSchema.safeParse(value).success, PingRequestSchema, ProgressSchema, ProgressNotificationParamsSchema, ProgressNotificationSchema, PaginatedRequestParamsSchema, PaginatedRequestSchema, PaginatedResultSchema, TaskStatusSchema, TaskSchema, CreateTaskResultSchema, TaskStatusNotificationParamsSchema, TaskStatusNotificationSchema, GetTaskRequestSchema, GetTaskResultSchema, GetTaskPayloadRequestSchema, GetTaskPayloadResultSchema, ListTasksRequestSchema, ListTasksResultSchema, CancelTaskRequestSchema, CancelTaskResultSchema, ResourceContentsSchema, TextResourceContentsSchema, Base64Schema, BlobResourceContentsSchema, RoleSchema, AnnotationsSchema, ResourceSchema, ResourceTemplateSchema, ListResourcesRequestSchema, ListResourcesResultSchema, ListResourceTemplatesRequestSchema, ListResourceTemplatesResultSchema, ResourceRequestParamsSchema, ReadResourceRequestParamsSchema, ReadResourceRequestSchema, ReadResourceResultSchema, ResourceListChangedNotificationSchema, SubscribeRequestParamsSchema, SubscribeRequestSchema, UnsubscribeRequestParamsSchema, UnsubscribeRequestSchema, ResourceUpdatedNotificationParamsSchema, ResourceUpdatedNotificationSchema, PromptArgumentSchema, PromptSchema, ListPromptsRequestSchema, ListPromptsResultSchema, GetPromptRequestParamsSchema, GetPromptRequestSchema, TextContentSchema, ImageContentSchema, AudioContentSchema, ToolUseContentSchema, EmbeddedResourceSchema, ResourceLinkSchema, ContentBlockSchema, PromptMessageSchema, GetPromptResultSchema, PromptListChangedNotificationSchema, ToolAnnotationsSchema, ToolExecutionSchema, ToolSchema, ListToolsRequestSchema, ListToolsResultSchema, CallToolResultSchema, CompatibilityCallToolResultSchema, CallToolRequestParamsSchema, CallToolRequestSchema, ToolListChangedNotificationSchema, ListChangedOptionsBaseSchema, LoggingLevelSchema, SetLevelRequestParamsSchema, SetLevelRequestSchema, LoggingMessageNotificationParamsSchema, LoggingMessageNotificationSchema, ModelHintSchema, ModelPreferencesSchema, ToolChoiceSchema, ToolResultContentSchema, SamplingContentSchema, SamplingMessageContentBlockSchema, SamplingMessageSchema, CreateMessageRequestParamsSchema, CreateMessageRequestSchema, CreateMessageResultSchema, CreateMessageResultWithToolsSchema, BooleanSchemaSchema, StringSchemaSchema, NumberSchemaSchema, UntitledSingleSelectEnumSchemaSchema, TitledSingleSelectEnumSchemaSchema, LegacyTitledEnumSchemaSchema, SingleSelectEnumSchemaSchema, UntitledMultiSelectEnumSchemaSchema, TitledMultiSelectEnumSchemaSchema, MultiSelectEnumSchemaSchema, EnumSchemaSchema, PrimitiveSchemaDefinitionSchema, ElicitRequestFormParamsSchema, ElicitRequestURLParamsSchema, ElicitRequestParamsSchema, ElicitRequestSchema, ElicitationCompleteNotificationParamsSchema, ElicitationCompleteNotificationSchema, ElicitResultSchema, ResourceTemplateReferenceSchema, PromptReferenceSchema, CompleteRequestParamsSchema, CompleteRequestSchema, CompleteResultSchema, RootSchema, ListRootsRequestSchema, ListRootsResultSchema, RootsListChangedNotificationSchema, ClientRequestSchema, ClientNotificationSchema, ClientResultSchema, ServerRequestSchema, ServerNotificationSchema, ServerResultSchema, McpError, UrlElicitationRequiredError;
 var init_types = __esm(() => {
   init_v4();
   SUPPORTED_PROTOCOL_VERSIONS = [LATEST_PROTOCOL_VERSION, "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"];
@@ -5494,7 +5494,7 @@ var init_types = __esm(() => {
   ListToolsRequestSchema = PaginatedRequestSchema.extend({
     method: literal("tools/list")
   });
-  ListToolsResultSchema2 = PaginatedResultSchema.extend({
+  ListToolsResultSchema = PaginatedResultSchema.extend({
     tools: array(ToolSchema)
   });
   CallToolResultSchema = ResultSchema.extend({
@@ -5820,7 +5820,7 @@ var init_types = __esm(() => {
     ListResourceTemplatesResultSchema,
     ReadResourceResultSchema,
     CallToolResultSchema,
-    ListToolsResultSchema2,
+    ListToolsResultSchema,
     GetTaskResultSchema,
     ListTasksResultSchema,
     CreateTaskResultSchema
@@ -13988,7 +13988,7 @@ var init_client2 = __esm(() => {
       return this._cachedToolOutputValidators.get(toolName);
     }
     async listTools(params, options) {
-      const result = await this.request({ method: "tools/list", params }, ListToolsResultSchema2, options);
+      const result = await this.request({ method: "tools/list", params }, ListToolsResultSchema, options);
       this.cacheToolMetadata(result.tools);
       return result;
     }
@@ -18190,12 +18190,16 @@ function getToolDefinitions(context) {
 async function executeTool(name, input, ctx) {
   const toolStart = Date.now();
   const preHooks = getPreHooks(name);
+  let preHookOutput = "";
   if (preHooks.length > 0) {
     const hookResults = await runHooks(preHooks, { tool: name, input, cwd: ctx.cwd });
     for (const r of hookResults) {
       if (r.startsWith("Hook error:")) {
         return { content: r, isError: true };
       }
+      if (r)
+        preHookOutput += (preHookOutput ? `
+` : "") + r;
     }
   }
   if (feature("PERMISSION_RULES")) {
@@ -18303,10 +18307,25 @@ Dangerous patterns: ${security.dangerousPatterns?.join(", ") || "unknown"}`,
   if (postHooks.length > 0) {
     const hookResults = await runHooks(postHooks, { tool: name, input, cwd: ctx.cwd });
     if (hookResults.length > 0) {
-      result.content += `
+      result.content = (preHookOutput ? preHookOutput + `
+` : "") + result.content + `
 ` + hookResults.join(`
 `);
+      logToolCall({
+        timestamp: new Date().toISOString(),
+        sessionId: ctx.sessionId,
+        tool: name,
+        input,
+        resultLength: result.content.length,
+        isError: result.isError || false,
+        durationMs: Date.now() - toolStart
+      });
+      return result;
     }
+  }
+  if (preHookOutput) {
+    result.content = preHookOutput + `
+` + result.content;
   }
   logToolCall({
     timestamp: new Date().toISOString(),
@@ -22498,8 +22517,9 @@ var init_commands = __esm(() => {
 
 // src/skills/registry.ts
 async function callLlm(prompt) {
-  const { default: { llm } } = await Promise.resolve().then(() => (init_llm(), exports_llm));
-  const result = await llm([{ role: "user", content: prompt }], {
+  const { LLMClient: LLMClient2 } = await Promise.resolve().then(() => (init_llm(), exports_llm));
+  const client = new LLMClient2;
+  const result = await client.chat([{ role: "user", content: prompt }], {
     model: "default"
   });
   return result.content;
@@ -22706,7 +22726,7 @@ class SkillLoader {
     let description = "";
     const readWhen = [];
     let allowedTools = [];
-    let execute;
+    let codeSection = "";
     let section = "header";
     for (const line of lines) {
       const trimmed = line.trim();
@@ -22721,7 +22741,7 @@ class SkillLoader {
           section = "trigger";
         else if (header.includes("allowed"))
           section = "allowed";
-        else if (header.includes("action") || header.includes("code"))
+        else if (header.includes("action") || header.includes("code") || header.includes("prompt"))
           section = "code";
         else
           section = "header";
@@ -22737,17 +22757,37 @@ class SkillLoader {
         readWhen.push(trimmed.toLowerCase().replace(/^[-*]\s*/, ""));
       } else if (section === "allowed" && trimmed) {
         allowedTools.push(trimmed.replace(/^[-*]\s*/, ""));
+      } else if (section === "code" && trimmed) {
+        codeSection += (codeSection ? `
+` : "") + trimmed;
       }
     }
     if (!name || !description)
       return null;
+    const execute = codeSection ? this.buildExecuteFromPrompt(codeSection.trim()) : this.defaultExecute;
     return {
       name,
       description,
       read_when: readWhen.length ? readWhen : ["*"],
       allowed_tools: allowedTools.length ? allowedTools : ["*"],
-      execute: execute || this.defaultExecute,
+      execute,
       source
+    };
+  }
+  buildExecuteFromPrompt(promptTemplate) {
+    return async (input, ctx) => {
+      try {
+        const { LLMClient: LLMClient2 } = await Promise.resolve().then(() => (init_llm(), exports_llm));
+        const llm = new LLMClient2;
+        const prompt = `${promptTemplate}
+
+Input:
+${input}`;
+        const result = await llm.chat([{ role: "user", content: prompt }], { model: "default" });
+        return result.content;
+      } catch (err) {
+        return `Skill error: ${err instanceof Error ? err.message : String(err)}`;
+      }
     };
   }
   async defaultExecute(input, ctx) {
@@ -27595,99 +27635,6 @@ var init_web2 = __esm(() => {
   execAsync5 = promisify5(exec5);
 });
 
-// src/commands/context.ts
-var exports_context = {};
-__export(exports_context, {
-  registerContextCommand: () => registerContextCommand
-});
-import { existsSync as existsSync22, readFileSync as readFileSync22 } from "fs";
-import { cwd } from "process";
-import { homedir as homedir17 } from "os";
-function getAge(dateStr) {
-  const ms2 = Date.now() - new Date(dateStr).getTime();
-  if (ms2 < 60000)
-    return "just now";
-  if (ms2 < 3600000)
-    return `${Math.floor(ms2 / 60000)}m ago`;
-  if (ms2 < 86400000)
-    return `${Math.floor(ms2 / 3600000)}h ago`;
-  return `${Math.floor(ms2 / 86400000)}d ago`;
-}
-function loadSessionInfo(sessionId) {
-  try {
-    const sessionPath = `${homedir17()}/.nole-code/sessions/${sessionId}.json`;
-    if (!existsSync22(sessionPath))
-      return null;
-    const data = readFileSync22(sessionPath, "utf-8");
-    return JSON.parse(data);
-  } catch {
-    return null;
-  }
-}
-function getGitBranch() {
-  try {
-    const cwdPath = cwd();
-    const headPath = `${cwdPath}/.git/HEAD`;
-    if (!existsSync22(headPath))
-      return "not a git repo";
-    const head = readFileSync22(headPath, "utf-8").trim();
-    const match = head.match(/ref: refs\/heads\/(\S+)/);
-    return match ? match[1] : "detached";
-  } catch {
-    return "unknown";
-  }
-}
-function getTokenCount(messages) {
-  let totalChars = 0;
-  for (const msg of messages) {
-    if (msg.content) {
-      totalChars += msg.content.length;
-    }
-  }
-  return Math.floor(totalChars / 4);
-}
-function registerContextCommand(registerCmd) {
-  registerCmd({
-    name: "context",
-    description: "Show current REPL context state",
-    aliases: ["ctx", "info"],
-    execute: async (_args, ctx) => {
-      const session = loadSessionInfo(ctx.sessionId);
-      const currentCwd = ctx.cwd || cwd();
-      const branch = getGitBranch();
-      const sessionAge = session ? getAge(session.updatedAt) : "unknown";
-      const tokenCount = session ? getTokenCount(session.messages) : 0;
-      const userMsgs = session ? session.messages.filter((m) => m.role === "user").length : 0;
-      let loopStatus = "idle";
-      try {
-        const loopPath = "/tmp/.nole_loop_running";
-        if (existsSync22(loopPath)) {
-          const pid = readFileSync22(loopPath, "utf-8").trim();
-          loopStatus = `running (PID: ${pid})`;
-        }
-      } catch {
-        loopStatus = "idle";
-      }
-      const info = `
-\uD83D\uDCCA CONTEXT STATE
-━━━━━━━━━━━━━━━━━━━━
-  Session: ${ctx.sessionId.slice(0, 12)}...
-  Age: ${sessionAge}
-  Messages: ${userMsgs} user, ${session ? session.messages.length - userMsgs : 0} total
-  Est. Tokens: ~${tokenCount.toLocaleString()}
-  Branch: ${branch}
-  Loop: ${loopStatus}
-
-\uD83D\uDCC1 DIRECTORY
-━━━━━━━━━━━━━━━━━━━━
-  ${currentCwd.replace(homedir17(), "~")}
-`;
-      return info.trim();
-    }
-  });
-}
-var init_context = () => {};
-
 // src/commands/git.ts
 var exports_git = {};
 __export(exports_git, {
@@ -27695,10 +27642,10 @@ __export(exports_git, {
 });
 import { exec as exec6 } from "child_process";
 import { promisify as promisify6 } from "util";
-import { cwd as cwd2 } from "process";
+import { cwd } from "process";
 async function git(args) {
   try {
-    const { stdout, stderr } = await execAsync6(`git ${args.join(" ")}`, { cwd: cwd2() });
+    const { stdout, stderr } = await execAsync6(`git ${args.join(" ")}`, { cwd: cwd() });
     return stdout + stderr;
   } catch (e) {
     return e.message || String(e);
@@ -27787,15 +27734,15 @@ var exports_send = {};
 __export(exports_send, {
   registerSendCommand: () => registerSendCommand
 });
-import { existsSync as existsSync23, readFileSync as readFileSync23 } from "fs";
-import { homedir as homedir18 } from "os";
+import { existsSync as existsSync22, readFileSync as readFileSync22 } from "fs";
+import { homedir as homedir17 } from "os";
 function getEnv(key) {
   if (process.env[key])
     return process.env[key];
   try {
-    const envPath = `${homedir18()}/.nole-code/.env`;
-    if (existsSync23(envPath)) {
-      const envContent = readFileSync23(envPath, "utf-8");
+    const envPath = `${homedir17()}/.nole-code/.env`;
+    if (existsSync22(envPath)) {
+      const envContent = readFileSync22(envPath, "utf-8");
       const match = envContent.match(new RegExp(`${key}=(.+)`));
       if (match)
         return match[1].trim();
@@ -27930,21 +27877,21 @@ var exports_alias = {};
 __export(exports_alias, {
   registerAliasCommand: () => registerAliasCommand
 });
-import { existsSync as existsSync24, readFileSync as readFileSync24, writeFileSync as writeFileSync11, mkdirSync as mkdirSync10 } from "fs";
+import { existsSync as existsSync23, readFileSync as readFileSync23, writeFileSync as writeFileSync11, mkdirSync as mkdirSync10 } from "fs";
 import { join as join23 } from "path";
-import { homedir as homedir19 } from "os";
+import { homedir as homedir18 } from "os";
 function ensureAliasDir() {
-  const dir = join23(homedir19(), ".nole-code");
-  if (!existsSync24(dir)) {
+  const dir = join23(homedir18(), ".nole-code");
+  if (!existsSync23(dir)) {
     mkdirSync10(dir, { recursive: true });
   }
 }
 function loadAliases() {
   ensureAliasDir();
-  if (!existsSync24(ALIAS_FILE))
+  if (!existsSync23(ALIAS_FILE))
     return {};
   try {
-    return JSON.parse(readFileSync24(ALIAS_FILE, "utf-8"));
+    return JSON.parse(readFileSync23(ALIAS_FILE, "utf-8"));
   } catch {
     return {};
   }
@@ -28006,7 +27953,7 @@ Usage: /alias <name> <cmd>  — create alias
 }
 var ALIAS_FILE;
 var init_alias = __esm(() => {
-  ALIAS_FILE = join23(homedir19(), ".nole-code", "aliases.json");
+  ALIAS_FILE = join23(homedir18(), ".nole-code", "aliases.json");
 });
 
 // src/commands/port.ts
@@ -28138,6 +28085,144 @@ function registerPortCommand(registerCommand2) {
   });
 }
 var init_port = () => {};
+
+// src/commands/rules.ts
+var exports_rules = {};
+__export(exports_rules, {
+  registerRulesCommand: () => registerRulesCommand
+});
+import { existsSync as existsSync24, readFileSync as readFileSync24, writeFileSync as writeFileSync12 } from "fs";
+import { join as join24, homedir as homedir19 } from "path";
+function loadRules() {
+  if (!existsSync24(RULES_FILE))
+    return [];
+  try {
+    return JSON.parse(readFileSync24(RULES_FILE, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+function saveRules(rules) {
+  writeFileSync12(RULES_FILE, JSON.stringify(rules, null, 2), "utf-8");
+}
+function displayRules(rules, title = "Permission Rules") {
+  if (rules.length === 0)
+    return `${title}:
+  (no rules — all operations allowed by default)`;
+  const lines = [`${title}:
+`];
+  for (const rule of rules) {
+    const actionColor = rule.action === "allow" ? "✅" : rule.action === "deny" ? "\uD83D\uDEAB" : "⚠️";
+    lines.push(`  ${actionColor} ${rule.pattern}`);
+    if (rule.reason)
+      lines.push(`     → ${rule.reason}`);
+  }
+  return lines.join(`
+`);
+}
+function registerRulesCommand(registerCommand2) {
+  registerCommand2({
+    name: "rules",
+    description: "View, add, or remove permission rules (/rules [list|add|remove|clear])",
+    aliases: ["permissions", "perms"],
+    execute: async (args) => {
+      const [action, ...rest] = args;
+      if (!action || action === "list") {
+        return displayRules(loadRules());
+      }
+      if (action === "add") {
+        const [pattern, act, ...reasonParts] = rest;
+        if (!pattern || !act) {
+          return `Usage: /rules add <pattern> <allow|deny|ask> [reason]
+
+Examples:
+  /rules add Bash(sudo *) deny "Privilege escalation blocked"
+  /rules add Write(*) ask "File creation requires confirmation"`;
+        }
+        if (!["allow", "deny", "ask"].includes(act)) {
+          return `Invalid action: ${act}. Use: allow, deny, ask`;
+        }
+        const rules = loadRules();
+        rules.push({ pattern, action: act, reason: reasonParts.join(" ") || undefined });
+        saveRules(rules);
+        return `✅ Added rule: ${pattern} → ${act}`;
+      }
+      if (action === "remove") {
+        const pattern = rest.join(" ");
+        if (!pattern)
+          return "Usage: /rules remove <pattern>";
+        const rules = loadRules();
+        const before = rules.length;
+        const filtered = rules.filter((r) => r.pattern !== pattern);
+        if (filtered.length === before)
+          return `Rule not found: ${pattern}`;
+        saveRules(filtered);
+        return `✅ Removed rule: ${pattern}`;
+      }
+      if (action === "clear") {
+        saveRules([]);
+        return "✅ Cleared all custom rules";
+      }
+      return `Unknown action: ${action}
+
+Usage:
+  /rules list
+  /rules add <pattern> <allow|deny|ask> [reason]
+  /rules remove <pattern>
+  /rules clear`;
+    }
+  });
+}
+var RULES_FILE;
+var init_rules = __esm(() => {
+  RULES_FILE = join24(homedir19(), ".nole-code", "permissions.json");
+});
+
+// src/commands/lint.ts
+var exports_lint = {};
+__export(exports_lint, {
+  registerLintCommand: () => registerLintCommand
+});
+import { exec as exec8 } from "child_process";
+import { promisify as promisify8 } from "util";
+function registerLintCommand(registerCommand2) {
+  registerCommand2({
+    name: "lint",
+    description: "Run ESLint to check code quality (/lint [path|fix])",
+    aliases: ["eslint", "check"],
+    execute: async (args, ctx) => {
+      const [target, ...rest] = args;
+      const cwd2 = ctx.cwd || process.cwd();
+      const isFix = target === "fix" || rest.includes("fix");
+      const cleanRest = isFix ? rest.filter((a) => a !== "fix") : rest;
+      let cmd = "npx eslint";
+      if (isFix)
+        cmd += " --fix";
+      const targetArg = cleanRest.join(" ") || (target && !isFix ? target : "");
+      cmd += targetArg ? ` ${targetArg}` : " .";
+      try {
+        const { stdout, stderr } = await execAsync8(cmd, {
+          cwd: cwd2,
+          timeout: 30000,
+          maxBuffer: 10 * 1024 * 1024
+        });
+        if (!stdout && !stderr)
+          return "✅ No lint errors";
+        return (stdout + stderr).slice(0, 3000);
+      } catch (e) {
+        if (e.stdout)
+          return e.stdout.slice(0, 3000);
+        if (e.stderr)
+          return `Error: ${e.stderr.slice(0, 1000)}`;
+        return `Lint failed: ${e.message.slice(0, 500)}`;
+      }
+    }
+  });
+}
+var execAsync8;
+var init_lint = __esm(() => {
+  execAsync8 = promisify8(exec8);
+});
 
 // src/commands/pipe.ts
 var exports_pipe = {};
@@ -28468,10 +28553,10 @@ var exports_recent = {};
 __export(exports_recent, {
   registerRecentCommand: () => registerRecentCommand
 });
-import { exec as exec8 } from "child_process";
+import { exec as exec9 } from "child_process";
 import { statSync as statSync6 } from "fs";
 import { resolve as resolve4 } from "path";
-import { promisify as promisify8 } from "util";
+import { promisify as promisify9 } from "util";
 function registerRecentCommand(register) {
   register({
     name: "recent",
@@ -28483,7 +28568,7 @@ function registerRecentCommand(register) {
       }
       try {
         const findCmd = `find . -type f \\( -path '*/.git/*' -o -path '*/node_modules/*' -o -path '*/.nole-code/*' -o -path '*/dist/*' -o -path '*/build/*' \\) -prune -o -type f -mtime -7 -print`;
-        const { stdout: findOutput } = await execAsync8(findCmd, {
+        const { stdout: findOutput } = await execAsync9(findCmd, {
           encoding: "utf-8",
           cwd: ctx.cwd,
           timeout: 1e4
@@ -28510,7 +28595,7 @@ function registerRecentCommand(register) {
         }
         const gitStatus = {};
         try {
-          const { stdout: gitOut } = await execAsync8("git status --short", {
+          const { stdout: gitOut } = await execAsync9("git status --short", {
             encoding: "utf-8",
             cwd: ctx.cwd,
             timeout: 5000
@@ -28564,9 +28649,9 @@ function registerRecentCommand(register) {
     }
   });
 }
-var execAsync8;
+var execAsync9;
 var init_recent = __esm(() => {
-  execAsync8 = promisify8(exec8);
+  execAsync9 = promisify9(exec9);
 });
 
 // src/commands/index.ts
@@ -28577,12 +28662,12 @@ __export(exports_commands2, {
   getCommand: () => getCommand,
   getAllCommands: () => getAllCommands
 });
-import { exec as exec9 } from "child_process";
-import { promisify as promisify9 } from "util";
+import { exec as exec10 } from "child_process";
+import { promisify as promisify10 } from "util";
 import { existsSync as existsSync25, readFileSync as readFileSync25 } from "fs";
-import { join as join24 } from "path";
+import { join as join25 } from "path";
 import { homedir as homedir20 } from "os";
-function getAge2(dateStr) {
+function getAge(dateStr) {
   const ms2 = Date.now() - new Date(dateStr).getTime();
   if (ms2 < 60000)
     return "just now";
@@ -28608,10 +28693,10 @@ function parseCommand(input) {
   const parts = input.slice(1).split(/\s+/);
   return { cmd: parts[0], args: parts.slice(1) };
 }
-var execAsync9, commands;
+var execAsync10, commands;
 var init_commands2 = __esm(() => {
   init_env();
-  execAsync9 = promisify9(exec9);
+  execAsync10 = promisify10(exec10);
   commands = new Map;
   registerCommand({
     name: "help",
@@ -28662,7 +28747,7 @@ var init_commands2 = __esm(() => {
         const current = s.id === ctx.sessionId ? " \x1B[32m← current\x1B[0m" : "";
         const userMsgs = s.messages.filter((m) => m.role === "user").length;
         const dir = s.cwd ? s.cwd.split("/").pop() : "?";
-        const age = getAge2(s.updatedAt);
+        const age = getAge(s.updatedAt);
         return `  ${s.id.slice(0, 20).padEnd(20)} ${String(userMsgs).padStart(3)} msgs  ${dir?.padEnd(15)}  ${age}${current}`;
       });
       return `Sessions:
@@ -28680,8 +28765,8 @@ ${lines.join(`
       if (args.length === 0)
         return "Usage: /commit <message>";
       const msg = args.join(" ");
-      await execAsync9("git add -A", { cwd: process.cwd() });
-      const { stdout, stderr } = await execAsync9('git commit -m "$COMMIT_MSG"', {
+      await execAsync10("git add -A", { cwd: process.cwd() });
+      const { stdout, stderr } = await execAsync10('git commit -m "$COMMIT_MSG"', {
         cwd: process.cwd(),
         env: { ...process.env, COMMIT_MSG: msg }
       });
@@ -28694,7 +28779,7 @@ ${lines.join(`
     aliases: ["d"],
     execute: async (args) => {
       const target = args[0] || "";
-      const { stdout } = await execAsync9("git diff -- " + (target ? `"${target.replace(/'/g, `'"'"'`)}"` : ""), { cwd: process.cwd() });
+      const { stdout } = await execAsync10("git diff -- " + (target ? `"${target.replace(/'/g, `'"'"'`)}"` : ""), { cwd: process.cwd() });
       return stdout || "No changes";
     }
   });
@@ -28703,7 +28788,7 @@ ${lines.join(`
     description: "Show git status",
     aliases: ["st"],
     execute: async () => {
-      const { stdout } = await execAsync9("git status --short", { cwd: process.cwd() });
+      const { stdout } = await execAsync10("git status --short", { cwd: process.cwd() });
       return stdout || "Clean working tree";
     }
   });
@@ -28713,7 +28798,7 @@ ${lines.join(`
     aliases: ["lg"],
     execute: async (args) => {
       const n7 = args[0] || "10";
-      const { stdout } = await execAsync9("git log --oneline -n " + String(n7), { cwd: process.cwd() });
+      const { stdout } = await execAsync10("git log --oneline -n " + String(n7), { cwd: process.cwd() });
       return stdout || "No commits";
     }
   });
@@ -28722,7 +28807,7 @@ ${lines.join(`
     description: "Show git branches",
     aliases: ["br"],
     execute: async () => {
-      const { stdout } = await execAsync9("git branch -v", { cwd: process.cwd() });
+      const { stdout } = await execAsync10("git branch -v", { cwd: process.cwd() });
       return stdout || "No branches";
     }
   });
@@ -28733,7 +28818,7 @@ ${lines.join(`
       if (args.length === 0)
         return "Usage: /checkout <branch|file>";
       try {
-        const { stdout, stderr } = await execAsync9("git checkout -- " + args.map((a) => `'${a.replace(/'/g, `'"'"'`)}'`).join(" "), { cwd: process.cwd() });
+        const { stdout, stderr } = await execAsync10("git checkout -- " + args.map((a) => `'${a.replace(/'/g, `'"'"'`)}'`).join(" "), { cwd: process.cwd() });
         return (stdout + stderr).trim() || `Checked out ${args[0]}`;
       } catch (e) {
         const err = e;
@@ -28748,7 +28833,7 @@ ${lines.join(`
       const port = args[0] || "";
       const cmd = port ? `lsof -i :${port}` : "lsof -i -P";
       try {
-        const { stdout } = await execAsync9(cmd);
+        const { stdout } = await execAsync10(cmd);
         return stdout || "No results";
       } catch {
         return "lsof not available";
@@ -28760,7 +28845,7 @@ ${lines.join(`
     description: "Show running processes",
     execute: async (args) => {
       const filter = args.join(" ") || "aux";
-      const { stdout } = await execAsync9(`ps ${filter} | head -20`);
+      const { stdout } = await execAsync10(`ps ${filter} | head -20`);
       return stdout || "No processes";
     }
   });
@@ -28794,7 +28879,7 @@ ${lines.join(`
     name: "cost",
     description: "Show estimated API usage for this session",
     execute: async (_args, ctx) => {
-      const sessionFile = join24(homedir20(), ".nole-code", "sessions", `${ctx.sessionId}.json`);
+      const sessionFile = join25(homedir20(), ".nole-code", "sessions", `${ctx.sessionId}.json`);
       if (!existsSync25(sessionFile))
         return "Session not found";
       try {
@@ -28816,7 +28901,7 @@ Note: Actual token usage available in provider dashboard.`;
       const checks4 = [
         ["Node.js", process.version],
         ["API Key", MINIMAX_API_KEY ? "✅ set" : "❌ missing"],
-        ["Session Dir", existsSync25(join24(homedir20(), ".nole-code")) ? "✅ exists" : "❌ missing"]
+        ["Session Dir", existsSync25(join25(homedir20(), ".nole-code")) ? "✅ exists" : "❌ missing"]
       ];
       return `\uD83E\uDD9E NOLE CODE — Health Check:
 
@@ -28964,14 +29049,14 @@ Use /plan approve to proceed step by step.`;
     aliases: ["save-chat"],
     execute: async (_args, ctx) => {
       const { loadSession: load, exportSession: exportSession2 } = await Promise.resolve().then(() => (init_manager(), exports_manager));
-      const { writeFileSync: writeFileSync12 } = __require("fs");
-      const { join: join25 } = __require("path");
+      const { writeFileSync: writeFileSync13 } = __require("fs");
+      const { join: join26 } = __require("path");
       const transcript = exportSession2(ctx.sessionId);
       if (!transcript)
         return "Session not found";
       const filename = `nole-session-${ctx.sessionId.slice(5, 15)}.md`;
-      const outPath = join25(ctx.cwd, filename);
-      writeFileSync12(outPath, transcript, "utf-8");
+      const outPath = join26(ctx.cwd, filename);
+      writeFileSync13(outPath, transcript, "utf-8");
       return `Exported to ${filename} (${transcript.split(`
 `).length} lines)`;
     }
@@ -29210,9 +29295,9 @@ ${lines.join(`
     description: "List installed plugins",
     execute: async () => {
       const { existsSync: existsSync26, readdirSync: readdirSync7 } = __require("fs");
-      const { join: join25 } = __require("path");
+      const { join: join26 } = __require("path");
       const { homedir: homedir21 } = __require("os");
-      const dir = join25(homedir21(), ".nole-code", "plugins");
+      const dir = join26(homedir21(), ".nole-code", "plugins");
       if (!existsSync26(dir)) {
         return `No plugins directory.
 Create ~/.nole-code/plugins/ and add .js files.
@@ -29345,7 +29430,7 @@ Start a loop with /loop <goal>`;
         const progress = `${cp.currentStep}/${cp.steps.length}`;
         const errors3 = cp.context.errorsEncountered.length;
         const files = cp.context.filesCreated.length;
-        const age = getAge2(cp.updatedAt);
+        const age = getAge(cp.updatedAt);
         lines.push(`${cp.id}`);
         lines.push(`  Goal: ${cp.goal.slice(0, 60)}`);
         lines.push(`  State: ${cp.state} | Progress: ${progress} | Age: ${age}`);
@@ -29482,16 +29567,232 @@ Start one with /loop <goal>`;
     Promise.resolve().then(() => (init_multi(), exports_multi)).then((m) => m.registerMultiCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_mcp(), exports_mcp)).then((m) => m.registerMCPCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_web2(), exports_web)).then((m) => m.registerWebCommand(registerCommand)).catch(() => {});
-    Promise.resolve().then(() => (init_context(), exports_context)).then((m) => m.registerContextCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_git(), exports_git)).then((m) => m.registerGitCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_send(), exports_send)).then((m) => m.registerSendCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_exec(), exports_exec)).then((m) => m.registerExecCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_alias(), exports_alias)).then((m) => m.registerAliasCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_port(), exports_port)).then((m) => m.registerPortCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_rules(), exports_rules)).then((m) => m.registerRulesCommand(registerCommand)).catch(() => {});
+    Promise.resolve().then(() => (init_lint(), exports_lint)).then((m) => m.registerLintCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_pipe(), exports_pipe)).then((m) => m.registerPipeCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_retry(), exports_retry)).then((m) => m.registerRetryCommand(registerCommand)).catch(() => {});
     Promise.resolve().then(() => (init_recent(), exports_recent)).then((m) => m.registerRecentCommand(registerCommand)).catch(() => {});
   }, 0);
+});
+
+// src/agents/delegate.ts
+async function delegateToAgent(type, task, options) {
+  const agentDef = AGENT_TYPES[type];
+  if (!agentDef) {
+    throw new Error(`Unknown agent type: ${type}. Available: ${Object.keys(AGENT_TYPES).join(", ")}`);
+  }
+  return spawnAgent({
+    name: agentDef.name,
+    description: `${agentDef.role}: ${task.slice(0, 80)}${task.length > 80 ? "..." : ""}`,
+    prompt: `${agentDef.prompt}
+
+Task: ${task}
+
+Context: ${options?.cwd || process.cwd()}`,
+    cwd: options?.cwd,
+    background: options?.background ?? false
+  });
+}
+var AGENT_TYPES;
+var init_delegate = __esm(() => {
+  init_spawner();
+  init_commands2();
+  init_team();
+  AGENT_TYPES = {
+    planner: {
+      name: "Planner",
+      role: "Technical Lead",
+      description: "Breaks down complex tasks into actionable steps, estimates effort, and coordinates implementation.",
+      prompt: `You are Planner, a technical lead. Analyze the task carefully.
+
+Your process:
+1. Understand the goal — what does success look like?
+2. Identify constraints — language, framework, timing, quality bar
+3. Break into phases — discovery, implementation, verification
+4. Define specific steps with clear deliverables
+5. Flag risks and assumptions upfront
+
+Be concrete. Step numbers should correspond to actual work units, not abstract phases.`,
+      specialties: ["task decomposition", "estimation", "risk identification", "sequencing"]
+    },
+    "tdd-guide": {
+      name: "TDD Guide",
+      role: "Test-Driven Development Coach",
+      description: "Guides implementation through red-green-refactor cycles. Writes tests first, then implementation.",
+      prompt: `You are TDD Guide, a test-driven development specialist. You enforce the red-green-refactor cycle ruthlessly.
+
+Your process:
+1. RED: Write a failing test that describes the desired behavior
+2. GREEN: Write the minimum code to make the test pass
+3. REFACTOR: Clean up code while tests stay green
+
+Rules:
+- Never write implementation code before a failing test
+- Never write more test than necessary to fail
+- Each test should be independently runnable
+- Name tests as "should <expected behavior>" not "<method name>"
+
+When guidance is needed: show the exact test structure, the minimal implementation, and the refactor point.`,
+      specialties: ["TDD", "red-green-refactor", "test design", "edge cases", "mocking"]
+    },
+    "code-reviewer": {
+      name: "Code Reviewer",
+      role: "Code Quality Specialist",
+      description: "Reviews code for bugs, security issues, performance problems, and adherence to best practices.",
+      prompt: `You are Code Reviewer, a code review specialist. You catch what developers miss.
+
+Review dimensions:
+1. CORRECTNESS — logic errors, off-by-one, null checks, exception handling
+2. SECURITY — injection, auth bypass, sensitive data exposure, dependencies
+3. PERFORMANCE — N+1 queries, unnecessary iterations, missing indexes, caching opportunities
+4. MAINTAINABILITY — naming, comments, function length, coupling, SOLID principles
+5. TESTING — coverage gaps, test quality, edge cases missing
+
+Output format:
+- [CRITICAL] for security/correctness issues that could cause data loss or breach
+- [MAJOR] for performance/maintainability issues affecting production
+- [MINOR] for style/naming improvements
+- [Praises] for notable good patterns
+
+Be specific: file, function, line number, and exact fix recommendation.`,
+      specialties: ["security", "performance", "correctness", "best practices", "SOLID", "design patterns"]
+    },
+    "security-reviewer": {
+      name: "Security Reviewer",
+      role: "Application Security Specialist",
+      description: "Deep security audit: authentication, authorization, injection, crypto, data protection.",
+      prompt: `You are Security Reviewer, an application security specialist. You think like an attacker.
+
+Audit areas:
+1. AUTHENTICATION — password storage, session management, MFA, token handling
+2. AUTHORIZATION — RBAC/permissions, data access boundaries, IDOR
+3. INJECTION — SQL, NoSQL, OS command, XSS, SSRF, LDAP, template injection
+4. CRYPTO — algorithm choice, key management, random generation, TLS
+5. SECRETS — API keys, tokens, credentials in code or logs, env var exposure
+6. DEPENDENCIES — known vulnerabilities, outdated packages, supply chain risk
+
+Methodology:
+1. Map the attack surface (user inputs, API endpoints, data flows)
+2. Identify trust boundaries
+3. Trace data from untrusted source to sensitive sink
+4. Look for weakened security under edge cases (race conditions, timeouts, error paths)
+
+Output: specific CVE or CWE references where applicable, exact vulnerable code snippets, concrete fix.`,
+      specialties: ["OWASP", "injection", "auth", "crypto", "CVE", "threat modeling"]
+    },
+    "build-error-resolver": {
+      name: "Build Error Resolver",
+      role: "Debugging Specialist",
+      description: "Analyzes and resolves build errors, TypeScript errors, linter failures, and runtime exceptions.",
+      prompt: `You are Build Error Resolver, an expert at diagnosing and fixing build failures.
+
+Your diagnostic process:
+1. IDENTIFY the exact error — compiler message, exit code, failing file
+2. DETERMINE root cause — not just the symptom, but why it happened
+3. CONSIDER scope — is this isolated or symptomatic of a larger issue?
+4. FIX minimal — change only what's needed to resolve the error
+5. VERIFY the fix — ensure the build passes and no regressions
+
+Common patterns:
+- TypeScript errors: check interface alignment, generic constraints, nullability
+- Import errors: check casing, file extensions, export vs default export
+- Dependency conflicts: check version ranges, peer deps, hoisting
+- Linter errors: understand the rule, fix the pattern not just the instance
+- Runtime errors in CI: check environment differences, missing env vars
+
+Provide the exact change and why it fixes the error. Never apply broad "fix all" changes for isolated errors.`,
+      specialties: ["TypeScript", "debugging", "compiler errors", "linting", "CI/CD", "dependency resolution"]
+    },
+    "refactor-cleaner": {
+      name: "Refactor Cleaner",
+      role: "Code Quality Improver",
+      description: "Improves code quality through refactoring: reduces duplication, improves naming, extracts functions.",
+      prompt: `You are Refactor Cleaner, a refactoring specialist. You improve code without changing behavior.
+
+Refactoring patterns:
+1. EXTRACT FUNCTION — when a function does multiple things, sections have comments, or logic is reused
+2. RENAME — variable/function names don't match intent, names are cryptic or misleading
+3. REMOVE DUPLICATION — repeated code patterns, similar switch/if chains, copy-paste modifications
+4. REDUCE NESTING — early returns, extracted predicates, combined conditions
+5. SIMPLIFY COMPLEX EXPRESSIONS — ternary chains, negated conditions, magic numbers
+6. MOVE RESPONSIBILITY — function in wrong module, tight coupling between modules
+
+Safety rules:
+- Never refactor and add features at the same time
+- Keep refactors atomic and verifiable with existing tests
+- Prefer small, composable changes over large rewrites
+- Preserve external API behavior exactly — only internal structure changes
+
+Show the before/after for each refactor, and why the new structure is better.`,
+      specialties: ["refactoring", "SOLID", "design patterns", "code smells", "duplication", "naming"]
+    }
+  };
+  registerCommand({
+    name: "delegate",
+    description: "Delegate a task to a specialized sub-agent (planner, tdd-guide, code-reviewer, security-reviewer, build-error-resolver, refactor-cleaner)",
+    aliases: ["run-agent", "agent"],
+    execute: async (args, ctx) => {
+      const [type, ...taskParts] = args;
+      const task = taskParts.join(" ");
+      if (!type || !task) {
+        const available = Object.entries(AGENT_TYPES).map(([k2, v2]) => `  /delegate ${k2} <task> — ${v2.description}`).join(`
+`);
+        return `Usage: /delegate <agent-type> <task>
+
+Available agents:
+${available}
+
+Examples:
+  /delegate planner Implement user authentication flow
+  /delegate tdd-guide Add search filtering to product list
+  /delegate code-reviewer Review auth middleware for security issues
+  /delegate security-reviewer Audit the payment processing module
+  /delegate build-error-resolver Fix the CI build failure in src/api
+  /delegate refactor-cleaner Clean up the data transformation layer`;
+      }
+      const agentType = type.toLowerCase();
+      if (!AGENT_TYPES[agentType]) {
+        return `Unknown agent type: ${type}
+Available: ${Object.keys(AGENT_TYPES).join(", ")}`;
+      }
+      try {
+        const agent = await delegateToAgent(agentType, task, { cwd: ctx.cwd, background: true });
+        let status = `\uD83D\uDE80 Delegated to ${AGENT_TYPES[agentType].name} (${agent.id})
+`;
+        status += `   Task: ${task.slice(0, 100)}${task.length > 100 ? "..." : ""}
+`;
+        status += `   Background: yes
+`;
+        status += `   Use /agents to monitor, /agents kill <id> to cancel`;
+        return status;
+      } catch (err) {
+        return `❌ Failed to spawn agent: ${err instanceof Error ? err.message : String(err)}`;
+      }
+    }
+  });
+  registerCommand({
+    name: "agents-types",
+    description: "Show all available agent types for delegation",
+    aliases: ["delegate-help", "agent-types"],
+    execute: async () => {
+      const lines = [`Available Agent Types:
+`];
+      for (const [key, agent] of Object.entries(AGENT_TYPES)) {
+        lines.push(`  ${key}`);
+        lines.push(`    Role: ${agent.role}`);
+        lines.push(`    ${agent.description}`);
+        lines.push(`    Specialties: ${agent.specialties.join(", ")}`);
+        lines.push("");
+      }
+      return lines.join(`
+`).trim();
+    }
+  });
 });
 
 // src/ui/output/verbose.ts
@@ -29611,7 +29912,7 @@ __export(exports_loader, {
   loadPlugins: () => loadPlugins
 });
 import { existsSync as existsSync26, readdirSync as readdirSync7 } from "fs";
-import { join as join25 } from "path";
+import { join as join26 } from "path";
 import { homedir as homedir21 } from "os";
 async function loadPlugins() {
   if (!existsSync26(PLUGINS_DIR2))
@@ -29620,7 +29921,7 @@ async function loadPlugins() {
   const loaded = [];
   for (const file of files) {
     try {
-      const pluginPath = join25(PLUGINS_DIR2, file);
+      const pluginPath = join26(PLUGINS_DIR2, file);
       const plugin = __require(pluginPath);
       if (!plugin.name || !plugin.execute) {
         console.error(`Plugin ${file}: missing name or execute`);
@@ -29648,7 +29949,7 @@ async function loadPlugins() {
 var PLUGINS_DIR2;
 var init_loader2 = __esm(() => {
   init_registry();
-  PLUGINS_DIR2 = join25(homedir21(), ".nole-code", "plugins");
+  PLUGINS_DIR2 = join26(homedir21(), ".nole-code", "plugins");
 });
 
 // src/services/indexer.ts
@@ -29658,7 +29959,7 @@ __export(exports_indexer, {
   formatIndexForPrompt: () => formatIndexForPrompt
 });
 import { readFileSync as readFileSync26, readdirSync as readdirSync8, statSync as statSync7 } from "fs";
-import { join as join26, relative as relative3, extname as extname3 } from "path";
+import { join as join27, relative as relative3, extname as extname3 } from "path";
 function indexProject(root, maxFiles = 200) {
   const languages = {};
   const keyFiles = [];
@@ -29677,7 +29978,7 @@ function indexProject(root, maxFiles = 200) {
     for (const entry of entries) {
       if (entry.startsWith(".") || IGNORE_DIRS.has(entry))
         continue;
-      const fullPath = join26(dir, entry);
+      const fullPath = join27(dir, entry);
       try {
         const stat = statSync7(fullPath);
         const rel = relative3(root, fullPath);
@@ -29852,8 +30153,8 @@ __export(exports_src, {
   expandAlias: () => expandAlias,
   activeClient: () => activeClient
 });
-import { existsSync as existsSync28, readFileSync as readFileSync27, writeFileSync as writeFileSync12, mkdirSync as mkdirSync11 } from "fs";
-import { join as join27, resolve as resolve5 } from "node:path";
+import { existsSync as existsSync28, readFileSync as readFileSync27, writeFileSync as writeFileSync13, mkdirSync as mkdirSync11 } from "fs";
+import { join as join28, resolve as resolve5 } from "node:path";
 import { homedir as homedir22 } from "node:os";
 import * as readline3 from "readline";
 function _loadEnv(path) {
@@ -29901,7 +30202,7 @@ async function streamOutput(lines, maxLines, delayMs = 10) {
 }
 function getMiniMaxToken() {
   try {
-    const authPath = join27(homedir22(), ".openclaw", "agents", "main", "agent", "auth-profiles.json");
+    const authPath = join28(homedir22(), ".openclaw", "agents", "main", "agent", "auth-profiles.json");
     if (existsSync28(authPath)) {
       const auth2 = JSON.parse(readFileSync27(authPath, "utf-8"));
       return auth2.profiles?.["minimax-portal:default"]?.access || "";
@@ -29922,18 +30223,18 @@ function detectPlanIntent(input) {
   }
   return null;
 }
-function getBanner(cwd3, verbose = false) {
+function getBanner(cwd2, verbose = false) {
   const v2 = verbose ? `${dim("· ")}verbose` : "";
   return `
 ${bold(c2.cyan("▐▛███▜▌"))} ${bold("Nole Code v1.20")} ${dim("· MiniMax")}
-${dim("▝▜█████▛▘")} ${dim(cwd3)} ${v2}
+${dim("▝▜█████▛▘")} ${dim(cwd2)} ${v2}
 
 ${divider()}
 ${formatShortcuts()}
 `;
 }
 function ensureHistoryDir() {
-  const dir = join27(homedir22(), ".nole-code");
+  const dir = join28(homedir22(), ".nole-code");
   if (!existsSync28(dir)) {
     mkdirSync11(dir, { recursive: true });
   }
@@ -29954,7 +30255,7 @@ function loadHistory() {
 function saveHistory(history) {
   ensureHistoryDir();
   const trimmed = history.slice(-MAX_HISTORY);
-  writeFileSync12(HISTORY_FILE, trimmed.join(`
+  writeFileSync13(HISTORY_FILE, trimmed.join(`
 `) + `
 `, "utf-8");
 }
@@ -30015,7 +30316,7 @@ ${dim("Or add keys to ~/.nole-code/.env:")}
 
 Then run ${bold("nole")} again.
 `);
-    const configDir = join27(homedir22(), ".nole-code");
+    const configDir = join28(homedir22(), ".nole-code");
     if (!existsSync28(configDir)) {
       mkdirSync11(configDir, { recursive: true });
       console.log(dim(`  Created ${configDir}/`));
@@ -30046,20 +30347,20 @@ Then run ${bold("nole")} again.
       console.log(dim(`  Loaded ${plugins.length} plugin${plugins.length > 1 ? "s" : ""}: ${plugins.join(", ")}`));
     }
   } catch {}
-  const cwd3 = opts.cwd || process.cwd();
+  const cwd2 = opts.cwd || process.cwd();
   let session;
   if (opts.session) {
-    session = loadSession(opts.session) || createSession(cwd3);
+    session = loadSession(opts.session) || createSession(cwd2);
   } else {
     const recent = listSessions(5);
-    const lastForCwd = recent.find((s) => s.cwd === cwd3 && s.messages.length > 1);
+    const lastForCwd = recent.find((s) => s.cwd === cwd2 && s.messages.length > 1);
     if (lastForCwd) {
       session = lastForCwd;
       console.log(dim(`  Resuming session ${session.id.slice(0, 20)}... (${session.messages.length} messages)`));
       console.log(dim(`  Use /fork to branch off, /compact to shrink context
 `));
     } else {
-      session = createSession(cwd3);
+      session = createSession(cwd2);
     }
   }
   costTracker.startSession(session.id);
@@ -30067,7 +30368,7 @@ Then run ${bold("nole")} again.
   let projectIndex = "";
   try {
     const { indexProject: indexProject2, formatIndexForPrompt: formatIndexForPrompt2 } = await Promise.resolve().then(() => (init_indexer(), exports_indexer));
-    const index = indexProject2(cwd3);
+    const index = indexProject2(cwd2);
     if (index.fileCount > 0) {
       projectIndex = formatIndexForPrompt2(index);
       console.log(dim(`  Indexed ${index.fileCount} files (${Object.keys(index.languages).join(", ")})`));
@@ -30078,12 +30379,12 @@ Then run ${bold("nole")} again.
   let gitContext = "";
   try {
     const { execFileSync: execFileSync2 } = __require("child_process");
-    const cwd4 = opts.cwd || process.cwd();
-    const branch = execFileSync2("git", ["branch", "--show-current"], { encoding: "utf-8", cwd: cwd4 }).trim();
-    const status = execFileSync2("git", ["status", "--short"], { encoding: "utf-8", cwd: cwd4 }).trim();
+    const cwd3 = opts.cwd || process.cwd();
+    const branch = execFileSync2("git", ["branch", "--show-current"], { encoding: "utf-8", cwd: cwd3 }).trim();
+    const status = execFileSync2("git", ["status", "--short"], { encoding: "utf-8", cwd: cwd3 }).trim();
     const changed = status ? status.split(`
 `).length : 0;
-    const lastCommit = execFileSync2("git", ["log", "--oneline", "-1"], { encoding: "utf-8", cwd: cwd4 }).trim();
+    const lastCommit = execFileSync2("git", ["log", "--oneline", "-1"], { encoding: "utf-8", cwd: cwd3 }).trim();
     if (branch) {
       gitContext = `
 - Git branch: ${branch}${changed ? ` (${changed} files changed)` : " (clean)"}`;
@@ -30325,8 +30626,8 @@ ${c2.yellow("⏹")} Cancelled`);
     if (sigintCount >= 2) {
       saveHistory(history);
       unsubAgent();
-      const { getAllAgents: getAllAgents2, killAgent: ka } = (init_spawner(), __toCommonJS(exports_spawner));
-      for (const agent of getAllAgents2()) {
+      const { getAllAgents: getAllAgents3, killAgent: ka } = (init_spawner(), __toCommonJS(exports_spawner));
+      for (const agent of getAllAgents3()) {
         if (agent.status === "running")
           ka(agent.id);
       }
@@ -30782,8 +31083,8 @@ function parseArgs() {
   const args = process.argv.slice(2);
   if (args[0] === "init") {
     const { createNoleMd: createNoleMd2 } = (init_onboarding(), __toCommonJS(exports_onboarding));
-    const cwd3 = args[1] || process.cwd();
-    const path = createNoleMd2(cwd3);
+    const cwd2 = args[1] || process.cwd();
+    const path = createNoleMd2(cwd2);
     console.log(`Created ${path}`);
     console.log("Edit this file to configure project context for Nole.");
     process.exit(0);
@@ -30884,6 +31185,7 @@ var init_src = __esm(() => {
   init_client3();
   init_commands2();
   init_spawner();
+  init_delegate();
   init_manager();
   init_onboarding();
   init_cost();
@@ -30893,9 +31195,9 @@ var init_src = __esm(() => {
   init_spinner();
   init_streaming();
   init_markdown();
-  _loadEnv(join27(homedir22(), "nole-code", ".env"));
-  _loadEnv(join27(homedir22(), ".nole-code", ".env"));
-  _loadEnv(join27(process.cwd(), ".env"));
+  _loadEnv(join28(homedir22(), "nole-code", ".env"));
+  _loadEnv(join28(homedir22(), ".nole-code", ".env"));
+  _loadEnv(join28(process.cwd(), ".env"));
   PLAN_INTENT_PATTERNS = [
     /^let['’]?s?\s+(make\s+a\s+plan|plan|break\s+this\s+down|walk\s+me\s+through)/i,
     /^plan\s+(this|it|that|out|for|our|the)/i,
@@ -30913,8 +31215,8 @@ var init_src = __esm(() => {
     /^should\s+we\s+plan/i,
     /^approach\s+(this|it)\s+step\s+by\s+step/i
   ];
-  HISTORY_FILE = join27(homedir22(), ".nole-code", "history");
-  ALIAS_FILE2 = join27(homedir22(), ".nole-code", "aliases.json");
+  HISTORY_FILE = join28(homedir22(), ".nole-code", "history");
+  ALIAS_FILE2 = join28(homedir22(), ".nole-code", "aliases.json");
   main().catch((err) => {
     console.error("FATAL ERR:", err?.message, err?.stack?.split(`
 `).slice(0, 3).join("|"));

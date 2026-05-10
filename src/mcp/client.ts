@@ -19,8 +19,9 @@ import {
   StreamableHTTPClientTransport,
   type StreamableHTTPClientTransportOptions,
 } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import { 
-  CallToolResultSchema, 
+import {
+  CallToolResultSchema,
+  ListToolsResultSchema,
   type ListToolsResult,
   type JSONRPCMessage,
 } from '@modelcontextprotocol/sdk/types.js'
