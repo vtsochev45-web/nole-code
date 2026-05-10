@@ -17568,6 +17568,60 @@ var init_rules_engine = __esm(() => {
   permissionRules = [...DEFAULT_RULES];
 });
 
+// src/utils/input-control.ts
+var exports_input_control = {};
+__export(exports_input_control, {
+  withStdinLock: () => withStdinLock,
+  setMainReadline: () => setMainReadline,
+  readOneKey: () => readOneKey
+});
+function setMainReadline(rl) {
+  mainRl = rl;
+}
+async function withStdinLock(fn) {
+  const wasRaw = process.stdin.isTTY ? Boolean(process.stdin.isRaw) : false;
+  if (mainRl)
+    mainRl.pause();
+  if (process.stdin.isTTY)
+    process.stdin.setRawMode(true);
+  process.stdin.resume();
+  try {
+    return await fn();
+  } finally {
+    if (process.stdin.isTTY)
+      process.stdin.setRawMode(wasRaw);
+    if (mainRl)
+      mainRl.resume();
+    else
+      process.stdin.pause();
+  }
+}
+function readOneKey(timeoutMs) {
+  return new Promise((resolve2) => {
+    let settled = false;
+    const cleanup = () => {
+      process.stdin.removeListener("data", onData);
+      clearTimeout(timer);
+    };
+    const onData = (buf) => {
+      if (settled)
+        return;
+      settled = true;
+      cleanup();
+      resolve2(buf.toString().slice(0, 1));
+    };
+    const timer = setTimeout(() => {
+      if (settled)
+        return;
+      settled = true;
+      cleanup();
+      resolve2(null);
+    }, timeoutMs);
+    process.stdin.on("data", onData);
+  });
+}
+var mainRl = null;
+
 // src/utils/count-tokens.ts
 var exports_count_tokens = {};
 __export(exports_count_tokens, {
@@ -18103,31 +18157,36 @@ async function promptPermission(toolName, input, reason) {
     return true;
   }
   const preview = toolName === "Bash" && input.command ? String(input.command).slice(0, 80) : JSON.stringify(input).slice(0, 80);
-  const next = promptChain.then(() => new Promise((resolve3) => {
-    const rl = __require("readline").createInterface({ input: process.stdin, output: process.stdout });
-    const timeout = setTimeout(() => {
-      rl.close();
-      process.stderr.write(`\x1B[33m⚠ Permission timeout, auto-allowed: ${toolName}\x1B[0m
-`);
-      resolve3(true);
-    }, 30000);
-    const prompt = `
+  const next = promptChain.then(async () => {
+    const { withStdinLock: withStdinLock2, readOneKey: readOneKey2 } = await Promise.resolve().then(() => exports_input_control);
+    const { addRule: addRule2 } = await Promise.resolve().then(() => (init_rules_engine(), exports_rules_engine));
+    process.stdout.write(`
 \x1B[33m⚠ Permission required:\x1B[0m ${toolName}(${preview})
   Reason: ${reason}
-  Allow? [y/n/a(lways)] (auto-allows in 30s): `;
-    rl.question(prompt, (answer) => {
-      clearTimeout(timeout);
-      rl.close();
-      const a = answer.trim().toLowerCase();
-      if (a === "a" || a === "always") {
-        const { addRule: addRule2 } = (init_rules_engine(), __toCommonJS(exports_rules_engine));
-        addRule2({ pattern: `${toolName}(*)`, action: "allow", reason: "User chose always-allow" });
-        resolve3(true);
-        return;
+  Allow? [y/n/a(lways)] (auto-allows in 30s) `);
+    return withStdinLock2(async () => {
+      const ch = await readOneKey2(30000);
+      if (ch === null) {
+        process.stdout.write(`
+\x1B[33m⚠ Permission timeout, auto-allowed\x1B[0m
+`);
+        return true;
       }
-      resolve3(["y", "yes", ""].includes(a));
+      const printable = ch === "\r" || ch === `
+` ? "↵" : ch;
+      process.stdout.write(`${printable}
+`);
+      if (ch === "\x03")
+        return false;
+      const lower = ch.toLowerCase();
+      if (lower === "a") {
+        addRule2({ pattern: `${toolName}(*)`, action: "allow", reason: "User chose always-allow" });
+        return true;
+      }
+      return lower === "y" || ch === "\r" || ch === `
+`;
     });
-  }));
+  });
   promptChain = next.catch(() => {
     return;
   });
@@ -30575,6 +30634,8 @@ ${memorySummary}` : ""}${resumeContext}`;
     completer,
     historySize: 0
   });
+  const { setMainReadline: setMainReadline2 } = await Promise.resolve().then(() => exports_input_control);
+  setMainReadline2(rl3);
   const prompt = () => process.stdout.write(`${dim("❯")} `);
   let commandMenuShown = false;
   if (process.stdin.isTTY) {

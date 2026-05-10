@@ -570,6 +570,13 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
     historySize: 0, // We handle history ourselves
   })
 
+  // Register so promptPermission (in tools/registry) can pause us while
+  // it owns stdin in raw mode for single-keystroke prompts. Without this
+  // a typed `y` would either be eaten by the REPL or split between the
+  // permission prompt and the next chat message.
+  const { setMainReadline } = await import('./utils/input-control.js')
+  setMainReadline(rl)
+
   const prompt = () => process.stdout.write(`${dim('❯')} `)
 
   // Show command menu when user types '/' as first char (like Claude Code)

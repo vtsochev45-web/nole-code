@@ -21,11 +21,9 @@ import type { ToolDefinition } from '../api/llm.js'
 
 const execAsync = promisify(exec)
 
-// Serialised permission-prompt queue. Multiple parallel tool calls used to
-// each create their own readline.createInterface() on process.stdin, racing
-// for keystrokes — typing `y` could go to either prompt or get split across
-// both. Funnel every prompt through this chain so only one readline is live
-// at a time.
+// Serialised permission-prompt queue. Multiple parallel tool calls would
+// otherwise both try to acquire the stdin lock at once. Chain them so only
+// one prompt is live at a time.
 let promptChain: Promise<unknown> = Promise.resolve()
 
 async function promptPermission(toolName: string, input: Record<string, unknown>, reason: string): Promise<boolean> {
@@ -39,31 +37,44 @@ async function promptPermission(toolName: string, input: Record<string, unknown>
     ? String(input.command).slice(0, 80)
     : JSON.stringify(input).slice(0, 80)
 
-  const next = promptChain.then(() => new Promise<boolean>((resolve) => {
-    const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout })
+  const next = promptChain.then(async (): Promise<boolean> => {
+    const { withStdinLock, readOneKey } = await import('../utils/input-control.js')
+    const { addRule } = await import('../permissions/rules-engine.js')
 
-    // Timeout after 30s — auto-allow so it doesn't hang forever
-    const timeout = setTimeout(() => {
-      rl.close()
-      process.stderr.write(`\x1b[33m⚠ Permission timeout, auto-allowed: ${toolName}\x1b[0m\n`)
-      resolve(true)
-    }, 30000)
+    // Single-keystroke prompt. Reading one byte in raw mode means typing
+    // `y` resolves immediately with no Enter needed and no leftover bytes
+    // bleeding back into the REPL as a phantom chat message.
+    process.stdout.write(
+      `\n\x1b[33m⚠ Permission required:\x1b[0m ${toolName}(${preview})\n` +
+      `  Reason: ${reason}\n` +
+      `  Allow? [y/n/a(lways)] (auto-allows in 30s) `
+    )
 
-    const prompt = `\n\x1b[33m⚠ Permission required:\x1b[0m ${toolName}(${preview})\n  Reason: ${reason}\n  Allow? [y/n/a(lways)] (auto-allows in 30s): `
-    rl.question(prompt, (answer: string) => {
-      clearTimeout(timeout)
-      rl.close()
-      const a = answer.trim().toLowerCase()
-      if (a === 'a' || a === 'always') {
-        // Add a permanent allow rule
-        const { addRule } = require('../permissions/rules-engine.js')
-        addRule({ pattern: `${toolName}(*)`, action: 'allow', reason: 'User chose always-allow' })
-        resolve(true)
-        return
+    return withStdinLock(async () => {
+      const ch = await readOneKey(30000)
+
+      if (ch === null) {
+        process.stdout.write('\n\x1b[33m⚠ Permission timeout, auto-allowed\x1b[0m\n')
+        return true
       }
-      resolve(['y', 'yes', ''].includes(a))
+
+      // Echo the keystroke + newline so the user sees what they pressed
+      // (raw mode disables the terminal's own echo).
+      const printable = ch === '\r' || ch === '\n' ? '↵' : ch
+      process.stdout.write(`${printable}\n`)
+
+      // Ctrl+C — treat as deny, don't surface as "yes" by mistake.
+      if (ch === '\x03') return false
+
+      const lower = ch.toLowerCase()
+      if (lower === 'a') {
+        addRule({ pattern: `${toolName}(*)`, action: 'allow', reason: 'User chose always-allow' })
+        return true
+      }
+      // Enter (\r / \n) and `y` allow once; anything else denies.
+      return lower === 'y' || ch === '\r' || ch === '\n'
     })
-  }))
+  })
 
   // Keep the chain alive even if a prompt rejects, so one bad prompt doesn't
   // poison every later one.
