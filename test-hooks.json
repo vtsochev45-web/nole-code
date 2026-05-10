@@ -1,0 +1,10 @@
+{
+  "pre": {
+    "Read": ["echo 'PRE-READ-HOOK-FIRED'"],
+    "Glob": ["echo 'PRE-GLOB-HOOK-FIRED'"]
+  },
+  "post": {
+    "Write": ["echo 'POST-WRITE-HOOK-FIRED'"],
+    "Edit": ["echo 'POST-EDIT-HOOK-FIRED'"]
+  }
+}

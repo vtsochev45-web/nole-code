@@ -172,12 +172,14 @@ export async function executeTool(
 
   // Run pre-hooks
   const preHooks = getPreHooks(name)
+  let preHookOutput = ''
   if (preHooks.length > 0) {
     const hookResults = await runHooks(preHooks, { tool: name, input, cwd: ctx.cwd })
     for (const r of hookResults) {
       if (r.startsWith('Hook error:')) {
         return { content: r, isError: true }
       }
+      if (r) preHookOutput += (preHookOutput ? '\n' : '') + r
     }
   }
 
@@ -285,16 +287,30 @@ export async function executeTool(
     }
   }
 
-  // Run post-hooks
+// Run post-hooks
   const postHooks = getPostHooks(name)
   if (postHooks.length > 0) {
     const hookResults = await runHooks(postHooks, { tool: name, input, cwd: ctx.cwd })
     if (hookResults.length > 0) {
-      result.content += '\n' + hookResults.join('\n')
+      result.content = (preHookOutput ? preHookOutput + '\n' : '') + result.content + '\n' + hookResults.join('\n')
+      logToolCall({
+        timestamp: new Date().toISOString(),
+        sessionId: ctx.sessionId,
+        tool: name,
+        input,
+        resultLength: result.content.length,
+        isError: result.isError || false,
+        durationMs: Date.now() - toolStart,
+      })
+      return result
     }
   }
 
-  // Audit log
+  // Prepend pre-hook output to result if present
+  if (preHookOutput) {
+    result.content = preHookOutput + '\n' + result.content
+  }
+
   logToolCall({
     timestamp: new Date().toISOString(),
     sessionId: ctx.sessionId,
@@ -304,7 +320,6 @@ export async function executeTool(
     isError: result.isError || false,
     durationMs: Date.now() - toolStart,
   })
-
   return result
 }
 

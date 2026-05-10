@@ -1,0 +1,39 @@
+▐▛███▜▌ Nole Code v1.19 · MiniMax
+▝▜█████▛▘ ~/my-project
+
+────────────────────────────────────────
+
+❯ refactor auth.ts to use JWT
+
+⠹ Milking the API... (2s)
+
+🤖 nole │ I'll refactor the auth middleware.
+
+⟳ Read (src/middleware/auth.ts)
+  ✅ Read [3ms]
+
+  1  import { sessions } from '../store'
+  2  export function auth(req, res, next) {
+  3    const token = req.headers.authorization
+  4    const user = sessions.get(token)
+
+⟳ Edit (src/middleware/auth.ts)
+  ✅ Edit [1ms]
+
+  - import { sessions } from '../store'
+  + import jwt from 'jsonwebtoken'
+  - const user = sessions.get(token)
+  + const user = jwt.verify(token, SECRET)
+
+⟳ Bash (npm install jsonwebtoken)
+  ✅ Bash [1.2s]
+
+⟳ Bash (npm test)
+  ✅ Bash [3.4s]
+  12 passing (2s)
+
+Refactored auth.ts to JWT. All 12 tests pass.
+
+4.8s · ~2400 tokens (2%) · 4 turns
+
+❯ █
