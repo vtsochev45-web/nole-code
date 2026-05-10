@@ -32,6 +32,7 @@ _loadEnv(join(process.cwd(), '.env'))            // cwd/.env (override if exists
 
 import { spawnAgent, onAgentMessage } from './agents/spawner.js'
 import { createTeam } from './agents/team.js'
+import './agents/delegate.js'  // Load agent delegation commands
 import { loadSession, saveSession, createSession, listSessions, deleteSession, forkSession, compactSession } from './session/manager.js'
 import { loadProjectContext, loadSettings } from './project/onboarding.js'
 import { costTracker } from './utils/cost.js'
