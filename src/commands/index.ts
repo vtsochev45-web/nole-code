@@ -233,6 +233,12 @@ registerCommand({
   description: 'Exit Nole Code',
   aliases: ['quit', 'q'],
   execute: async () => {
+    // Disconnect MCP children cleanly so they get SIGTERM, not the
+    // group-SIGINT that crashes Python servers like ccmem.
+    try {
+      const { mcpClient } = await import('../mcp/client.js')
+      await mcpClient.disconnectAll()
+    } catch { /* ignore */ }
     console.log('\n👋 Goodbye!\n')
     process.exit(0)
   },

@@ -635,17 +635,27 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
     }
     sigintCount++
     if (sigintCount >= 2) {
-      // Double Ctrl+C to exit — save history first
-      saveHistory(history)
-      unsubAgent()
-      const { getAllAgents, killAgent: ka } = require('./agents/spawner.js')
-      for (const agent of getAllAgents()) {
-        if (agent.status === 'running') ka(agent.id)
-      }
-      costTracker.endSession()
-      saveSession(session)
-      console.log(`\n${dim('👋 Goodbye!')}\n`)
-      process.exit(0)
+      // Double Ctrl+C to exit. Async cleanup must run before process.exit
+      // or MCP children get group-SIGINT (and Python servers like ccmem
+      // crash mid-shutdown with a KeyboardInterrupt traceback we don't
+      // want spilling into the user's terminal).
+      void (async () => {
+        saveHistory(history)
+        unsubAgent()
+        const { getAllAgents, killAgent: ka } = require('./agents/spawner.js')
+        for (const agent of getAllAgents()) {
+          if (agent.status === 'running') ka(agent.id)
+        }
+        try {
+          const { mcpClient } = await import('./mcp/client.js')
+          await mcpClient.disconnectAll()
+        } catch { /* ignore — we're exiting anyway */ }
+        costTracker.endSession()
+        saveSession(session)
+        console.log(`\n${dim('👋 Goodbye!')}\n`)
+        process.exit(0)
+      })()
+      return
     }
     console.log(`\n${dim('Press Ctrl+C again to exit, or type a message.')}`)
     prompt()
@@ -1152,6 +1162,10 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
   // Load and run single message if provided
   if (opts.message) {
     await processInput(opts.message)
+    try {
+      const { mcpClient } = await import('./mcp/client.js')
+      await mcpClient.disconnectAll()
+    } catch { /* ignore */ }
     process.exit(0)
   }
 

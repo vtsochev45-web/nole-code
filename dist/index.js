@@ -16404,6 +16404,14 @@ var init_streamableHttp = __esm(() => {
 });
 
 // src/mcp/client.ts
+var exports_client = {};
+__export(exports_client, {
+  mcpRegistry: () => mcpRegistry,
+  mcpClient: () => mcpClient,
+  loadMCPServers: () => loadMCPServers,
+  getMCPToolDefs: () => getMCPToolDefs,
+  MCPRegistry: () => MCPRegistry
+});
 import { readFileSync as readFileSync2, existsSync as existsSync2 } from "fs";
 import { join as join2 } from "path";
 import { homedir as homedir2 } from "os";
@@ -16494,6 +16502,8 @@ class MCPClientManager {
     const transport = new StdioClientTransport(params);
     server.transport = transport;
     transport.stderr?.on("data", (data) => {
+      if (server.shuttingDown)
+        return;
       const lines = data.toString().trim().split(`
 `);
       for (const line of lines) {
@@ -16612,16 +16622,39 @@ class MCPClientManager {
     const server = this.servers.get(name);
     if (!server)
       return;
-    await server.client.close();
-    if (server.process) {
-      server.process.kill();
+    server.shuttingDown = true;
+    try {
+      await Promise.race([
+        server.client.close(),
+        new Promise((resolve) => setTimeout(resolve, 500))
+      ]);
+    } catch {}
+    const proc = server.process;
+    if (proc && proc.exitCode === null && !proc.killed) {
+      try {
+        proc.kill("SIGTERM");
+      } catch {}
+      await new Promise((resolve) => {
+        const killTimer = setTimeout(() => {
+          try {
+            if (proc.exitCode === null && !proc.killed)
+              proc.kill("SIGKILL");
+          } catch {}
+          resolve();
+        }, 1500);
+        proc.once("exit", () => {
+          clearTimeout(killTimer);
+          resolve();
+        });
+      });
     }
     this.servers.delete(name);
   }
   async disconnectAll() {
-    for (const name of this.servers.keys()) {
-      await this.disconnect(name);
-    }
+    const names = Array.from(this.servers.keys());
+    await Promise.all(names.map((n) => this.disconnect(n).catch(() => {
+      return;
+    })));
   }
 }
 async function loadMCPServers() {
@@ -16629,6 +16662,13 @@ async function loadMCPServers() {
   for (const config2 of configs) {
     await mcpClient.connect(config2);
   }
+}
+function getMCPToolDefs() {
+  return mcpClient.getAllTools().map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    input_schema: tool.inputSchema
+  }));
 }
 
 class MCPRegistry {
@@ -28931,6 +28971,10 @@ ${lines.join(`
     description: "Exit Nole Code",
     aliases: ["quit", "q"],
     execute: async () => {
+      try {
+        const { mcpClient: mcpClient2 } = await Promise.resolve().then(() => (init_client3(), exports_client));
+        await mcpClient2.disconnectAll();
+      } catch {}
       console.log(`
 \uD83D\uDC4B Goodbye!
 `);
@@ -30688,19 +30732,26 @@ ${c2.yellow("⏹")} Cancelled`);
     }
     sigintCount++;
     if (sigintCount >= 2) {
-      saveHistory(history);
-      unsubAgent();
-      const { getAllAgents: getAllAgents3, killAgent: ka } = (init_spawner(), __toCommonJS(exports_spawner));
-      for (const agent of getAllAgents3()) {
-        if (agent.status === "running")
-          ka(agent.id);
-      }
-      costTracker.endSession();
-      saveSession(session);
-      console.log(`
+      (async () => {
+        saveHistory(history);
+        unsubAgent();
+        const { getAllAgents: getAllAgents3, killAgent: ka } = (init_spawner(), __toCommonJS(exports_spawner));
+        for (const agent of getAllAgents3()) {
+          if (agent.status === "running")
+            ka(agent.id);
+        }
+        try {
+          const { mcpClient: mcpClient2 } = await Promise.resolve().then(() => (init_client3(), exports_client));
+          await mcpClient2.disconnectAll();
+        } catch {}
+        costTracker.endSession();
+        saveSession(session);
+        console.log(`
 ${dim("\uD83D\uDC4B Goodbye!")}
 `);
-      process.exit(0);
+        process.exit(0);
+      })();
+      return;
     }
     console.log(`
 ${dim("Press Ctrl+C again to exit, or type a message.")}`);
@@ -31139,6 +31190,10 @@ ${c2.yellow("⚠")} Reached maximum ${MAX_TURNS} turns in agentic loop.
   });
   if (opts.message) {
     await processInput(opts.message);
+    try {
+      const { mcpClient: mcpClient2 } = await Promise.resolve().then(() => (init_client3(), exports_client));
+      await mcpClient2.disconnectAll();
+    } catch {}
     process.exit(0);
   }
   prompt();

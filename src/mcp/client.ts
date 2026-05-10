@@ -53,6 +53,10 @@ export interface MCPServer {
   tools: ListToolsResult['tools']
   status: 'connecting' | 'connected' | 'error' | 'disconnected'
   error?: string
+  // True once we've started tearing down — used to suppress death-rattle
+  // stderr from the child (e.g. Python KeyboardInterrupt tracebacks) so
+  // the user's terminal doesn't fill with noise on exit.
+  shuttingDown?: boolean
 }
 
 export interface MCPTool {
@@ -176,8 +180,11 @@ class MCPClientManager {
     const transport = new StdioClientTransport(params)
     server.transport = transport
 
-    // Handle stderr output (often useful for debugging)
+    // Handle stderr output (often useful for debugging). Once shutdown
+    // begins, swallow further stderr — the child often logs a noisy
+    // KeyboardInterrupt traceback during teardown that isn't actionable.
     transport.stderr?.on('data', (data: Buffer) => {
+      if (server.shuttingDown) return
       const lines = data.toString().trim().split('\n')
       for (const line of lines) {
         if (line) {
@@ -353,28 +360,52 @@ class MCPClientManager {
   }
 
   /**
-   * Disconnect a server
+   * Disconnect a server. Sequenced: client.close() (clean MCP shutdown
+   * message) → SIGTERM → 1.5s grace → SIGKILL. Errors during teardown
+   * are swallowed — we just want the child gone.
    */
   async disconnect(name: string): Promise<void> {
     const server = this.servers.get(name)
     if (!server) return
 
-    await server.client.close()
-    
-    if (server.process) {
-      server.process.kill()
+    server.shuttingDown = true
+
+    // Best-effort clean close, capped so a hung server doesn't block exit.
+    try {
+      await Promise.race([
+        server.client.close(),
+        new Promise<void>((resolve) => setTimeout(resolve, 500)),
+      ])
+    } catch {
+      // ignore — we're tearing down anyway
+    }
+
+    const proc = server.process
+    if (proc && proc.exitCode === null && !proc.killed) {
+      try { proc.kill('SIGTERM') } catch { /* ignore */ }
+
+      // Give the child up to 1.5s to exit cleanly, then SIGKILL.
+      await new Promise<void>((resolve) => {
+        const killTimer = setTimeout(() => {
+          try { if (proc.exitCode === null && !proc.killed) proc.kill('SIGKILL') } catch { /* ignore */ }
+          resolve()
+        }, 1500)
+        proc.once('exit', () => {
+          clearTimeout(killTimer)
+          resolve()
+        })
+      })
     }
 
     this.servers.delete(name)
   }
 
   /**
-   * Disconnect all servers
+   * Disconnect all servers in parallel — exit shouldn't be O(n × 1.5s).
    */
   async disconnectAll(): Promise<void> {
-    for (const name of this.servers.keys()) {
-      await this.disconnect(name)
-    }
+    const names = Array.from(this.servers.keys())
+    await Promise.all(names.map(n => this.disconnect(n).catch(() => undefined)))
   }
 }
 
