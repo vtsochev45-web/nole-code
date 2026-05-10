@@ -939,6 +939,8 @@ setTimeout(() => {
   // New features: /alias, /port
   import('./alias.js').then(m => m.registerAliasCommand(registerCommand)).catch(() => {})
   import('./port.js').then(m => m.registerPortCommand(registerCommand)).catch(() => {})
+  // /rules command
+  import('./rules.js').then(m => m.registerRulesCommand(registerCommand)).catch(() => {})
   // New commands: /pipe, /retry, /recent
   import('./pipe.js').then(m => m.registerPipeCommand(registerCommand)).catch(() => {})
   import('./retry.js').then(m => m.registerRetryCommand(registerCommand)).catch(() => {})
