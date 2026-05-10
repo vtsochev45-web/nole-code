@@ -48,7 +48,7 @@ Rules:
 - Never write implementation code before a failing test
 - Never write more test than necessary to fail
 - Each test should be independently runnable
-- Name tests as "should <expected behavior>" not "<method name>
+- Name tests as "should <expected behavior>" not "<method name>"
 
 When guidance is needed: show the exact test structure, the minimal implementation, and the refactor point.`,
     specialties: ['TDD', 'red-green-refactor', 'test design', 'edge cases', 'mocking'],
@@ -135,8 +135,8 @@ Refactoring patterns:
 1. EXTRACT FUNCTION — when a function does multiple things, sections have comments, or logic is reused
 2. RENAME — variable/function names don't match intent, names are cryptic or misleading
 3. REMOVE DUPLICATION — repeated code patterns, similar switch/if chains, copy-paste modifications
-4. REDUCE NESTING — early returns, extracted predicates,合并条件
-5. SIMPLIFY COMPLEX EXPRES SIONS — ternary chains, negated conditions, magic numbers
+4. REDUCE NESTING — early returns, extracted predicates, combined conditions
+5. SIMPLIFY COMPLEX EXPRESSIONS — ternary chains, negated conditions, magic numbers
 6. MOVE RESPONSIBILITY — function in wrong module, tight coupling between modules
 
 Safety rules:
@@ -192,12 +192,10 @@ export async function delegateTeam(
     parentSessionId: '',
   })
 
-  // Get agents for the team members
-  const agents = members.map((m, i) => {
-    // Agents are stored in spawner registry
-    const allAgents = getAllAgents()
-    return allAgents.find(a => a.name === m.name) || allAgents[i]
-  }).filter(Boolean)
+  // Retrieve agents from the team's member registry (createTeam spawns them and assigns agentId)
+  const agents = Array.from(team.members.values())
+    .map(m => getAgent(m.agentId))
+    .filter(Boolean)
 
   return { teamId: team.id, agents }
 }

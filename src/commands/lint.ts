@@ -16,16 +16,12 @@ export function registerLintCommand(registerCommand: (cmd: any) => void) {
       const [target, ...rest] = args
       const cwd = (ctx as any).cwd || process.cwd()
       const isFix = target === 'fix' || rest.includes('fix')
-
-      const eslintConfigs = ['eslint.config.js', '.eslintrc.js', '.eslintrc.json']
-      const hasConfig = eslintConfigs.some(f => existsSync(join(cwd, f)))
-      if (!hasConfig) {
-        return '⚠️  ESLint config not found. Run: npm init @eslint/config'
-      }
+      const cleanRest = isFix ? rest.filter(a => a !== 'fix') : rest
 
       let cmd = 'npx eslint'
       if (isFix) cmd += ' --fix'
-      cmd += target && !isFix ? ` ${target}` : ' .'
+      const targetArg = cleanRest.join(' ') || (target && !isFix ? target : '')
+      cmd += targetArg ? ` ${targetArg}` : ' .'
 
       try {
         const { stdout, stderr } = await execAsync(cmd, {
