@@ -92,7 +92,7 @@ export function isOnboardingComplete(cwd: string): boolean {
 
 export function markOnboardingComplete(cwd: string) {
   const config = loadProjectConfig()
-  if (!config[cwd]) config[cwd] = {}
+  if (!config[cwd])   config[cwd] = { hasCompletedOnboarding: false }
   config[cwd].hasCompletedOnboarding = true
   saveProjectConfig(config)
 }

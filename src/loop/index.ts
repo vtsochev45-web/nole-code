@@ -35,9 +35,13 @@ export {
   type Checkpoint,
   type LoopStep,
   type LoopState,
+} from './checkpoint.js'
+
+export {
+  // Types from executor (defined there, not in checkpoint)
   type ExecutorOptions,
   type ExecutionResult,
-} from './checkpoint.js'
+} from './executor.js'
 
 export {
   runLoop,

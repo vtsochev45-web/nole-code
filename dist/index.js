@@ -19714,7 +19714,7 @@ function listSessions(limit = 20) {
     } catch {
       return null;
     }
-  }).filter(Boolean).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }).filter((a) => Boolean(a)).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   return sessions.slice(0, limit);
 }
 function loadSession(id) {
@@ -19957,7 +19957,7 @@ function isOnboardingComplete(cwd) {
 function markOnboardingComplete(cwd) {
   const config2 = loadProjectConfig();
   if (!config2[cwd])
-    config2[cwd] = {};
+    config2[cwd] = { hasCompletedOnboarding: false };
   config2[cwd].hasCompletedOnboarding = true;
   saveProjectConfig(config2);
 }
@@ -28089,7 +28089,8 @@ __export(exports_rules, {
   registerRulesCommand: () => registerRulesCommand
 });
 import { existsSync as existsSync24, readFileSync as readFileSync24, writeFileSync as writeFileSync12 } from "fs";
-import { join as join24, homedir as homedir19 } from "path";
+import { join as join24 } from "path";
+import { homedir as homedir19 } from "os";
 function loadRules() {
   if (!existsSync24(RULES_FILE))
     return [];

@@ -3,6 +3,8 @@
 // Adapted from Nole Code's EnterPlanModeTool/ExitPlanModeTool
 
 import { EventEmitter } from 'events'
+import { execSync } from 'child_process'
+import { homedir } from 'os'
 
 export type ExecutionMode = 'execute' | 'plan' | 'review'
 

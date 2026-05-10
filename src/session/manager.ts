@@ -48,8 +48,8 @@ export function listSessions(limit = 20): Session[] {
         return JSON.parse(readFileSync(join(SESSION_DIR, f), 'utf-8')) as Session
       } catch { return null }
     })
-    .filter(Boolean)
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .filter((a: Session | null) => Boolean(a))
+    .sort((a: Session, b: Session) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
 
   return sessions.slice(0, limit)
 }

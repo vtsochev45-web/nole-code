@@ -3,7 +3,8 @@
 // Adapted from Nole Code's autoDream service
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'fs'
-import { join, homedir } from 'path'
+import { join } from 'path'
+import { homedir } from 'os'
 import { loadSession, saveSession, type Session } from '../session/manager.js'
 
 interface MemoryEntry {
@@ -95,7 +96,7 @@ export function searchMemory(query: string): MemoryEntry[] {
 
   try {
     const { readdirSync } = require('fs')
-    const files = readdirSync(MEMORY_DIR).filter(f => f.endsWith('.json'))
+    const files = readdirSync(MEMORY_DIR).filter((f: string) => f.endsWith('.json'))
 
     for (const file of files) {
       try {
@@ -119,7 +120,7 @@ export function listMemory(): MemoryEntry[] {
 
   try {
     const { readdirSync } = require('fs')
-    const files = readdirSync(MEMORY_DIR).filter(f => f.endsWith('.json'))
+    const files = readdirSync(MEMORY_DIR).filter((f: string) => f.endsWith('.json'))
 
     for (const file of files) {
       try {

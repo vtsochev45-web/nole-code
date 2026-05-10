@@ -5,7 +5,8 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import { randomUUID } from 'crypto'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
-import { join, homedir } from 'path'
+import { join } from 'path'
+import { homedir } from 'os'
 
 export interface RemoteSession {
   id: string

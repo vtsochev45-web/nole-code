@@ -1,6 +1,7 @@
 // /rules command - View and manage permission rules
 import { existsSync, readFileSync, writeFileSync } from 'fs'
-import { join, homedir } from 'path'
+import { join } from 'path'
+import { homedir } from 'os'
 
 const RULES_FILE = join(homedir(), '.nole-code', 'permissions.json')
 
