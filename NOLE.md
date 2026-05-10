@@ -1,23 +1,42 @@
 # nole-code
 
-## Project Overview
-Brief description of what this project does.
+## Overview
+AI coding assistant CLI — 31 tools, multi-provider, agentic tool loop, MCP server mode
 
 ## Tech Stack
-- Language/Framework 1
-- Language/Framework 2
+TypeScript
 
-## Key Commands
+## Commands
 ```bash
-# Development
-npm run dev
-
-# Build
-npm run build
+npm run dev    # bun run src/index.ts
+npm run build  # bun build src/index.ts --outdir dist --t
+npm test       # bun test
+npm start      # node dist/index.js
 ```
 
-## Architecture
-Brief overview of the codebase structure.
+## Structure
+```
+.
+./tests
+./src
+./src/permissions
+./src/agents
+./src/tasks
+./src/loop
+./src/services
+./src/session
+./src/plugins
+./src/hooks
+./src/feature-flags
+./src/tools
+./src/mcp
+./src/session-memory
+./src/skills
+./src/utils
+./src/memory
+./src/vim
+./src/plan
+```
 
 ## Notes
-- Important things to know when working here
+- Important things to know when working in this project
