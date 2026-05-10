@@ -86,7 +86,7 @@ export class SkillLoader {
     let description = ''
     const readWhen: string[] = []
     let allowedTools: string[] = []
-    let execute: ((input: string, ctx: SkillContext) => Promise<string>) | undefined
+    let codeSection = ''
 
     let section = 'header'
     for (const line of lines) {
@@ -102,7 +102,7 @@ export class SkillLoader {
         if (header.includes('description')) section = 'description'
         else if (header.includes('trigger') || header.includes('keyword')) section = 'trigger'
         else if (header.includes('allowed')) section = 'allowed'
-        else if (header.includes('action') || header.includes('code')) section = 'code'
+        else if (header.includes('action') || header.includes('code') || header.includes('prompt')) section = 'code'
         else section = 'header'
         continue
       }
@@ -118,18 +118,47 @@ export class SkillLoader {
         readWhen.push(trimmed.toLowerCase().replace(/^[-*]\s*/, ''))
       } else if (section === 'allowed' && trimmed) {
         allowedTools.push(trimmed.replace(/^[-*]\s*/, ''))
+      } else if (section === 'code' && trimmed) {
+        // Accumulate non-empty lines from the code/prompt section
+        codeSection += (codeSection ? '\n' : '') + trimmed
       }
     }
 
     if (!name || !description) return null
+
+    // Build execute function: use code section as LLM prompt, or fall back to description-only
+    const execute = codeSection
+      ? this.buildExecuteFromPrompt(codeSection.trim())
+      : this.defaultExecute
 
     return {
       name,
       description,
       read_when: readWhen.length ? readWhen : ['*'],
       allowed_tools: allowedTools.length ? allowedTools : ['*'],
-      execute: execute || this.defaultExecute,
+      execute,
       source,
+    }
+  }
+
+  /**
+   * Build an execute function from a prompt template string.
+   * The input text is appended to the prompt and sent to the LLM.
+   */
+  private buildExecuteFromPrompt(promptTemplate: string): (input: string, ctx: SkillContext) => Promise<string> {
+    return async (input: string, ctx: SkillContext): Promise<string> => {
+      try {
+        const { LLMClient } = await import('../api/llm.js')
+        const llm = new LLMClient()
+        const prompt = `${promptTemplate}\n\nInput:\n${input}`
+        const result = await llm.chat(
+          [{ role: 'user', content: prompt }],
+          { model: 'default' }
+        )
+        return result.content
+      } catch (err) {
+        return `Skill error: ${err instanceof Error ? err.message : String(err)}`
+      }
     }
   }
 

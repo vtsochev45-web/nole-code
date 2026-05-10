@@ -5,8 +5,9 @@
 import type { Skill, SkillContext } from './types.js'
 
 async function callLlm(prompt: string): Promise<string> {
-  const { default: { llm } } = await import('../api/llm.js')
-  const result = await llm([{ role: 'user', content: prompt }], {
+  const { LLMClient } = await import('../api/llm.js')
+  const client = new LLMClient()
+  const result = await client.chat([{ role: 'user', content: prompt }], {
     model: 'default',
   })
   return result.content
