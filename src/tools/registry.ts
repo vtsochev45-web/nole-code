@@ -21,6 +21,28 @@ import type { ToolDefinition } from '../api/llm.js'
 
 const execAsync = promisify(exec)
 
+// Tools historically signal failure by returning a bare error-message string.
+// The wrapper at executeTool() then flagged those as success and the UI
+// rendered ✓ even when nothing happened (silent-edit bug). Detect known
+// error prefixes so the bare-string returns flow through with isError=true.
+const ERROR_PREFIX_PATTERNS: RegExp[] = [
+  /^Access denied:/,
+  /^File not found:/,
+  /^Permission denied:/,
+  /^Security blocked:/,
+  /^Error reading\b/,
+  /^Error writing\b/,
+  /^Error editing\b/,
+  /^Error:/,
+  /^Tool .* not found$/,
+  /^Could not find the specified text/,
+]
+function isErrorString(s: string): boolean {
+  if (!s) return false
+  const head = s.split('\n', 1)[0]
+  return ERROR_PREFIX_PATTERNS.some(re => re.test(head))
+}
+
 // Serialised permission-prompt queue. Multiple parallel tool calls would
 // otherwise both try to acquire the stdin lock at once. Chain them so only
 // one prompt is live at a time.
@@ -302,7 +324,7 @@ export async function executeTool(
     } else {
       try {
         const content = await tool.execute(input, ctx)
-        result = { content }
+        result = { content, isError: isErrorString(content) }
       } catch (err) {
         result = { content: `Error: ${err}`, isError: true }
       }
@@ -347,11 +369,11 @@ export async function executeTool(
 
 // ============ Built-in Shell ============
 
-async function runBash(command: string, timeout = 30000): Promise<string> {
+async function runBash(command: string, timeout = 30000, cwd: string = process.cwd()): Promise<string> {
   try {
     const { stdout, stderr } = await execAsync(command, {
       timeout,
-      cwd: process.cwd(),
+      cwd,
       shell: '/bin/bash',
       maxBuffer: 10 * 1024 * 1024,
     })
@@ -390,14 +412,10 @@ registerTool({
   },
   execute: async (input, ctx) => {
     const bashCwd = (input.cwd as string) ? resolve(process.cwd(), input.cwd as string) : ctx.cwd || process.cwd()
-    // Temporarily change cwd for this command
-    const origCwd = process.cwd()
-    try {
-      process.chdir(bashCwd)
-      return await runBash(input.command as string, (input.timeout as number) || 30000)
-    } finally {
-      process.chdir(origCwd)
-    }
+    // Pass cwd as an option rather than process.chdir() — chdir is process-wide
+    // state and concurrent Bash tool calls would race, restoring the wrong cwd
+    // and running later commands from an unexpected directory.
+    return await runBash(input.command as string, (input.timeout as number) || 30000, bashCwd)
   },
 })
 

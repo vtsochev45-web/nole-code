@@ -13,6 +13,7 @@ import {
 } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
+import { randomUUID } from 'crypto'
 
 export interface SessionMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
@@ -120,7 +121,10 @@ export function createSession(cwdOrOpts?: string | {
   model?: string
 }): Session {
   const opts = typeof cwdOrOpts === 'string' ? { cwd: cwdOrOpts } : (cwdOrOpts || {})
-  const id = `nole-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+  // Use randomUUID for collision-free IDs under parallel `nole` invocations.
+  // The old `${ts}-${4-char base36}` form gave ~1.7M of randomness and could
+  // collide when two processes started in the same millisecond.
+  const id = `nole-${randomUUID()}`
   const now = new Date().toISOString()
 
   const session: Session = {
