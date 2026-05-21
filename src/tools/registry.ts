@@ -36,10 +36,13 @@ const ERROR_PREFIX_PATTERNS: RegExp[] = [
   /^Error:/,
   /^Tool .* not found$/,
   /^Could not find the specified text/,
+  /^Exit code [1-9]\d*/,
 ]
 function isErrorString(s: string): boolean {
   if (!s) return false
-  const head = s.split('\n', 1)[0]
+  // Strip leading whitespace before checking — some tools return strings like
+  // "\nbwrap: ..." where stdout was empty but stderr got appended after a "\n".
+  const head = s.replace(/^\s+/, '').split('\n', 1)[0]
   return ERROR_PREFIX_PATTERNS.some(re => re.test(head))
 }
 
