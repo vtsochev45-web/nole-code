@@ -40,6 +40,12 @@ const REASONING_HINTS: RegExp[] = [
   /how many|\bcount\b|\bprobabilit|combinator|number of ways/i,
   /trade-?off|\bcompare\b|\bdecide\b|\bplan\b|figure out|reason about/i,
   /\bfix\b.*\b(bug|issue|error|fail|crash|broken)/i,
+  // Complex code-generation — looks mechanical ("write a parser…") but is a
+  // real algorithm where the reasoning pass prevents subtle bugs. Surfaced when
+  // a thinking-off run shipped a JSON parser with a wrong leading-zero check.
+  /from[ -]scratch/i,
+  /\bparser\b|\bcompiler\b|\binterpreter\b|\blexer\b|tokeni[sz]|\bgrammar\b|state machine/i,
+  /\bimplement\b|data structure|\bprotocol\b|\bencoder\b|\bdecoder\b|\bmatcher\b|\bmatching\b/i,
 ]
 
 // Signals that a task is a plain mechanical action the model likely already

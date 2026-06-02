@@ -783,7 +783,10 @@ var init_thinking_policy = __esm(() => {
     /security|vulnerab|exploit|injection/i,
     /how many|\bcount\b|\bprobabilit|combinator|number of ways/i,
     /trade-?off|\bcompare\b|\bdecide\b|\bplan\b|figure out|reason about/i,
-    /\bfix\b.*\b(bug|issue|error|fail|crash|broken)/i
+    /\bfix\b.*\b(bug|issue|error|fail|crash|broken)/i,
+    /from[ -]scratch/i,
+    /\bparser\b|\bcompiler\b|\binterpreter\b|\blexer\b|tokeni[sz]|\bgrammar\b|state machine/i,
+    /\bimplement\b|data structure|\bprotocol\b|\bencoder\b|\bdecoder\b|\bmatcher\b|\bmatching\b/i
   ];
   SIMPLE_ACTION_START = /^\s*(create|write|add|make|generate|scaffold|rename|move|copy|delete|remove|list|show|print|read|display|cat|format|prettif|lint|install|run|execute|append|insert|replace|set|update the|bump|commit|stage)\b/i;
 });
