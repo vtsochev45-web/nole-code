@@ -364,7 +364,7 @@ class LLMClient {
       top_p,
       messages: merged
     };
-    if (process.env.NOLE_THINKING === "off")
+    if (options.disableThinking ?? process.env.NOLE_THINKING === "off")
       body.thinking = { type: "disabled" };
     if (systemPrompt || options.system) {
       body.system = options.system || systemPrompt;
@@ -509,7 +509,7 @@ class LLMClient {
       messages: anthropicMessages,
       stream: true
     };
-    if (process.env.NOLE_THINKING === "off")
+    if (options.disableThinking ?? process.env.NOLE_THINKING === "off")
       body.thinking = { type: "disabled" };
     if (systemPrompt || options.system) {
       body.system = options.system || systemPrompt;
@@ -738,6 +738,54 @@ var init_llm = __esm(() => {
   RETRY_STATUS = new Set([429, 500, 502, 503, 529]);
   DEFAULT_MAX_TOKENS = parseInt(process.env.NOLE_MAX_TOKENS || "32000", 10);
   REQUEST_TIMEOUT_MS = Number(process.env.NOLE_FETCH_TIMEOUT_MS) || 180000;
+});
+
+// src/utils/thinking-policy.ts
+function getThinkingMode() {
+  const v = (process.env.NOLE_THINKING || "").trim().toLowerCase();
+  if (v === "off")
+    return "off";
+  if (v === "auto")
+    return "auto";
+  if (v === "on")
+    return "on";
+  return "on";
+}
+function decideThinking(taskText, errorLatched) {
+  if (errorLatched)
+    return { disable: false, reason: "error recovery — keep thinking" };
+  const text = (taskText || "").slice(0, 2000);
+  const hint = REASONING_HINTS.find((re) => re.test(text));
+  if (hint)
+    return { disable: false, reason: `reasoning signal (${hint.source.slice(0, 24)}…)` };
+  if (SIMPLE_ACTION_START.test(text)) {
+    return { disable: true, reason: "mechanical action, no reasoning signal — skip thinking" };
+  }
+  return { disable: false, reason: "uncertain — keep thinking (conservative default)" };
+}
+function resolveThinking(mode, taskText, errorLatched) {
+  if (mode === "off")
+    return { disable: true, reason: "NOLE_THINKING=off" };
+  if (mode === "on")
+    return { disable: false, reason: "thinking on (default)" };
+  return decideThinking(taskText, errorLatched);
+}
+var REASONING_HINTS, SIMPLE_ACTION_START;
+var init_thinking_policy = __esm(() => {
+  REASONING_HINTS = [
+    /\bdebug|\bbug\b|root cause|\bdiagnos/i,
+    /\bwhy\b|\bexplain|\banaly[sz]e/i,
+    /race condition|deadlock|concurren|thread.?safe|data race/i,
+    /optimi[sz]e|performance|complexity|big-?o\b/i,
+    /\brefactor|\bredesign|\barchitect|\bdesign\b/i,
+    /\balgorithm|\bprove\b|\bproof\b|\bderive\b|\binvariant/i,
+    /edge case|corner case|off-by-one|\btricky\b/i,
+    /security|vulnerab|exploit|injection/i,
+    /how many|\bcount\b|\bprobabilit|combinator|number of ways/i,
+    /trade-?off|\bcompare\b|\bdecide\b|\bplan\b|figure out|reason about/i,
+    /\bfix\b.*\b(bug|issue|error|fail|crash|broken)/i
+  ];
+  SIMPLE_ACTION_START = /^\s*(create|write|add|make|generate|scaffold|rename|move|copy|delete|remove|list|show|print|read|display|cat|format|prettif|lint|install|run|execute|append|insert|replace|set|update the|bump|commit|stage)\b/i;
 });
 
 // src/utils/url-safety.ts
@@ -30945,6 +30993,8 @@ ${divider()}
       let truncationBumps = 0;
       const MAX_TRUNCATION_BUMPS = 2;
       const TRUNCATION_BUDGET_CAP = 120000;
+      const thinkingMode = getThinkingMode();
+      let errorLatched = false;
       while (turn < MAX_TURNS) {
         let flushXmlBuffer = function() {
           if (xmlBuffer) {
@@ -31042,6 +31092,11 @@ ${divider()}
         const mdStream = createStreamingMarkdown();
         let xmlBuffer = "";
         let xmlBufferTimer = null;
+        const thinkingDecision = resolveThinking(thinkingMode, expandedInput, errorLatched);
+        if (process.env.NOLE_DEBUG) {
+          process.stderr.write(`[thinking] turn ${turn}: ${thinkingDecision.disable ? "OFF" : "ON"} — ${thinkingDecision.reason}
+`);
+        }
         const usage = await client.chatStream(session.messages.map((m) => {
           const msg = { role: m.role, content: m.content };
           if (m.tool_call_id)
@@ -31051,7 +31106,7 @@ ${divider()}
           if (m.tool_calls)
             msg.tool_calls = m.tool_calls;
           return msg;
-        }), { tools: toolDefs, max_tokens: effectiveMaxTokens }, (chunk) => {
+        }), { tools: toolDefs, max_tokens: effectiveMaxTokens, disableThinking: thinkingDecision.disable }, (chunk) => {
           if (!hasOutput && spinnerInterval) {
             clearInterval(spinnerInterval);
             spinnerInterval = null;
@@ -31208,8 +31263,10 @@ ${divider()}
               maxLines
             }));
           } else {
-            if (result.isError)
+            if (result.isError) {
               toolErrorCount++;
+              errorLatched = true;
+            }
             await streamOutput(displayLines, maxLines, displayLines.length > 20 ? 5 : 0);
           }
           const status = result.isError ? "❌" : "✅";
@@ -31295,6 +31352,9 @@ function parseArgs() {
         opts.message = args.slice(i + 1).join(" ");
         i = args.length;
         break;
+      case "--fast":
+        process.env.NOLE_THINKING = "auto";
+        break;
       case "--verbose":
       case "-v":
         opts.verbose = true;
@@ -31332,6 +31392,7 @@ ${dim("Options:")}
   -s, --session <id>    Resume a session
   -c, --cwd <path>       Working directory (default: cwd)
   -m, --message <text>   Run single message and exit
+  --fast                 Auto-skip M3's thinking on mechanical turns (put before -m)
   --verbose              Verbose output with timings
   --list-sessions        List all sessions
   --delete-session <id>  Delete a session
@@ -31372,6 +31433,7 @@ async function main() {
 var cancelRequested = false, isProcessing = false, lastUserMessage = "", lastOutput = "", activeClient = null, PLAN_INTENT_PATTERNS, HISTORY_FILE, MAX_HISTORY = 1000, ALIAS_FILE2;
 var init_src = __esm(() => {
   init_llm();
+  init_thinking_policy();
   init_registry();
   init_client3();
   init_commands2();

@@ -6,6 +6,7 @@ import { join, resolve, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import * as readline from 'readline'
 import { LLMClient, DEFAULT_MAX_TOKENS } from './api/llm.js'
+import { getThinkingMode, resolveThinking } from './utils/thinking-policy.js'
 import { getToolDefinitions, executeTool } from './tools/registry.js'
 import { loadMCPServers } from './mcp/client.js'
 import { parseCommand, getCommand } from './commands/index.js'
@@ -831,6 +832,12 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
       const MAX_TRUNCATION_BUMPS = 2
       const TRUNCATION_BUDGET_CAP = 120000
 
+      // Thinking policy: in 'auto' mode (--fast) skip M3's reasoning pass on
+      // mechanical tasks, keep it for reasoning-heavy ones. Once a tool errors
+      // this run, errorLatched flips on so recovery turns get reasoning back.
+      const thinkingMode = getThinkingMode()
+      let errorLatched = false
+
       while (turn < MAX_TURNS) {
         turn++
         responseText = ''
@@ -931,6 +938,11 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
           }
         }
 
+        const thinkingDecision = resolveThinking(thinkingMode, expandedInput, errorLatched)
+        if (process.env.NOLE_DEBUG) {
+          process.stderr.write(`[thinking] turn ${turn}: ${thinkingDecision.disable ? 'OFF' : 'ON'} — ${thinkingDecision.reason}\n`)
+        }
+
         const usage = await client.chatStream(
           session!.messages.map(m => {
             const msg: any = { role: m.role, content: m.content }
@@ -939,7 +951,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
             if ((m as any).tool_calls) msg.tool_calls = (m as any).tool_calls
             return msg
           }),
-          { tools: toolDefs, max_tokens: effectiveMaxTokens },
+          { tools: toolDefs, max_tokens: effectiveMaxTokens, disableThinking: thinkingDecision.disable },
           (chunk) => {
             if (!hasOutput && spinnerInterval) {
               clearInterval(spinnerInterval)
@@ -1148,7 +1160,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
               maxLines,
             }))
           } else {
-            if (result.isError) toolErrorCount++
+            if (result.isError) { toolErrorCount++; errorLatched = true } // recovery needs reasoning (auto mode)
             // Await so concurrent tool outputs don't interleave line-by-line.
             // The for-loop serialises display; streamOutput's per-line delays
             // would otherwise interleave with the next iteration's writes.
@@ -1253,6 +1265,11 @@ function parseArgs(): CliOptions {
         opts.message = args.slice(i + 1).join(' ')
         i = args.length
         break
+      case '--fast':
+        // Auto thinking-policy: skip M3's reasoning pass on mechanical turns,
+        // keep it for reasoning-heavy tasks and error recovery. Place before -m.
+        process.env.NOLE_THINKING = 'auto'
+        break
       case '--verbose':
       case '-v':
         opts.verbose = true
@@ -1289,6 +1306,7 @@ ${dim('Options:')}
   -s, --session <id>    Resume a session
   -c, --cwd <path>       Working directory (default: cwd)
   -m, --message <text>   Run single message and exit
+  --fast                 Auto-skip M3's thinking on mechanical turns (put before -m)
   --verbose              Verbose output with timings
   --list-sessions        List all sessions
   --delete-session <id>  Delete a session

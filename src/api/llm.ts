@@ -153,6 +153,8 @@ export interface ChatOptions {
   top_p?: number
   max_tokens?: number
   system?: string
+  /** When true, send thinking:{type:'disabled'}. Overrides the NOLE_THINKING env flag. */
+  disableThinking?: boolean
 }
 
 export class LLMClient {
@@ -295,11 +297,11 @@ export class LLMClient {
       messages: merged,
     }
 
-    // Opt-in: NOLE_THINKING=off disables M3's reasoning pass entirely. M3's
-    // Anthropic-compat endpoint honours thinking:{type:'disabled'} (budget_tokens
-    // is ignored). Trades reasoning depth for ~5x lower latency; default keeps
-    // thinking on. See chatStream for the streaming path.
-    if (process.env.NOLE_THINKING === 'off') body.thinking = { type: 'disabled' }
+    // Disable M3's reasoning pass when the caller asks (auto policy / --fast) or
+    // NOLE_THINKING=off. M3's Anthropic-compat endpoint honours
+    // thinking:{type:'disabled'} (budget_tokens is ignored). Trades reasoning
+    // depth for ~5x lower latency; default keeps thinking on.
+    if (options.disableThinking ?? (process.env.NOLE_THINKING === 'off')) body.thinking = { type: 'disabled' }
 
     if (systemPrompt || options.system) {
       body.system = options.system || systemPrompt
@@ -479,9 +481,9 @@ export class LLMClient {
       stream: true,
     }
 
-    // Opt-in thinking kill-switch (see chat()): NOLE_THINKING=off → no reasoning
-    // pass, ~5x faster, default leaves thinking on.
-    if (process.env.NOLE_THINKING === 'off') body.thinking = { type: 'disabled' }
+    // Disable thinking when the caller asks (auto policy / --fast) or
+    // NOLE_THINKING=off. See chat() for details.
+    if (options.disableThinking ?? (process.env.NOLE_THINKING === 'off')) body.thinking = { type: 'disabled' }
 
     if (systemPrompt || options.system) {
       body.system = options.system || systemPrompt
