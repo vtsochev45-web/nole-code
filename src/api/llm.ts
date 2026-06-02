@@ -295,6 +295,12 @@ export class LLMClient {
       messages: merged,
     }
 
+    // Opt-in: NOLE_THINKING=off disables M3's reasoning pass entirely. M3's
+    // Anthropic-compat endpoint honours thinking:{type:'disabled'} (budget_tokens
+    // is ignored). Trades reasoning depth for ~5x lower latency; default keeps
+    // thinking on. See chatStream for the streaming path.
+    if (process.env.NOLE_THINKING === 'off') body.thinking = { type: 'disabled' }
+
     if (systemPrompt || options.system) {
       body.system = options.system || systemPrompt
     }
@@ -472,6 +478,10 @@ export class LLMClient {
       messages: anthropicMessages,
       stream: true,
     }
+
+    // Opt-in thinking kill-switch (see chat()): NOLE_THINKING=off → no reasoning
+    // pass, ~5x faster, default leaves thinking on.
+    if (process.env.NOLE_THINKING === 'off') body.thinking = { type: 'disabled' }
 
     if (systemPrompt || options.system) {
       body.system = options.system || systemPrompt

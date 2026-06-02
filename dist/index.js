@@ -364,6 +364,8 @@ class LLMClient {
       top_p,
       messages: merged
     };
+    if (process.env.NOLE_THINKING === "off")
+      body.thinking = { type: "disabled" };
     if (systemPrompt || options.system) {
       body.system = options.system || systemPrompt;
     }
@@ -507,6 +509,8 @@ class LLMClient {
       messages: anthropicMessages,
       stream: true
     };
+    if (process.env.NOLE_THINKING === "off")
+      body.thinking = { type: "disabled" };
     if (systemPrompt || options.system) {
       body.system = options.system || systemPrompt;
     }
