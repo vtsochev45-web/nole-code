@@ -16486,8 +16486,9 @@ class MCPClientManager {
       server.tools = toolsResult.tools || [];
       server.status = "connected";
       this.servers.set(config2.name, server);
-      console.log(`
-✅ MCP server "${config2.name}" connected with ${server.tools.length} tools`);
+      process.stderr.write(`
+✅ MCP server "${config2.name}" connected with ${server.tools.length} tools
+`);
     } catch (error2) {
       server.status = "error";
       server.error = error2 instanceof Error ? error2.message : String(error2);
@@ -16523,7 +16524,8 @@ class MCPClientManager {
       }
     });
     transport.onclose = () => {
-      console.log(`[${config2.name}] Process closed`);
+      process.stderr.write(`[${config2.name}] Process closed
+`);
       server.status = "disconnected";
     };
     await server.client.connect(transport);
@@ -30415,7 +30417,8 @@ function expandAlias(input) {
   return input;
 }
 async function runRepl(opts) {
-  if (opts.verbose || feature("VERBOSE_OUTPUT")) {
+  const headless = !!opts.message;
+  if ((opts.verbose || feature("VERBOSE_OUTPUT")) && !headless) {
     setFeature("VERBOSE_OUTPUT", true);
     setVerbose(true);
     setShowTimings(feature("TOOL_TIMING"));
@@ -30491,9 +30494,11 @@ Then run ${bold("nole")} again.
     const lastForCwd = recent.find((s) => s.cwd === cwd2 && s.messages.length > 1);
     if (lastForCwd) {
       session = lastForCwd;
-      console.log(dim(`  Resuming session ${session.id.slice(0, 20)}... (${session.messages.length} messages)`));
-      console.log(dim(`  Use /fork to branch off, /compact to shrink context
+      if (!headless) {
+        console.log(dim(`  Resuming session ${session.id.slice(0, 20)}... (${session.messages.length} messages)`));
+        console.log(dim(`  Use /fork to branch off, /compact to shrink context
 `));
+      }
     } else {
       session = createSession(cwd2);
     }
@@ -30506,7 +30511,8 @@ Then run ${bold("nole")} again.
     const index = indexProject2(cwd2);
     if (index.fileCount > 0) {
       projectIndex = formatIndexForPrompt2(index);
-      console.log(dim(`  Indexed ${index.fileCount} files (${Object.keys(index.languages).join(", ")})`));
+      if (!headless)
+        console.log(dim(`  Indexed ${index.fileCount} files (${Object.keys(index.languages).join(", ")})`));
     }
   } catch {}
   const { getMemorySummary: getMemorySummary2 } = await Promise.resolve().then(() => (init_session_memory(), exports_session_memory));
@@ -30643,9 +30649,11 @@ ${memorySummary}` : ""}${resumeContext}`;
     }
   }
   saveSession(session);
-  console.clear();
   const providerName = client.getActiveProviderName();
-  console.log(getBanner(opts.cwd || process.cwd(), opts.verbose));
+  if (!headless) {
+    console.clear();
+    console.log(getBanner(opts.cwd || process.cwd(), opts.verbose));
+  }
   if (opts.verbose) {
     printContextHeader({
       sessionId: session.id,
@@ -30902,7 +30910,8 @@ ${truncated}
         }
       }
     }
-    console.log(`${c2.blue("➜ you")} │ ${expandedInput}`);
+    if (!headless)
+      console.log(`${c2.blue("➜ you")} │ ${expandedInput}`);
     session.messages.push({
       role: "user",
       content: expandedInput,
@@ -30911,10 +30920,12 @@ ${truncated}
     const toolDefs = getToolDefinitions(expandedInput);
     let responseText = "";
     let toolCalls = [];
-    console.log(`
+    if (!headless) {
+      console.log(`
 ${divider()}
 `);
-    console.log(`${c2.magenta("\uD83E\uDD16 nole")} │ `);
+      console.log(`${c2.magenta("\uD83E\uDD16 nole")} │ `);
+    }
     const startTime = Date.now();
     try {
       const MAX_TURNS = parseInt(process.env.NOLE_MAX_TURNS || "") || settings.maxTurns || 50;
@@ -31197,7 +31208,8 @@ ${c2.yellow("⚠")} Reached maximum ${MAX_TURNS} turns in agentic loop.
       const warning = pct > 80 ? " ⚠ context filling up" : "";
       const provider = client.getActiveProviderName();
       const providerTag = provider !== "minimax" ? ` · ${provider}` : "";
-      console.log(dim(`${elapsed}s · ~${totalTokens} tokens (${pct}%)${turnInfo}${toolInfo}${providerTag}${warning}`));
+      if (!headless)
+        console.log(dim(`${elapsed}s · ~${totalTokens} tokens (${pct}%)${turnInfo}${toolInfo}${providerTag}${warning}`));
       saveSession(session);
       const { extractMemoryFromConversation: extractMemoryFromConversation2 } = await Promise.resolve().then(() => (init_session_memory(), exports_session_memory));
       extractMemoryFromConversation2(session.messages, session.id).catch(() => {});

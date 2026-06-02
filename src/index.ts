@@ -244,8 +244,12 @@ interface CliOptions {
 }
 
 async function runRepl(opts: CliOptions) {
+  // Headless / single-message mode (`-m`): suppress all interactive chrome
+  // (banner, screen-clear, project-index line, turn dividers, "you/nole"
+  // prefixes) so stdout carries only the model's answer — usable when piped.
+  const headless = !!opts.message
   // Initialize verbose output system
-  if (opts.verbose || feature('VERBOSE_OUTPUT')) {
+  if ((opts.verbose || feature('VERBOSE_OUTPUT')) && !headless) {
     setFeature('VERBOSE_OUTPUT', true)
     setVerbose(true)
     setShowTimings(feature('TOOL_TIMING'))
@@ -342,8 +346,10 @@ Then run ${bold('nole')} again.
     const lastForCwd = recent.find(s => s.cwd === cwd && s.messages.length > 1)
     if (lastForCwd) {
       session = lastForCwd
-      console.log(dim(`  Resuming session ${session.id.slice(0, 20)}... (${session.messages.length} messages)`))
-      console.log(dim(`  Use /fork to branch off, /compact to shrink context\n`))
+      if (!headless) {
+        console.log(dim(`  Resuming session ${session.id.slice(0, 20)}... (${session.messages.length} messages)`))
+        console.log(dim(`  Use /fork to branch off, /compact to shrink context\n`))
+      }
     } else {
       session = createSession(cwd)
     }
@@ -361,7 +367,7 @@ Then run ${bold('nole')} again.
     const index = indexProject(cwd)
     if (index.fileCount > 0) {
       projectIndex = formatIndexForPrompt(index)
-      console.log(dim(`  Indexed ${index.fileCount} files (${Object.keys(index.languages).join(', ')})`))
+      if (!headless) console.log(dim(`  Indexed ${index.fileCount} files (${Object.keys(index.languages).join(', ')})`))
     }
   } catch {}
 
@@ -497,9 +503,11 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
 
   saveSession(session)
 
-  console.clear()
   const providerName = client.getActiveProviderName()
-  console.log(getBanner(opts.cwd || process.cwd(), opts.verbose))
+  if (!headless) {
+    console.clear()
+    console.log(getBanner(opts.cwd || process.cwd(), opts.verbose))
+  }
 
   // Print verbose context
   if (opts.verbose) {
@@ -787,7 +795,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
       }
     }
 
-    console.log(`${c.blue('➜ you')} │ ${expandedInput}`)
+    if (!headless) console.log(`${c.blue('➜ you')} │ ${expandedInput}`)
 
     session!.messages.push({
       role: 'user',
@@ -800,8 +808,10 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
     let toolCalls: Array<{ id?: string; name: string; input: Record<string, unknown> }> = []
 
     // Stream response
-    console.log(`\n${divider()}\n`)
-    console.log(`${c.magenta('🤖 nole')} │ `)
+    if (!headless) {
+      console.log(`\n${divider()}\n`)
+      console.log(`${c.magenta('🤖 nole')} │ `)
+    }
 
     const startTime = Date.now()
 
@@ -1137,7 +1147,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
       const warning = pct > 80 ? ' ⚠ context filling up' : ''
       const provider = client.getActiveProviderName()
       const providerTag = provider !== 'minimax' ? ` · ${provider}` : ''
-      console.log(dim(`${elapsed}s · ~${totalTokens} tokens (${pct}%)${turnInfo}${toolInfo}${providerTag}${warning}`))
+      if (!headless) console.log(dim(`${elapsed}s · ~${totalTokens} tokens (${pct}%)${turnInfo}${toolInfo}${providerTag}${warning}`))
 
       saveSession(session!)
 
