@@ -3,6 +3,7 @@
 // Branded as Nole Code
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import type { Key } from 'ink'
 import {
   Box,
   Text,
@@ -53,45 +54,45 @@ export function Terminal({ messages, toolCalls, onSend, onInterrupt, isLoading }
   const [history, setHistory] = useState<string[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [scrollOffset, setScrollOffset] = useState(0)
-  const inputRef = useRef<HTMLInputElement | null>(null)
+  const inputRef = useRef<null>(null)
 
   const maxVisible = 20
 
-  useInput((input, key) => {
+  useInput((input: string, key: Key) => {
     if (key.return) {
       if (input.trim()) {
         onSend(input.trim())
-        setHistory(prev => [input.trim(), ...prev.slice(0, 49)])
+        setHistory((prev: string[]) => [input.trim(), ...prev.slice(0, 49)])
         setHistoryIndex(-1)
         setInput('')
       }
     } else if (key.backspace) {
-      setInput(prev => prev.slice(0, -1))
+      setInput((prev: string) => prev.slice(0, -1))
     } else if (key.upArrow) {
       if (history.length > 0) {
         const newIndex = Math.min(historyIndex + 1, history.length - 1)
         setHistoryIndex(newIndex)
-        setInput(history[newIndex])
+        setInput(history[newIndex] ?? '')
       }
     } else if (key.downArrow) {
       if (historyIndex > 0) {
         const newIndex = historyIndex - 1
         setHistoryIndex(newIndex)
-        setInput(history[newIndex])
+        setInput(history[newIndex] ?? '')
       } else {
         setHistoryIndex(-1)
         setInput('')
       }
-    } else if (key.ctrlC) {
+    } else if (key.ctrl && input === 'c') {
       onInterrupt()
-    } else if (key.ctrlL) {
+    } else if (key.ctrl && input === 'l') {
       setScrollOffset(0)
     } else if (key.pageUp) {
-      setScrollOffset(prev => Math.min(prev + maxVisible, Math.max(0, messages.length - maxVisible)))
+      setScrollOffset((prev: number) => Math.min(prev + maxVisible, Math.max(0, messages.length - maxVisible)))
     } else if (key.pageDown) {
-      setScrollOffset(prev => Math.max(0, prev - maxVisible))
-    } else if (input && !key.ctrl && !key.meta) {
-      setInput(prev => prev + input)
+      setScrollOffset((prev: number) => Math.max(0, prev - maxVisible))
+    } else if (input && !key.ctrl) {
+      setInput((prev: string) => prev + input)
     }
   })
 
@@ -155,7 +156,7 @@ export function Terminal({ messages, toolCalls, onSend, onInterrupt, isLoading }
   )
 }
 
-function MessageView({ message, isLast }: { message: Message; isLast: boolean }) {
+function MessageView({ message, isLast }: { key?: React.Key; message: Message; isLast: boolean }) {
   const roleColor = message.role === 'user' ? C.user
     : message.role === 'nole' ? C.assistant
     : message.role === 'tool' ? C.tool
@@ -189,7 +190,7 @@ function MessageView({ message, isLast }: { message: Message; isLast: boolean })
         )}
       </Box>
       <Box paddingLeft={3} flexDirection="column">
-        <Text wrap="wrap" white>{message.content}</Text>
+        <Text wrap="wrap">{message.content}</Text>
       </Box>
     </Box>
   )
@@ -229,7 +230,7 @@ export function Spinner({ label }: { label: string }) {
   const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
   useEffect(() => {
-    const id = setInterval(() => setFrame(f => (f + 1) % frames.length), 80)
+    const id = setInterval(() => setFrame((f: number) => (f + 1) % frames.length), 80)
     return () => clearInterval(id)
   }, [])
 

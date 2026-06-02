@@ -1,7 +1,7 @@
 // LocalShellTask — Run a shell command as a background task
 
 import { spawn, ChildProcess } from 'child_process'
-import { type LocalShellTaskState } from './types.js'
+import { type LocalShellTaskState } from '../types.js'
 import { EventEmitter } from 'events'
 
 export interface ShellTaskOptions {
@@ -49,7 +49,7 @@ export class LocalShellTask extends EventEmitter {
     this.startTime = Date.now()
 
     const { command, cwd, env } = this.task
-    
+
     // Parse command for spawn
     const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/sh'
     const shellArgs = process.platform === 'win32' ? ['/c', command] : ['-c', command]

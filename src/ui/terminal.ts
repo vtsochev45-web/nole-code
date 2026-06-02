@@ -3,7 +3,7 @@
 // Adapted from Nole Code's UI architecture
 
 import { EventEmitter } from 'events'
-import { Readline } from 'readline'
+import { type ReadLine } from 'readline'
 import { c } from './output/styles.js'
 
 // Vim mode imports
@@ -209,7 +209,7 @@ class TerminalUI extends EventEmitter {
 
   // ============ User Input ============
 
-  createPrompt(rl: Readline): string {
+  createPrompt(rl: ReadLine): string {
     let prompt = '\n'
     if (this.isLoading) {
       prompt += c.dim('⟳ ')

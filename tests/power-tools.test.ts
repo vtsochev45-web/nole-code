@@ -98,7 +98,8 @@ describe('GitStatus Tool', () => {
   test('shows branch info', async () => {
     const result = await executeTool('GitStatus', {}, { cwd: '/tmp/nole-code', sessionId: 'test' })
     expect(result.content).toContain('Branch:')
-    expect(result.content).toContain('master')
+    // Branch name is environment-dependent (feature branch locally, detached HEAD in CI),
+    // so assert that branch info is reported rather than a specific branch name.
   })
 })
 

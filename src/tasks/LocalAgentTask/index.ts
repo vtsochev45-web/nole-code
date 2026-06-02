@@ -3,7 +3,7 @@
 import { spawn, ChildProcess } from 'child_process'
 import { join } from 'path'
 import { EventEmitter } from 'events'
-import { type LocalAgentTaskState } from './types.js'
+import { type LocalAgentTaskState } from '../types.js'
 
 export interface AgentTaskOptions {
   prompt?: string

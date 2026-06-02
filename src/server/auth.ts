@@ -4,11 +4,12 @@
 import { API_KEY } from '../utils/env.js'
 
 export function authenticate(request: Request): boolean {
+  const pathname = new URL(request.url).pathname
   // Skip auth for health check
-  if (request.url.pathname === '/health') return true
-  
+  if (pathname === '/health') return true
+
   // Skip auth for WebSocket upgrade
-  if (request.url.pathname === '/ws') return true
+  if (pathname === '/ws') return true
   
   const authHeader = request.headers.get('Authorization')
   if (!authHeader) return false

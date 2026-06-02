@@ -3,6 +3,19 @@
  * Provides cursor position calculations for vim motions.
  */
 
+// Vim character-class helpers used by text-object and motion logic.
+export function isVimWordChar(ch: string): boolean {
+  return /[\w]/.test(ch)
+}
+
+export function isVimWhitespace(ch: string): boolean {
+  return /\s/.test(ch)
+}
+
+export function isVimPunctuation(ch: string): boolean {
+  return ch.length > 0 && !isVimWordChar(ch) && !isVimWhitespace(ch)
+}
+
 export class Cursor {
   constructor(
     public readonly text: string,
@@ -128,6 +141,33 @@ export class Cursor {
 
   isAtEnd(): boolean {
     return this.offset >= this.text.length
+  }
+
+  // measuredText — provides grapheme-aware offset utilities.
+  // In this implementation, text is plain UTF-16 code units, so nextOffset
+  // advances by one code unit (the minimum safe increment).
+  get measuredText(): { nextOffset(offset: number): number } {
+    return {
+      nextOffset: (offset: number): number =>
+        Math.min(this.text.length, offset + 1),
+    }
+  }
+
+  // goToLine — returns a Cursor at the start of logical line N (1-based).
+  goToLine(n: number): Cursor {
+    const lines = this.text.split('\n')
+    const targetLine = Math.max(0, Math.min(n - 1, lines.length - 1))
+    let offset = 0
+    for (let i = 0; i < targetLine; i++) {
+      offset += (lines[i]?.length ?? 0) + 1 // +1 for the newline
+    }
+    return new Cursor(this.text, offset)
+  }
+
+  // snapOutOfImageRef — no-op in this implementation; image chip syntax is
+  // not used here, so offsets are returned unchanged.
+  snapOutOfImageRef(offset: number, _side: 'start' | 'end'): number {
+    return offset
   }
 
   findCharacter(

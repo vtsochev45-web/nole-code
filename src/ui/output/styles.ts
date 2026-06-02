@@ -97,6 +97,7 @@ const c = {
   assistant: (text: string) => `${ESC}95m${text}${ESC}0m`,   // Magenta
   tool: (text: string) => `${ESC}93m${text}${ESC}0m`,        // Yellow
   system: (text: string) => `${ESC}90m${text}${ESC}0m`,      // Gray
+  pink: (text: string) => `${ESC}38;5;206m${text}${ESC}0m`, // Pink (256-colour)
   
   // Style modifiers
   bold,

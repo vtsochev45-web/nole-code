@@ -66,7 +66,7 @@ export function executeOperatorFind(
   const targetOffset = ctx.cursor.findCharacter(char, findType, count)
   if (targetOffset === null) return
 
-  const target = new Cursor(ctx.cursor.measuredText, targetOffset)
+  const target = new Cursor(ctx.cursor.text, targetOffset)
   const range = getOperatorRangeForFind(ctx.cursor, target, findType)
 
   applyOperator(op, range.from, range.to, ctx)

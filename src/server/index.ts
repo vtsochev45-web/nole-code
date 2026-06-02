@@ -90,19 +90,20 @@ async function startServer(): Promise<string> {
   // Note: isPortInUse is async, simplified check
   console.log(`Starting Nole Code server on port ${port}...`)
   
-  const server = Bun.serve({
+  let server: Bun.Server<undefined>
+  server = Bun.serve({
     port,
     hostname: '127.0.0.1',
-    fetch(req, ctx) {
+    fetch(req): Promise<Response> | Response {
       // WebSocket upgrade handling
       const url = new URL(req.url)
       if (url.pathname === '/ws') {
         const upgraded = server.upgrade(req)
         if (upgraded) {
-          return undefined // WebSocket handled
+          return new Response(null)
         }
       }
-      
+
       return handleApiRequest(req)
     },
     websocket: {
@@ -122,9 +123,6 @@ async function startServer(): Promise<string> {
       close(ws) {
         console.log('WebSocket client disconnected')
         removeWsClient(ws)
-      },
-      error(ws, error) {
-        console.error('WebSocket error:', error)
       },
     },
   })

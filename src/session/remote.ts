@@ -46,7 +46,7 @@ class RemoteSessionManager {
     this._port = port || this.getDefaultPort()
     this.wss = new WebSocketServer({ port: this._port })
 
-    this.wss.on('connection', (ws) => {
+    this.wss.on('connection', (ws: WebSocket) => {
       this.handleConnection(ws)
     })
 
@@ -99,7 +99,7 @@ class RemoteSessionManager {
             // Broadcast message to all participants
             this.broadcast(sessionId!, {
               type: 'message',
-              sessionId,
+              sessionId: sessionId ?? undefined,
               content: msg.content,
             })
             break
@@ -108,7 +108,7 @@ class RemoteSessionManager {
             // Forward tool call
             this.broadcast(sessionId!, {
               type: 'tool_call',
-              sessionId,
+              sessionId: sessionId ?? undefined,
               data: msg.data,
             })
             break
@@ -117,7 +117,7 @@ class RemoteSessionManager {
             // Broadcast tool result
             this.broadcast(sessionId!, {
               type: 'tool_result',
-              sessionId,
+              sessionId: sessionId ?? undefined,
               data: msg.data,
             })
             break
@@ -144,7 +144,7 @@ class RemoteSessionManager {
       }
     })
 
-    ws.on('error', (err) => {
+    ws.on('error', (err: Error) => {
       console.error('WebSocket error:', err)
     })
   }

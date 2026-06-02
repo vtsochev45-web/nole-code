@@ -21173,6 +21173,7 @@ var init_styles = __esm(() => {
     assistant: (text) => `${ESC}95m${text}${ESC}0m`,
     tool: (text) => `${ESC}93m${text}${ESC}0m`,
     system: (text) => `${ESC}90m${text}${ESC}0m`,
+    pink: (text) => `${ESC}38;5;206m${text}${ESC}0m`,
     bold,
     dim,
     italic,
@@ -22071,17 +22072,14 @@ var init_DreamTask = __esm(() => {
       this.task.output.push(`[Dream] Starting dream task: ${this.task.prompt.slice(0, 50)}...`);
       this.emit("output", this.task.output[this.task.output.length - 1]);
       try {
-        const { chat } = await import("../api/llm.js");
+        const { LLMClient: LLMClient2 } = await Promise.resolve().then(() => (init_llm(), exports_llm));
+        const client = new LLMClient2;
         const model = this.task.model || "MiniMax-M2.7";
         this.task.output.push(`[Dream] Generating content with ${model}...`);
         this.emit("output", this.task.output[this.task.output.length - 1]);
-        const result = await chat({
-          messages: [
-            { role: "system", content: "You are a creative assistant. Generate content based on the user prompt." },
-            { role: "user", content: this.task.prompt }
-          ],
-          model
-        });
+        const result = await client.chat([
+          { role: "user", content: this.task.prompt }
+        ], { model, system: "You are a creative assistant. Generate content based on the user prompt." });
         this.task.generatedContent = result.content;
         this.task.output.push(`[Dream] Generated ${result.content.length} chars`);
         this.emit("output", this.task.output[this.task.output.length - 1]);

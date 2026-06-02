@@ -1,8 +1,11 @@
 // Nole Code - Server API
 // HTTP endpoints using Bun.serve()
 
-import { TaskManager, type Task, type TaskType } from '../tasks/manager.js'
+import type { ServerWebSocket } from 'bun'
+import { TaskManager } from '../tasks/manager.js'
 import { requireAuth, authenticate } from './auth.js'
+
+type TaskType = 'shell' | 'loop'
 
 const VERSION = '0.1.0'
 const startTime = Date.now()
@@ -26,20 +29,20 @@ function jsonResponse(data: unknown): Response {
 
 // Task storage (in-memory for now)
 const taskManager = new TaskManager()
-const wsClients = new Set<Bun.WebSocket>()
+const wsClients = new Set<ServerWebSocket<undefined>>()
 
-export function addWsClient(ws: Bun.WebSocket) {
+export function addWsClient(ws: ServerWebSocket<undefined>) {
   wsClients.add(ws)
 }
 
-export function removeWsClient(ws: Bun.WebSocket) {
+export function removeWsClient(ws: ServerWebSocket<undefined>) {
   wsClients.delete(ws)
 }
 
 export function broadcastTaskEvent(event: unknown) {
   const message = JSON.stringify(event)
   wsClients.forEach(ws => {
-    if (ws.readyState === Bun.WebSocket.OPEN) {
+    if (ws.readyState === 1) {
       ws.send(message)
     }
   })
@@ -94,14 +97,15 @@ export async function handleApiRequest(request: Request): Promise<Response> {
         return errorResponse(400, 'Invalid type: must be "loop" or "shell"')
       }
       
-      const task = taskManager.createTask(goal, type)
-      
+      const taskId = taskManager.addShellTask(goal)
+      const task = taskManager.getTask(taskId)
+
       // Broadcast task creation
       broadcastTaskEvent({
         type: 'task:created',
-        task: { id: task.id, goal: task.goal, type: task.type, status: task.status },
+        task: { id: taskId, goal, type, status: task?.status },
       })
-      
+
       return jsonResponse({ task })
     }
 
@@ -163,8 +167,8 @@ export async function handleApiRequest(request: Request): Promise<Response> {
 }
 
 // Bun server instance (set from index.ts)
-let server: Bun.Server
+let server: Bun.Server<undefined>
 
-export function setServer(s: Bun.Server) {
+export function setServer(s: Bun.Server<undefined>) {
   server = s
 }

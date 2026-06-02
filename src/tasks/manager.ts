@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { dirname, join } from 'path'
 import { homedir } from 'os'
 import { EventEmitter } from 'events'
-import { type TaskState, type TaskStatus } from './types.js'
+import { type TaskState, type TaskStatus, type DreamTaskState } from './types.js'
 import { LocalShellTask, createShellTask } from './LocalShellTask/index.js'
 import { LocalAgentTask, createAgentTask } from './LocalAgentTask/index.js'
 import { DreamTask, createDreamTask } from './DreamTask/index.js'
@@ -156,7 +156,9 @@ export class TaskManager extends EventEmitter {
       task.startedAt = state.startedAt
       task.completedAt = state.completedAt
       if ('generatedContent' in state) {
-        task.generatedContent = state.generatedContent
+        // Only DreamTaskState carries generatedContent; cast for the assignment
+        // while preserving the original runtime condition.
+        ;(task as DreamTaskState).generatedContent = state.generatedContent
       }
       this.saveToDisk()
     }

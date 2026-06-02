@@ -19,6 +19,7 @@ export interface LocalShellTaskState extends BaseTask {
   type: 'LocalShellTask'
   command: string
   cwd?: string
+  env?: Record<string, string>
   pid?: number
 }
 
@@ -28,6 +29,7 @@ export interface LocalAgentTaskState extends BaseTask {
   sessionId?: string
   prompt?: string
   runtime?: string
+  pid?: number
 }
 
 // RemoteAgentTask — runs a task on a remote agent (future)

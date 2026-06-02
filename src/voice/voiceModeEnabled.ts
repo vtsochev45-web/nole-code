@@ -1,9 +1,18 @@
 import { feature } from 'bun:bundle'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
-import {
-  getClaudeAIOAuthTokens,
-  isAnthropicAuthEnabled,
-} from '../utils/auth.js'
+
+// These modules do not exist in this codebase; stub the symbols so the file
+// type-checks. Voice mode is disabled at runtime when stubs return defaults.
+function getFeatureValue_CACHED_MAY_BE_STALE(_key: string, defaultValue: boolean): boolean {
+  return defaultValue
+}
+
+function isAnthropicAuthEnabled(): boolean {
+  return false
+}
+
+function getClaudeAIOAuthTokens(): { accessToken: string } | null {
+  return null
+}
 
 /**
  * Kill-switch check for voice mode. Returns true unless the

@@ -1,7 +1,7 @@
 // DreamTask — A "dream" task that runs in background with optional LLM generation
 
 import { EventEmitter } from 'events'
-import { type DreamTaskState } from './types.js'
+import { type DreamTaskState } from '../types.js'
 
 export interface DreamTaskOptions {
   prompt: string
@@ -50,21 +50,21 @@ export class DreamTask extends EventEmitter {
 
     try {
       // Dynamically import to avoid circular deps
-      const { chat } = await import('../api/llm.js')
-      
+      const { LLMClient } = await import('../../api/llm.js')
+      const client = new LLMClient()
+
       const model = this.task.model || 'MiniMax-M2.7'
-      
+
       this.task.output.push(`[Dream] Generating content with ${model}...`)
       this.emit('output', this.task.output[this.task.output.length - 1])
 
       // Run the LLM call
-      const result = await chat({
-        messages: [
-          { role: 'system', content: 'You are a creative assistant. Generate content based on the user prompt.' },
-          { role: 'user', content: this.task.prompt }
+      const result = await client.chat(
+        [
+          { role: 'user', content: this.task.prompt },
         ],
-        model,
-      })
+        { model, system: 'You are a creative assistant. Generate content based on the user prompt.' },
+      )
 
       this.task.generatedContent = result.content
       this.task.output.push(`[Dream] Generated ${result.content.length} chars`)
