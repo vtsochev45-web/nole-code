@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join, resolve, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import * as readline from 'readline'
-import { LLMClient } from './api/llm.js'
+import { LLMClient, DEFAULT_MAX_TOKENS } from './api/llm.js'
 import { getToolDefinitions, executeTool } from './tools/registry.js'
 import { loadMCPServers } from './mcp/client.js'
 import { parseCommand, getCommand } from './commands/index.js'
@@ -821,6 +821,16 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
       const MAX_TURNS = parseInt(process.env.NOLE_MAX_TURNS || '') || settings.maxTurns || 50
       let turn = 0
 
+      // M3 thinks within the same output budget as its answer. On a hard turn the
+      // thinking can exhaust max_tokens before any answer/tool_use is emitted
+      // (stop_reason: max_tokens, empty content). We detect that and retry the
+      // turn with a progressively larger budget rather than treating the empty
+      // response as completion. effectiveMaxTokens only ever ratchets up.
+      let effectiveMaxTokens = settings.maxTokens || DEFAULT_MAX_TOKENS
+      let truncationBumps = 0
+      const MAX_TRUNCATION_BUMPS = 2
+      const TRUNCATION_BUDGET_CAP = 120000
+
       while (turn < MAX_TURNS) {
         turn++
         responseText = ''
@@ -929,7 +939,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
             if ((m as any).tool_calls) msg.tool_calls = (m as any).tool_calls
             return msg
           }),
-          { tools: toolDefs, max_tokens: settings.maxTokens || 16384 },
+          { tools: toolDefs, max_tokens: effectiveMaxTokens },
           (chunk) => {
             if (!hasOutput && spinnerInterval) {
               clearInterval(spinnerInterval)
@@ -1020,6 +1030,27 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
             toolCalls.push(...xmlCalls)
             responseText = responseText.replace(/<invoke[\s\S]*?<\/invoke>/g, '').replace(/<\/?minimax:tool_call>/g, '').trim()
           }
+        }
+
+        // Truncated-mid-reasoning guard: M3 ended at the token ceiling
+        // (stop_reason: max_tokens) having produced only thinking — no answer
+        // text, no tool call. This is NOT task completion; without this guard the
+        // empty response is saved and the "no tool calls" break below exits the
+        // loop silently as if done. Retry the turn with a larger budget; give up
+        // with a clear error if it persists.
+        const truncatedEmpty =
+          usage?.stopReason === 'max_tokens' &&
+          toolCalls.length === 0 &&
+          responseText.trim() === ''
+        if (truncatedEmpty) {
+          if (truncationBumps < MAX_TRUNCATION_BUMPS) {
+            truncationBumps++
+            effectiveMaxTokens = Math.min(effectiveMaxTokens * 2, TRUNCATION_BUDGET_CAP)
+            console.log(dim(`  Model hit the ${usage?.output ?? '?'}-token ceiling while reasoning before producing output. Retrying with a larger budget (${effectiveMaxTokens} tokens)...`))
+            continue
+          }
+          console.error(c.red('Error: the model exhausted its token budget while reasoning and produced no output, even after raising the budget. Try a more focused request or raise NOLE_MAX_TOKENS.'))
+          break
         }
 
         // Save assistant response with tool_calls if present

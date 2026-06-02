@@ -162,7 +162,8 @@ var init_env = __esm(() => {
 var exports_llm = {};
 __export(exports_llm, {
   parseXmlToolCalls: () => parseXmlToolCalls,
-  LLMClient: () => LLMClient
+  LLMClient: () => LLMClient,
+  DEFAULT_MAX_TOKENS: () => DEFAULT_MAX_TOKENS
 });
 import { randomUUID } from "crypto";
 function parseApiError(raw) {
@@ -448,7 +449,8 @@ class LLMClient {
       toolCalls,
       usage: {
         input: data.usage?.input_tokens || 0,
-        output: data.usage?.output_tokens || 0
+        output: data.usage?.output_tokens || 0,
+        stopReason: data.stop_reason || undefined
       }
     };
   }
@@ -541,7 +543,7 @@ class LLMClient {
       const contentType = response.headers.get("content-type") || "";
       if (!contentType.includes("text/event-stream")) {
         const data = await response.json();
-        const usage2 = { input: data.usage?.input_tokens || 0, output: data.usage?.output_tokens || 0 };
+        const usage2 = { input: data.usage?.input_tokens || 0, output: data.usage?.output_tokens || 0, stopReason: data.stop_reason || undefined };
         if (data.content) {
           for (const block of data.content) {
             if (block.type === "text")
@@ -584,8 +586,11 @@ class LLMClient {
             const type = event.type;
             if (type === "message_start" && event.message?.usage) {
               usage.input = event.message.usage.input_tokens || 0;
-            } else if (type === "message_delta" && event.usage) {
-              usage.output = event.usage.output_tokens || 0;
+            } else if (type === "message_delta") {
+              if (event.usage)
+                usage.output = event.usage.output_tokens || 0;
+              if (event.delta?.stop_reason)
+                usage.stopReason = event.delta.stop_reason;
             } else if (type === "content_block_start") {
               const block = event.content_block;
               if (block?.type === "tool_use") {
@@ -711,12 +716,14 @@ class LLMClient {
         });
       }
     }
+    const finishReason = data.choices?.[0]?.finish_reason;
     return {
       content,
       toolCalls,
       usage: {
         input: data.usage?.prompt_tokens || 0,
-        output: data.usage?.completion_tokens || 0
+        output: data.usage?.completion_tokens || 0,
+        stopReason: finishReason === "length" ? "max_tokens" : finishReason || undefined
       }
     };
   }
@@ -725,7 +732,7 @@ var RETRY_STATUS, MAX_RETRIES = 3, BASE_DELAY_MS = 2000, DEFAULT_TEMPERATURE = 1
 var init_llm = __esm(() => {
   init_env();
   RETRY_STATUS = new Set([429, 500, 502, 503, 529]);
-  DEFAULT_MAX_TOKENS = parseInt(process.env.NOLE_MAX_TOKENS || "16384", 10);
+  DEFAULT_MAX_TOKENS = parseInt(process.env.NOLE_MAX_TOKENS || "32000", 10);
   REQUEST_TIMEOUT_MS = Number(process.env.NOLE_FETCH_TIMEOUT_MS) || 180000;
 });
 
@@ -30930,6 +30937,10 @@ ${divider()}
     try {
       const MAX_TURNS = parseInt(process.env.NOLE_MAX_TURNS || "") || settings.maxTurns || 50;
       let turn = 0;
+      let effectiveMaxTokens = settings.maxTokens || DEFAULT_MAX_TOKENS;
+      let truncationBumps = 0;
+      const MAX_TRUNCATION_BUMPS = 2;
+      const TRUNCATION_BUDGET_CAP = 120000;
       while (turn < MAX_TURNS) {
         let flushXmlBuffer = function() {
           if (xmlBuffer) {
@@ -31036,7 +31047,7 @@ ${divider()}
           if (m.tool_calls)
             msg.tool_calls = m.tool_calls;
           return msg;
-        }), { tools: toolDefs, max_tokens: settings.maxTokens || 16384 }, (chunk) => {
+        }), { tools: toolDefs, max_tokens: effectiveMaxTokens }, (chunk) => {
           if (!hasOutput && spinnerInterval) {
             clearInterval(spinnerInterval);
             spinnerInterval = null;
@@ -31100,6 +31111,17 @@ ${divider()}
             toolCalls.push(...xmlCalls);
             responseText = responseText.replace(/<invoke[\s\S]*?<\/invoke>/g, "").replace(/<\/?minimax:tool_call>/g, "").trim();
           }
+        }
+        const truncatedEmpty = usage?.stopReason === "max_tokens" && toolCalls.length === 0 && responseText.trim() === "";
+        if (truncatedEmpty) {
+          if (truncationBumps < MAX_TRUNCATION_BUMPS) {
+            truncationBumps++;
+            effectiveMaxTokens = Math.min(effectiveMaxTokens * 2, TRUNCATION_BUDGET_CAP);
+            console.log(dim(`  Model hit the ${usage?.output ?? "?"}-token ceiling while reasoning before producing output. Retrying with a larger budget (${effectiveMaxTokens} tokens)...`));
+            continue;
+          }
+          console.error(c2.red("Error: the model exhausted its token budget while reasoning and produced no output, even after raising the budget. Try a more focused request or raise NOLE_MAX_TOKENS."));
+          break;
         }
         const assistantMsg = {
           role: "assistant",
