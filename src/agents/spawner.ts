@@ -10,7 +10,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
 import { homedir } from 'os'
 import { LLMClient } from '../api/llm.js'
 import { getToolDefinitions, executeTool } from '../tools/registry.js'
-import { MINIMAX_API_KEY } from '../utils/env.js'
+import { MINIMAX_API_KEY, DEFAULT_MODEL } from '../utils/env.js'
 
 export interface Agent {
   id: string
@@ -198,7 +198,7 @@ const TOOLS = [
 async function chat(messages) {
   const sysMsg = messages.find(m => m.role === 'system');
   const body = {
-    model: 'MiniMax-M2.7',
+    model: ${JSON.stringify(DEFAULT_MODEL)},
     max_tokens: 4096,
     messages: messages.filter(m => m.role !== 'system'),
     tools: TOOLS,

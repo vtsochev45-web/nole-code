@@ -37,7 +37,9 @@ export async function summarizeMessages(
         content: `Summarize this coding session in 3-5 bullet points. Focus on: what was asked, what files were changed, what tools were used, and any errors encountered. Be concise.\n\n${transcript.slice(0, 8000)}`,
       },
     ], {
-      max_tokens: 300,
+      // M3 reasoning consumes output budget before the answer; a 300-token
+      // ceiling truncated to empty. 2000 leaves room for thinking + summary.
+      max_tokens: 2000,
       temperature: 0,
     })
 

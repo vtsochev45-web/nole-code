@@ -59,6 +59,7 @@ import {
   formatSummary, formatShortcuts, formatTopBar, formatCancelled
 } from './ui/output/streaming.js'
 import { renderMarkdown, createStreamingMarkdown } from './ui/markdown.js'
+import { DEFAULT_MODEL } from './utils/env.js'
 
 // Cancel flag — Ctrl+C during LLM call cancels the current request, not the process
 let cancelRequested = false
@@ -298,7 +299,7 @@ Then run ${bold('nole')} again.
   // Determine which API key to use — priority: MiniMax (OAuth or API key) > OpenRouter > OpenAI
   const { OPENROUTER_API_KEY, OPENAI_API_KEY, MINIMAX_API_KEY: minimaxKey } = await import('./utils/env.js')
   let primaryKey = token || minimaxKey
-  let primaryModel = settings.model || 'MiniMax-M2.7'
+  let primaryModel = settings.model || DEFAULT_MODEL
 
   // If no MiniMax, try OpenRouter
   if (!primaryKey && OPENROUTER_API_KEY) {
@@ -505,7 +506,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
     printContextHeader({
       sessionId: session.id,
       cwd: opts.cwd || process.cwd(),
-      model: 'MiniMax-M2.7',
+      model: DEFAULT_MODEL,
     })
   }
 
@@ -855,6 +856,9 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
         const isTTY = !!process.stdout.isTTY
         let spinnerInterval: ReturnType<typeof setInterval> | null = null
         let hasOutput = false
+        // Last line of M3's streamed reasoning, shown dimmed in the spinner until
+        // the real answer starts (which clears the spinner line). Never hits stdout.
+        let thinkingTail = ''
         const SPINNER_CHARS = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
         const VERBS = [
           'Thinking', 'Reasoning', 'Analyzing',
@@ -882,7 +886,9 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
             const verb = VERBS[currentVerbIdx]
             const elapsed = ((Date.now() - spinnerStartTime) / 1000).toFixed(0)
             try {
-              process.stdout.write(`\r${pink}${frame}${resetAnsi} ${pink}${verb}...${resetAnsi} ${dim(`(${elapsed}s)`)}  `)
+              const status = thinkingTail ? dim(thinkingTail) : `${pink}${verb}...${resetAnsi}`
+              // \x1b[K clears to end of line — needed because the thinking tail varies in length.
+              process.stdout.write(`\r\x1b[K${pink}${frame}${resetAnsi} ${status} ${dim(`(${elapsed}s)`)}`)
             } catch {}
             spinFrame++
           }
@@ -913,7 +919,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
             if ((m as any).tool_calls) msg.tool_calls = (m as any).tool_calls
             return msg
           }),
-          { tools: toolDefs, max_tokens: settings.maxTokens || 4096 },
+          { tools: toolDefs, max_tokens: settings.maxTokens || 16384 },
           (chunk) => {
             if (!hasOutput && spinnerInterval) {
               clearInterval(spinnerInterval)
@@ -950,6 +956,10 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
           },
           (tc) => {
             toolCalls.push({ id: tc.id || `tool_${Date.now()}`, name: tc.name, input: tc.input })
+          },
+          (t) => {
+            // M3 reasoning preview — collapse to one line and keep the tail.
+            thinkingTail = (thinkingTail + t.replace(/\s+/g, ' ')).slice(-80)
           },
         )
 
@@ -1022,7 +1032,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
 
         // Track API usage
         if (usage) {
-          costTracker.trackRequest(settings.model || 'MiniMax-M2.7', usage.input, usage.output)
+          costTracker.trackRequest(settings.model || DEFAULT_MODEL, usage.input, usage.output)
         }
 
         // No tool calls — LLM is done, exit loop

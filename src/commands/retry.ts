@@ -58,6 +58,7 @@ export function registerRetryCommand(register: typeof registerCommand) {
         const { loadSession: load, saveSession: save } = await import('../session/manager.js')
         const { LLMClient } = await import('../api/llm.js')
         const { getMiniMaxToken } = await import('../index.js')
+        const { DEFAULT_MODEL } = await import('../utils/env.js')
         const { getToolDefinitions, executeTool } = await import('../tools/registry.js')
         const { loadSettings } = await import('../project/onboarding.js')
 
@@ -69,8 +70,8 @@ export function registerRetryCommand(register: typeof registerCommand) {
         
         if (!token) return 'No API key configured'
 
-        const client = new LLMClient(token, settings.model || 'MiniMax-M2.7')
-        client.setModel(settings.model || 'MiniMax-M2.7')
+        const client = new LLMClient(token, settings.model || DEFAULT_MODEL)
+        client.setModel(settings.model || DEFAULT_MODEL)
 
         // Add the failed command to session
         session.messages.push({

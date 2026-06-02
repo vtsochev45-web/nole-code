@@ -253,8 +253,8 @@ export function loadSettings(): NoleSettings {
     streamResponses: true,
     showTimestamps: false,
     toolPermissions: 'all',
-    temperature: 0.7,
-    maxTokens: 4096,
+    temperature: 1.0,
+    maxTokens: 16384,
     editor: process.env.EDITOR || 'vim',
     shell: process.env.SHELL || '/bin/bash',
   }

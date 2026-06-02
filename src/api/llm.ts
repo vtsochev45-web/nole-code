@@ -2,12 +2,22 @@
 // Uses the same API endpoint as openclaw's lib/tools.py
 
 import { randomUUID } from 'crypto'
-import { MINIMAX_API_KEY, getProviders, type ProviderConfig } from '../utils/env.js'
+import { MINIMAX_API_KEY, DEFAULT_MODEL, getProviders, type ProviderConfig } from '../utils/env.js'
 
 // Retry config for transient errors (429, 529, 500, 502, 503)
 const RETRY_STATUS = new Set([429, 500, 502, 503, 529])
 const MAX_RETRIES = 3
 const BASE_DELAY_MS = 2000
+
+// Sampling + output defaults tuned for MiniMax-M3 (the default model).
+// MiniMax recommends temperature 1.0 / top_p 0.95 for M3; its reasoning also
+// consumes output budget, so the default ceiling is generous. Callers that need
+// determinism (JSON extraction, planning) pass an explicit lower temperature —
+// which now actually reaches the API (previously temperature was dropped on the
+// MiniMax path). Override the output ceiling globally with NOLE_MAX_TOKENS.
+const DEFAULT_TEMPERATURE = 1.0
+const DEFAULT_TOP_P = 0.95
+const DEFAULT_MAX_TOKENS = parseInt(process.env.NOLE_MAX_TOKENS || '16384', 10)
 // Per-request timeout. Tunable via NOLE_FETCH_TIMEOUT_MS. Default: 180s is long
 // enough for large coding responses without letting a hung socket freeze the agent.
 const REQUEST_TIMEOUT_MS = Number(process.env.NOLE_FETCH_TIMEOUT_MS) || 180_000
@@ -135,6 +145,7 @@ export interface ChatOptions {
   model?: string
   tools?: ToolDefinition[]
   temperature?: number
+  top_p?: number
   max_tokens?: number
   system?: string
 }
@@ -145,7 +156,7 @@ export class LLMClient {
   private providers: ProviderConfig[]
   private activeProvider: number = 0
 
-  constructor(apiKey?: string, model = 'MiniMax-M2.7') {
+  constructor(apiKey?: string, model = DEFAULT_MODEL) {
     this.apiKey = apiKey || MINIMAX_API_KEY || ''
     this.model = model
     this.providers = getProviders()
@@ -179,7 +190,7 @@ export class LLMClient {
     toolCalls: ToolCall[]
     usage: { input: number; output: number }
   }> {
-    const { tools, temperature = 0.7, max_tokens = 4096, model } = options
+    const { tools, temperature = DEFAULT_TEMPERATURE, top_p = DEFAULT_TOP_P, max_tokens = DEFAULT_MAX_TOKENS, model } = options
 
     // Convert messages to Anthropic format
     // Extract system messages — Anthropic API requires system as a top-level param, not in messages
@@ -273,7 +284,9 @@ export class LLMClient {
     
     const body: Record<string, unknown> = {
       model: model || this.model,
-      max_tokens: max_tokens || 4096,
+      max_tokens: max_tokens || DEFAULT_MAX_TOKENS,
+      temperature,
+      top_p,
       messages: merged,
     }
 
@@ -392,8 +405,9 @@ export class LLMClient {
     options: ChatOptions,
     onChunk: (text: string) => void,
     onToolCall?: (tc: ToolCall) => void,
+    onThinking?: (text: string) => void,
   ): Promise<{ input: number; output: number }> {
-    const { tools, temperature = 0.7, max_tokens = 4096, model } = options
+    const { tools, temperature = DEFAULT_TEMPERATURE, top_p = DEFAULT_TOP_P, max_tokens = DEFAULT_MAX_TOKENS, model } = options
 
     // Build Anthropic-format messages (same as chat())
     const anthropicMessages: Array<{
@@ -446,7 +460,9 @@ export class LLMClient {
 
     const body: Record<string, unknown> = {
       model: model || this.model,
-      max_tokens: max_tokens || 4096,
+      max_tokens: max_tokens || DEFAULT_MAX_TOKENS,
+      temperature,
+      top_p,
       messages: anthropicMessages,
       stream: true,
     }
@@ -558,6 +574,11 @@ export class LLMClient {
               const delta = event.delta
               if (delta?.type === 'text_delta' && delta.text) {
                 onChunk(delta.text)
+              } else if (delta?.type === 'thinking_delta' && delta.thinking) {
+                // M3 emits reasoning as thinking_delta before the answer. Surface
+                // it (the consumer renders it dimmed) so the UI isn't blank while
+                // the model thinks. It never enters responseText / the saved message.
+                onThinking?.(delta.thinking)
               } else if (delta?.type === 'input_json_delta' && delta.partial_json !== undefined) {
                 const partial = partialToolCalls.get(event.index)
                 if (partial) partial.inputJson += delta.partial_json
@@ -594,7 +615,7 @@ export class LLMClient {
     options: ChatOptions,
     provider: ProviderConfig,
   ): Promise<{ content: string; toolCalls: ToolCall[]; usage: { input: number; output: number } }> {
-    const { tools, temperature = 0.7, max_tokens = 4096 } = options
+    const { tools, temperature = DEFAULT_TEMPERATURE, top_p = DEFAULT_TOP_P, max_tokens = DEFAULT_MAX_TOKENS } = options
 
     // Convert to OpenAI format
     const openaiMessages: Array<Record<string, unknown>> = []
@@ -626,6 +647,7 @@ export class LLMClient {
       model: provider.model,
       max_tokens,
       temperature,
+      top_p,
       messages: openaiMessages,
     }
 

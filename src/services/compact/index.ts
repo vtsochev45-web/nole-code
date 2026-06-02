@@ -8,10 +8,14 @@ import { estimateTotalTokens, estimateMessageTokens } from '../../utils/count-to
 import { loadMemory, saveMemory, addToWorklog } from '../../session-memory/index.js'
 import { feature } from '../../feature-flags/index.js'
 
+// MiniMax-M3 exposes a large context window (the platform API serves ~200k
+// usable context). Conservative default of 200k; override with NOLE_CONTEXT_WINDOW.
+const CONTEXT_WINDOW_TOKENS = parseInt(process.env.NOLE_CONTEXT_WINDOW || '200000', 10)
+
 // Token budget configuration
 const COMPACT_CONFIG = {
-  // Trigger compaction when context exceeds this percentage of 100k
-  triggerPercent: 0.75,        // 75% = 75k tokens
+  // Trigger compaction when context exceeds this percentage of CONTEXT_WINDOW_TOKENS
+  triggerPercent: 0.75,        // 75% of CONTEXT_WINDOW_TOKENS
   // Target tokens after compaction
   targetTokens: 40000,          // Aggressive: aim for ~40k tokens
   // Keep more messages for working context
@@ -101,13 +105,13 @@ export function needsCompaction(messages: Array<{ role: string; content: string 
   const now = Date.now()
   if (lastCompactAt > 0 && now - lastCompactAt < COMPACT_COOLDOWN_MS) {
     // Within cooldown period - check if we REALLY need it (over 90%)
-    if (totalTokens < COMPACT_CONFIG.triggerPercent * 100000 * 1.2) {
+    if (totalTokens < COMPACT_CONFIG.triggerPercent * CONTEXT_WINDOW_TOKENS * 1.2) {
       return false
     }
   }
 
-  // Trigger when over triggerPercent (75% of 100k = 75k)
-  return totalTokens > COMPACT_CONFIG.triggerPercent * 100000
+  // Trigger when over triggerPercent of the context window
+  return totalTokens > COMPACT_CONFIG.triggerPercent * CONTEXT_WINDOW_TOKENS
 }
 
 /**
@@ -120,7 +124,7 @@ export function getTokenBudget(messages: Array<{ role: string; content: string }
   needsCompact: boolean
 } {
   const used = estimateTotalTokens(messages)
-  const max = 100000 // hardcoded max for context window
+  const max = CONTEXT_WINDOW_TOKENS
   return {
     used,
     max,

@@ -31,6 +31,11 @@ export const OPENAI_API_KEY = process.env.OPENAI_API_KEY || ''
 export const API_KEY = process.env.API_KEY || ''
 export const SERVER_PORT = parseInt(process.env.SERVER_PORT || '18792', 10)
 
+// Default model used everywhere a model isn't explicitly chosen (settings.model,
+// a task spec, or a /model override). Single source of truth — bump this one line
+// to change the default. Overridable per-run via the DEFAULT_MODEL env var.
+export const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'MiniMax-M3'
+
 export function isEnvTruthy(key: string): boolean {
   const val = process.env[key]
   return val === '1' || val === 'true' || val === 'yes'
@@ -54,7 +59,7 @@ export function getProviders(): ProviderConfig[] {
       name: 'minimax',
       baseUrl: 'https://api.minimax.io/anthropic/v1/messages',
       apiKey: MINIMAX_API_KEY,
-      model: 'MiniMax-M2.7',
+      model: DEFAULT_MODEL,
       headers: { 'anthropic-version': '2023-06-01' },
     })
   }

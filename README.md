@@ -129,9 +129,9 @@ export OPENAI_API_KEY=sk-          # Fallback (optional)
 ### Settings (`~/.nole-code/settings.json`)
 ```json
 {
-  "model": "MiniMax-M2.7",
-  "temperature": 0.7,
-  "maxTokens": 4096,
+  "model": "MiniMax-M3",
+  "temperature": 1.0,
+  "maxTokens": 16384,
   "toolPermissions": "all"
 }
 ```
