@@ -27,6 +27,7 @@ interface SessionCost {
 // MiniMax pricing (approximate, in USD per 1M tokens)
 const PRICING: Record<string, { input: number; output: number }> = {
   'MiniMax-Text-01': { input: 0.01, output: 0.01 },  // Very approximate
+  'MiniMax-M3': { input: 0.60, output: 2.40 },  // USD per 1M tokens (regular pricing)
   'MiniMax-M2.7': { input: 0.01, output: 0.01 },
   'MiniMax-M2.5': { input: 0.005, output: 0.005 },
   default: { input: 0.01, output: 0.01 },

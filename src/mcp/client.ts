@@ -148,7 +148,9 @@ class MCPClientManager {
       server.status = 'connected'
       this.servers.set(config.name, server)
 
-      console.log(`\n✅ MCP server "${config.name}" connected with ${server.tools.length} tools`)
+      // Status line → stderr so it never pollutes stdout in headless (`-m`) mode;
+      // still visible in the terminal during interactive use.
+      process.stderr.write(`\n✅ MCP server "${config.name}" connected with ${server.tools.length} tools\n`)
       
     } catch (error) {
       server.status = 'error'
@@ -195,7 +197,7 @@ class MCPClientManager {
 
     // Spawn the process
     transport.onclose = () => {
-      console.log(`[${config.name}] Process closed`)
+      process.stderr.write(`[${config.name}] Process closed\n`)
       server.status = 'disconnected'
     }
 

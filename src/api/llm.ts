@@ -2,12 +2,27 @@
 // Uses the same API endpoint as openclaw's lib/tools.py
 
 import { randomUUID } from 'crypto'
-import { MINIMAX_API_KEY, getProviders, type ProviderConfig } from '../utils/env.js'
+import { MINIMAX_API_KEY, DEFAULT_MODEL, getProviders, type ProviderConfig } from '../utils/env.js'
 
 // Retry config for transient errors (429, 529, 500, 502, 503)
 const RETRY_STATUS = new Set([429, 500, 502, 503, 529])
 const MAX_RETRIES = 3
 const BASE_DELAY_MS = 2000
+
+// Sampling + output defaults tuned for MiniMax-M3 (the default model).
+// MiniMax recommends temperature 1.0 / top_p 0.95 for M3; its reasoning also
+// consumes output budget, so the default ceiling is generous. Callers that need
+// determinism (JSON extraction, planning) pass an explicit lower temperature —
+// which now actually reaches the API (previously temperature was dropped on the
+// MiniMax path). Override the output ceiling globally with NOLE_MAX_TOKENS.
+const DEFAULT_TEMPERATURE = 1.0
+const DEFAULT_TOP_P = 0.95
+// M3 thinks by default, and the thinking trace shares this output budget with
+// the answer. On reasoning-heavy agentic tasks a 16k ceiling can be fully
+// consumed by thinking before any answer/tool_use is emitted (stop_reason:
+// max_tokens with empty content) — so the floor is generous. Callers detect a
+// max_tokens truncation via the returned stopReason and retry with more budget.
+export const DEFAULT_MAX_TOKENS = parseInt(process.env.NOLE_MAX_TOKENS || '32000', 10)
 // Per-request timeout. Tunable via NOLE_FETCH_TIMEOUT_MS. Default: 180s is long
 // enough for large coding responses without letting a hung socket freeze the agent.
 const REQUEST_TIMEOUT_MS = Number(process.env.NOLE_FETCH_TIMEOUT_MS) || 180_000
@@ -135,8 +150,11 @@ export interface ChatOptions {
   model?: string
   tools?: ToolDefinition[]
   temperature?: number
+  top_p?: number
   max_tokens?: number
   system?: string
+  /** When true, send thinking:{type:'disabled'}. Overrides the NOLE_THINKING env flag. */
+  disableThinking?: boolean
 }
 
 export class LLMClient {
@@ -145,7 +163,7 @@ export class LLMClient {
   private providers: ProviderConfig[]
   private activeProvider: number = 0
 
-  constructor(apiKey?: string, model = 'MiniMax-M2.7') {
+  constructor(apiKey?: string, model = DEFAULT_MODEL) {
     this.apiKey = apiKey || MINIMAX_API_KEY || ''
     this.model = model
     this.providers = getProviders()
@@ -177,9 +195,9 @@ export class LLMClient {
   async chat(messages: Message[], options: ChatOptions = {}): Promise<{
     content: string
     toolCalls: ToolCall[]
-    usage: { input: number; output: number }
+    usage: { input: number; output: number; stopReason?: string }
   }> {
-    const { tools, temperature = 0.7, max_tokens = 4096, model } = options
+    const { tools, temperature = DEFAULT_TEMPERATURE, top_p = DEFAULT_TOP_P, max_tokens = DEFAULT_MAX_TOKENS, model } = options
 
     // Convert messages to Anthropic format
     // Extract system messages — Anthropic API requires system as a top-level param, not in messages
@@ -273,9 +291,17 @@ export class LLMClient {
     
     const body: Record<string, unknown> = {
       model: model || this.model,
-      max_tokens: max_tokens || 4096,
+      max_tokens: max_tokens || DEFAULT_MAX_TOKENS,
+      temperature,
+      top_p,
       messages: merged,
     }
+
+    // Disable M3's reasoning pass when the caller asks (auto policy / --fast) or
+    // NOLE_THINKING=off. M3's Anthropic-compat endpoint honours
+    // thinking:{type:'disabled'} (budget_tokens is ignored). Trades reasoning
+    // depth for ~5x lower latency; default keeps thinking on.
+    if (options.disableThinking ?? (process.env.NOLE_THINKING === 'off')) body.thinking = { type: 'disabled' }
 
     if (systemPrompt || options.system) {
       body.system = options.system || systemPrompt
@@ -383,6 +409,7 @@ export class LLMClient {
       usage: {
         input: data.usage?.input_tokens || 0,
         output: data.usage?.output_tokens || 0,
+        stopReason: data.stop_reason || undefined,
       },
     }
   }
@@ -392,8 +419,9 @@ export class LLMClient {
     options: ChatOptions,
     onChunk: (text: string) => void,
     onToolCall?: (tc: ToolCall) => void,
-  ): Promise<{ input: number; output: number }> {
-    const { tools, temperature = 0.7, max_tokens = 4096, model } = options
+    onThinking?: (text: string) => void,
+  ): Promise<{ input: number; output: number; stopReason?: string }> {
+    const { tools, temperature = DEFAULT_TEMPERATURE, top_p = DEFAULT_TOP_P, max_tokens = DEFAULT_MAX_TOKENS, model } = options
 
     // Build Anthropic-format messages (same as chat())
     const anthropicMessages: Array<{
@@ -446,10 +474,16 @@ export class LLMClient {
 
     const body: Record<string, unknown> = {
       model: model || this.model,
-      max_tokens: max_tokens || 4096,
+      max_tokens: max_tokens || DEFAULT_MAX_TOKENS,
+      temperature,
+      top_p,
       messages: anthropicMessages,
       stream: true,
     }
+
+    // Disable thinking when the caller asks (auto policy / --fast) or
+    // NOLE_THINKING=off. See chat() for details.
+    if (options.disableThinking ?? (process.env.NOLE_THINKING === 'off')) body.thinking = { type: 'disabled' }
 
     if (systemPrompt || options.system) {
       body.system = options.system || systemPrompt
@@ -497,7 +531,7 @@ export class LLMClient {
       // If server doesn't support streaming, parse as JSON
       if (!contentType.includes('text/event-stream')) {
         const data = await response.json() as any
-        const usage = { input: data.usage?.input_tokens || 0, output: data.usage?.output_tokens || 0 }
+        const usage = { input: data.usage?.input_tokens || 0, output: data.usage?.output_tokens || 0, stopReason: data.stop_reason || undefined }
         if (data.content) {
           for (const block of data.content) {
             if (block.type === 'text') onChunk(block.text || '')
@@ -520,7 +554,7 @@ export class LLMClient {
 
       const decoder = new TextDecoder()
       let buffer = ''
-      let usage = { input: 0, output: 0 }
+      let usage: { input: number; output: number; stopReason?: string } = { input: 0, output: 0 }
       const partialToolCalls = new Map<number, { id: string; name: string; inputJson: string }>()
 
       while (true) {
@@ -543,8 +577,10 @@ export class LLMClient {
             // Track usage from message_start and message_delta
             if (type === 'message_start' && event.message?.usage) {
               usage.input = event.message.usage.input_tokens || 0
-            } else if (type === 'message_delta' && event.usage) {
-              usage.output = event.usage.output_tokens || 0
+            } else if (type === 'message_delta') {
+              // stop_reason rides on message_delta.delta; usage may be present too.
+              if (event.usage) usage.output = event.usage.output_tokens || 0
+              if (event.delta?.stop_reason) usage.stopReason = event.delta.stop_reason
             } else if (type === 'content_block_start') {
               const block = event.content_block
               if (block?.type === 'tool_use') {
@@ -558,6 +594,11 @@ export class LLMClient {
               const delta = event.delta
               if (delta?.type === 'text_delta' && delta.text) {
                 onChunk(delta.text)
+              } else if (delta?.type === 'thinking_delta' && delta.thinking) {
+                // M3 emits reasoning as thinking_delta before the answer. Surface
+                // it (the consumer renders it dimmed) so the UI isn't blank while
+                // the model thinks. It never enters responseText / the saved message.
+                onThinking?.(delta.thinking)
               } else if (delta?.type === 'input_json_delta' && delta.partial_json !== undefined) {
                 const partial = partialToolCalls.get(event.index)
                 if (partial) partial.inputJson += delta.partial_json
@@ -593,8 +634,8 @@ export class LLMClient {
     messages: Message[],
     options: ChatOptions,
     provider: ProviderConfig,
-  ): Promise<{ content: string; toolCalls: ToolCall[]; usage: { input: number; output: number } }> {
-    const { tools, temperature = 0.7, max_tokens = 4096 } = options
+  ): Promise<{ content: string; toolCalls: ToolCall[]; usage: { input: number; output: number; stopReason?: string } }> {
+    const { tools, temperature = DEFAULT_TEMPERATURE, top_p = DEFAULT_TOP_P, max_tokens = DEFAULT_MAX_TOKENS } = options
 
     // Convert to OpenAI format
     const openaiMessages: Array<Record<string, unknown>> = []
@@ -626,6 +667,7 @@ export class LLMClient {
       model: provider.model,
       max_tokens,
       temperature,
+      top_p,
       messages: openaiMessages,
     }
 
@@ -681,12 +723,14 @@ export class LLMClient {
       }
     }
 
+    const finishReason = data.choices?.[0]?.finish_reason
     return {
       content,
       toolCalls,
       usage: {
         input: data.usage?.prompt_tokens || 0,
         output: data.usage?.completion_tokens || 0,
+        stopReason: finishReason === 'length' ? 'max_tokens' : finishReason || undefined,
       },
     }
   }

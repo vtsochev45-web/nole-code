@@ -182,10 +182,11 @@ async function main(): Promise<void> {
       const { getMiniMaxToken } = await import('../index.js')
       const { LLMClient } = await import('../api/llm.js')
       const { loadSettings } = await import('../project/onboarding.js')
-      
+      const { DEFAULT_MODEL } = await import('../utils/env.js')
+
       const settings = loadSettings()
       const token = getMiniMaxToken()
-      const client = new LLMClient(token, settings.model || 'MiniMax-M2.7')
+      const client = new LLMClient(token, settings.model || DEFAULT_MODEL)
       
       const cp = createCheckpoint(goal, cwd)
       

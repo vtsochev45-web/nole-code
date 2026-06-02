@@ -6,7 +6,7 @@ import { promisify } from 'util'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
-import { MINIMAX_API_KEY } from '../utils/env.js'
+import { MINIMAX_API_KEY, DEFAULT_MODEL } from '../utils/env.js'
 
 const execAsync = promisify(exec)
 
@@ -500,7 +500,7 @@ registerCommand({
 
     if (args.length === 0) {
       return `Current Settings:\n\n` +
-        `  model:        ${current.model || 'MiniMax-M2.7'}\n` +
+        `  model:        ${current.model || DEFAULT_MODEL}\n` +
         `  temperature:  ${current.temperature ?? 0.7}\n` +
         `  maxTokens:    ${current.maxTokens ?? 4096}\n` +
         `  maxTurns:     ${current.maxTurns ?? 50}\n` +
@@ -590,7 +590,7 @@ registerCommand({
       const { loadSettings } = await import('../project/onboarding.js')
       const s = loadSettings()
       const provider = (() => { try { const { activeClient: c } = require('../index.js'); return c?.getActiveProviderName() || '?' } catch { return '?' } })()
-      return `Current model: ${s.model || 'MiniMax-M2.7'} (${provider})\n\nUsage: /model <name>\n\nExamples:\n  /model google/gemini-2.5-flash    (OpenRouter)\n  /model anthropic/claude-sonnet-4  (OpenRouter)\n  /model meta-llama/llama-4-scout   (OpenRouter)\n  /model gpt-4o-mini                (OpenAI)\n  /model MiniMax-M2.7               (MiniMax)\n\nProvider auto-detected from model name.`
+      return `Current model: ${s.model || DEFAULT_MODEL} (${provider})\n\nUsage: /model <name>\n\nExamples:\n  /model google/gemini-2.5-flash    (OpenRouter)\n  /model anthropic/claude-sonnet-4  (OpenRouter)\n  /model meta-llama/llama-4-scout   (OpenRouter)\n  /model gpt-4o-mini                (OpenAI)\n  /model MiniMax-M3                 (MiniMax)\n\nProvider auto-detected from model name.`
     }
 
     const { saveSettings } = await import('../project/onboarding.js')
@@ -712,7 +712,7 @@ registerCommand({
 
     return `Session Context:\n\n` +
       `  Session:   ${session.id}\n` +
-      `  Model:     ${settings.model || 'MiniMax-M2.7'}\n` +
+      `  Model:     ${settings.model || DEFAULT_MODEL}\n` +
       `  CWD:       ${session.cwd || ctx.cwd}${git}\n` +
       `  Messages:  ${session.messages.length} (${userMsgs} user, ${assistantMsgs} assistant, ${toolMsgs} tool)\n` +
       `  Tokens:    [${bar}] ~${tokens}/${maxTokens} (${percent}%)\n` +

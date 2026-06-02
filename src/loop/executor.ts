@@ -188,7 +188,7 @@ Return a JSON array of step descriptions:
     const result = await client.chat([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `Goal: ${goal}\nCWD: ${cwd}` }
-    ], { max_tokens: 1000, temperature: 0 })
+    ], { max_tokens: 4000, temperature: 0 })
     
     // Try to parse as JSON array
     const content = result.content.trim()
@@ -253,7 +253,7 @@ ${step.retryCount > 0 ? buildRetryContext({ steps: [step], context } as Checkpoi
     const result = await client.chat([
       ...sessionMessages.slice(-20), // Last 20 messages for context
       { role: 'user' as const, content: `\n\nTASK: ${step.description}\n\nContext:\n${stepContext}\n\nWhat tools should I use to complete this step? Respond with specific tool calls.` }
-    ], { tools: toolDefs, max_tokens: 2000, temperature: 0 })
+    ], { tools: toolDefs, max_tokens: 4000, temperature: 0 })
 
     // Extract tool calls from response
     if (result.toolCalls && result.toolCalls.length > 0) {
@@ -370,8 +370,9 @@ export async function runLoop(options: ExecutorOptions): Promise<ExecutionResult
   // Initialize LLM client
   const settings = loadSettings()
   const { getMiniMaxToken } = await import('../index.js')
+  const { DEFAULT_MODEL } = await import('../utils/env.js')
   const token = getMiniMaxToken()
-  const client = new LLMClient(token, settings.model || 'MiniMax-M2.7')
+  const client = new LLMClient(token, settings.model || DEFAULT_MODEL)
   
   // Session messages for context
   const sessionMessages: Message[] = []

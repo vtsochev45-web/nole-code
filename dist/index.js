@@ -79,6 +79,7 @@ __export(exports_env, {
   OPENAI_API_KEY: () => OPENAI_API_KEY,
   MINIMAX_BASE_URL: () => MINIMAX_BASE_URL,
   MINIMAX_API_KEY: () => MINIMAX_API_KEY,
+  DEFAULT_MODEL: () => DEFAULT_MODEL,
   API_KEY: () => API_KEY
 });
 import { existsSync, readFileSync } from "fs";
@@ -115,7 +116,7 @@ function getProviders() {
       name: "minimax",
       baseUrl: "https://api.minimax.io/anthropic/v1/messages",
       apiKey: MINIMAX_API_KEY,
-      model: "MiniMax-M2.7",
+      model: DEFAULT_MODEL,
       headers: { "anthropic-version": "2023-06-01" }
     });
   }
@@ -140,7 +141,7 @@ function getProviders() {
 function hasAnyProvider() {
   return !!(MINIMAX_API_KEY || OPENROUTER_API_KEY || OPENAI_API_KEY);
 }
-var MINIMAX_API_KEY, MINIMAX_BASE_URL, OPENROUTER_API_KEY, OPENAI_API_KEY, API_KEY, SERVER_PORT, WP_USER, WP_APP_PASSWORD, WP_API_URL;
+var MINIMAX_API_KEY, MINIMAX_BASE_URL, OPENROUTER_API_KEY, OPENAI_API_KEY, API_KEY, SERVER_PORT, DEFAULT_MODEL, WP_USER, WP_APP_PASSWORD, WP_API_URL;
 var init_env = __esm(() => {
   loadEnvFile(join(process.cwd(), ".env"));
   loadEnvFile(join(homedir(), ".nole-code", ".env"));
@@ -151,6 +152,7 @@ var init_env = __esm(() => {
   OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
   API_KEY = process.env.API_KEY || "";
   SERVER_PORT = parseInt(process.env.SERVER_PORT || "18792", 10);
+  DEFAULT_MODEL = process.env.DEFAULT_MODEL || "MiniMax-M3";
   WP_USER = process.env.WP_USER || "";
   WP_APP_PASSWORD = process.env.WP_APP_PASSWORD || "";
   WP_API_URL = process.env.WP_API_URL || "https://britfarmers.com/wp-json/wp/v2";
@@ -160,7 +162,8 @@ var init_env = __esm(() => {
 var exports_llm = {};
 __export(exports_llm, {
   parseXmlToolCalls: () => parseXmlToolCalls,
-  LLMClient: () => LLMClient
+  LLMClient: () => LLMClient,
+  DEFAULT_MAX_TOKENS: () => DEFAULT_MAX_TOKENS
 });
 import { randomUUID } from "crypto";
 function parseApiError(raw) {
@@ -253,7 +256,7 @@ class LLMClient {
   model;
   providers;
   activeProvider = 0;
-  constructor(apiKey, model = "MiniMax-M2.7") {
+  constructor(apiKey, model = DEFAULT_MODEL) {
     this.apiKey = apiKey || MINIMAX_API_KEY || "";
     this.model = model;
     this.providers = getProviders();
@@ -281,7 +284,7 @@ class LLMClient {
     return this.model;
   }
   async chat(messages, options = {}) {
-    const { tools, temperature = 0.7, max_tokens = 4096, model } = options;
+    const { tools, temperature = DEFAULT_TEMPERATURE, top_p = DEFAULT_TOP_P, max_tokens = DEFAULT_MAX_TOKENS, model } = options;
     let systemPrompt = "";
     const anthropicMessages = [];
     const validToolIds = new Set;
@@ -356,9 +359,13 @@ class LLMClient {
     }
     const body = {
       model: model || this.model,
-      max_tokens: max_tokens || 4096,
+      max_tokens: max_tokens || DEFAULT_MAX_TOKENS,
+      temperature,
+      top_p,
       messages: merged
     };
+    if (options.disableThinking ?? process.env.NOLE_THINKING === "off")
+      body.thinking = { type: "disabled" };
     if (systemPrompt || options.system) {
       body.system = options.system || systemPrompt;
     }
@@ -444,12 +451,13 @@ class LLMClient {
       toolCalls,
       usage: {
         input: data.usage?.input_tokens || 0,
-        output: data.usage?.output_tokens || 0
+        output: data.usage?.output_tokens || 0,
+        stopReason: data.stop_reason || undefined
       }
     };
   }
-  async chatStream(messages, options, onChunk, onToolCall) {
-    const { tools, temperature = 0.7, max_tokens = 4096, model } = options;
+  async chatStream(messages, options, onChunk, onToolCall, onThinking) {
+    const { tools, temperature = DEFAULT_TEMPERATURE, top_p = DEFAULT_TOP_P, max_tokens = DEFAULT_MAX_TOKENS, model } = options;
     const anthropicMessages = [];
     const validToolIds = new Set;
     for (const msg of messages) {
@@ -495,10 +503,14 @@ class LLMClient {
     }
     const body = {
       model: model || this.model,
-      max_tokens: max_tokens || 4096,
+      max_tokens: max_tokens || DEFAULT_MAX_TOKENS,
+      temperature,
+      top_p,
       messages: anthropicMessages,
       stream: true
     };
+    if (options.disableThinking ?? process.env.NOLE_THINKING === "off")
+      body.thinking = { type: "disabled" };
     if (systemPrompt || options.system) {
       body.system = options.system || systemPrompt;
     }
@@ -535,7 +547,7 @@ class LLMClient {
       const contentType = response.headers.get("content-type") || "";
       if (!contentType.includes("text/event-stream")) {
         const data = await response.json();
-        const usage2 = { input: data.usage?.input_tokens || 0, output: data.usage?.output_tokens || 0 };
+        const usage2 = { input: data.usage?.input_tokens || 0, output: data.usage?.output_tokens || 0, stopReason: data.stop_reason || undefined };
         if (data.content) {
           for (const block of data.content) {
             if (block.type === "text")
@@ -578,8 +590,11 @@ class LLMClient {
             const type = event.type;
             if (type === "message_start" && event.message?.usage) {
               usage.input = event.message.usage.input_tokens || 0;
-            } else if (type === "message_delta" && event.usage) {
-              usage.output = event.usage.output_tokens || 0;
+            } else if (type === "message_delta") {
+              if (event.usage)
+                usage.output = event.usage.output_tokens || 0;
+              if (event.delta?.stop_reason)
+                usage.stopReason = event.delta.stop_reason;
             } else if (type === "content_block_start") {
               const block = event.content_block;
               if (block?.type === "tool_use") {
@@ -593,6 +608,8 @@ class LLMClient {
               const delta = event.delta;
               if (delta?.type === "text_delta" && delta.text) {
                 onChunk(delta.text);
+              } else if (delta?.type === "thinking_delta" && delta.thinking) {
+                onThinking?.(delta.thinking);
               } else if (delta?.type === "input_json_delta" && delta.partial_json !== undefined) {
                 const partial = partialToolCalls.get(event.index);
                 if (partial)
@@ -626,7 +643,7 @@ class LLMClient {
     }
   }
   async chatViaOpenAI(messages, options, provider) {
-    const { tools, temperature = 0.7, max_tokens = 4096 } = options;
+    const { tools, temperature = DEFAULT_TEMPERATURE, top_p = DEFAULT_TOP_P, max_tokens = DEFAULT_MAX_TOKENS } = options;
     const openaiMessages = [];
     for (const msg of messages) {
       if (msg.role === "system") {
@@ -655,6 +672,7 @@ class LLMClient {
       model: provider.model,
       max_tokens,
       temperature,
+      top_p,
       messages: openaiMessages
     };
     if (tools && tools.length > 0) {
@@ -702,21 +720,75 @@ class LLMClient {
         });
       }
     }
+    const finishReason = data.choices?.[0]?.finish_reason;
     return {
       content,
       toolCalls,
       usage: {
         input: data.usage?.prompt_tokens || 0,
-        output: data.usage?.completion_tokens || 0
+        output: data.usage?.completion_tokens || 0,
+        stopReason: finishReason === "length" ? "max_tokens" : finishReason || undefined
       }
     };
   }
 }
-var RETRY_STATUS, MAX_RETRIES = 3, BASE_DELAY_MS = 2000, REQUEST_TIMEOUT_MS;
+var RETRY_STATUS, MAX_RETRIES = 3, BASE_DELAY_MS = 2000, DEFAULT_TEMPERATURE = 1, DEFAULT_TOP_P = 0.95, DEFAULT_MAX_TOKENS, REQUEST_TIMEOUT_MS;
 var init_llm = __esm(() => {
   init_env();
   RETRY_STATUS = new Set([429, 500, 502, 503, 529]);
+  DEFAULT_MAX_TOKENS = parseInt(process.env.NOLE_MAX_TOKENS || "32000", 10);
   REQUEST_TIMEOUT_MS = Number(process.env.NOLE_FETCH_TIMEOUT_MS) || 180000;
+});
+
+// src/utils/thinking-policy.ts
+function getThinkingMode() {
+  const v = (process.env.NOLE_THINKING || "").trim().toLowerCase();
+  if (v === "off")
+    return "off";
+  if (v === "auto")
+    return "auto";
+  if (v === "on")
+    return "on";
+  return "on";
+}
+function decideThinking(taskText, errorLatched) {
+  if (errorLatched)
+    return { disable: false, reason: "error recovery — keep thinking" };
+  const text = (taskText || "").slice(0, 2000);
+  const hint = REASONING_HINTS.find((re) => re.test(text));
+  if (hint)
+    return { disable: false, reason: `reasoning signal (${hint.source.slice(0, 24)}…)` };
+  if (SIMPLE_ACTION_START.test(text)) {
+    return { disable: true, reason: "mechanical action, no reasoning signal — skip thinking" };
+  }
+  return { disable: false, reason: "uncertain — keep thinking (conservative default)" };
+}
+function resolveThinking(mode, taskText, errorLatched) {
+  if (mode === "off")
+    return { disable: true, reason: "NOLE_THINKING=off" };
+  if (mode === "on")
+    return { disable: false, reason: "thinking on (default)" };
+  return decideThinking(taskText, errorLatched);
+}
+var REASONING_HINTS, SIMPLE_ACTION_START;
+var init_thinking_policy = __esm(() => {
+  REASONING_HINTS = [
+    /\bdebug|\bbug\b|root cause|\bdiagnos/i,
+    /\bwhy\b|\bexplain|\banaly[sz]e/i,
+    /race condition|deadlock|concurren|thread.?safe|data race/i,
+    /optimi[sz]e|performance|complexity|big-?o\b/i,
+    /\brefactor|\bredesign|\barchitect|\bdesign\b/i,
+    /\balgorithm|\bprove\b|\bproof\b|\bderive\b|\binvariant/i,
+    /edge case|corner case|off-by-one|\btricky\b/i,
+    /security|vulnerab|exploit|injection/i,
+    /how many|\bcount\b|\bprobabilit|combinator|number of ways/i,
+    /trade-?off|\bcompare\b|\bdecide\b|\bplan\b|figure out|reason about/i,
+    /\bfix\b.*\b(bug|issue|error|fail|crash|broken)/i,
+    /from[ -]scratch/i,
+    /\bparser\b|\bcompiler\b|\binterpreter\b|\blexer\b|tokeni[sz]|\bgrammar\b|state machine/i,
+    /\bimplement\b|data structure|\bprotocol\b|\bencoder\b|\bdecoder\b|\bmatcher\b|\bmatching\b/i
+  ];
+  SIMPLE_ACTION_START = /^\s*(create|write|add|make|generate|scaffold|rename|move|copy|delete|remove|list|show|print|read|display|cat|format|prettif|lint|install|run|execute|append|insert|replace|set|update the|bump|commit|stage)\b/i;
 });
 
 // src/utils/url-safety.ts
@@ -16476,8 +16548,9 @@ class MCPClientManager {
       server.tools = toolsResult.tools || [];
       server.status = "connected";
       this.servers.set(config2.name, server);
-      console.log(`
-✅ MCP server "${config2.name}" connected with ${server.tools.length} tools`);
+      process.stderr.write(`
+✅ MCP server "${config2.name}" connected with ${server.tools.length} tools
+`);
     } catch (error2) {
       server.status = "error";
       server.error = error2 instanceof Error ? error2.message : String(error2);
@@ -16513,7 +16586,8 @@ class MCPClientManager {
       }
     });
     transport.onclose = () => {
-      console.log(`[${config2.name}] Process closed`);
+      process.stderr.write(`[${config2.name}] Process closed
+`);
       server.status = "disconnected";
     };
     await server.client.connect(transport);
@@ -16850,7 +16924,7 @@ const TOOLS = [
 async function chat(messages) {
   const sysMsg = messages.find(m => m.role === 'system');
   const body = {
-    model: 'MiniMax-M2.7',
+    model: ${JSON.stringify(DEFAULT_MODEL)},
     max_tokens: 4096,
     messages: messages.filter(m => m.role !== 'system'),
     tools: TOOLS,
@@ -17956,15 +18030,15 @@ function needsCompaction(messages) {
   const totalTokens = estimateTotalTokens(messages);
   const now = Date.now();
   if (lastCompactAt > 0 && now - lastCompactAt < COMPACT_COOLDOWN_MS) {
-    if (totalTokens < COMPACT_CONFIG.triggerPercent * 1e5 * 1.2) {
+    if (totalTokens < COMPACT_CONFIG.triggerPercent * CONTEXT_WINDOW_TOKENS * 1.2) {
       return false;
     }
   }
-  return totalTokens > COMPACT_CONFIG.triggerPercent * 1e5;
+  return totalTokens > COMPACT_CONFIG.triggerPercent * CONTEXT_WINDOW_TOKENS;
 }
 function getTokenBudget(messages) {
   const used = estimateTotalTokens(messages);
-  const max = 1e5;
+  const max = CONTEXT_WINDOW_TOKENS;
   return {
     used,
     max,
@@ -18163,10 +18237,11 @@ function resetCompactionState() {
   lastCompactTokens = 0;
   lastCompactAt = 0;
 }
-var COMPACT_CONFIG, lastCompactTokens = 0, lastCompactAt = 0, COMPACT_COOLDOWN_MS = 30000, fileCache, FILE_CACHE_TTL_MS = 30000;
+var CONTEXT_WINDOW_TOKENS, COMPACT_CONFIG, lastCompactTokens = 0, lastCompactAt = 0, COMPACT_COOLDOWN_MS = 30000, fileCache, FILE_CACHE_TTL_MS = 30000;
 var init_compact = __esm(() => {
   init_session_memory();
   init_feature_flags();
+  CONTEXT_WINDOW_TOKENS = parseInt(process.env.NOLE_CONTEXT_WINDOW || "200000", 10);
   COMPACT_CONFIG = {
     triggerPercent: 0.75,
     targetTokens: 40000,
@@ -18190,6 +18265,13 @@ import { promisify } from "util";
 import { readFileSync as readFileSync8, writeFileSync as writeFileSync4, existsSync as existsSync8, mkdirSync as mkdirSync4, readdirSync, statSync as statSync2 } from "fs";
 import { join as join9, relative as relative2, resolve as resolve2 } from "path";
 import { homedir as homedir8 } from "os";
+function isErrorString(s) {
+  if (!s)
+    return false;
+  const head = s.replace(/^\s+/, "").split(`
+`, 1)[0];
+  return ERROR_PREFIX_PATTERNS.some((re) => re.test(head));
+}
 async function promptPermission(toolName, input, reason) {
   if (!process.stdin.isTTY) {
     process.stderr.write(`\x1B[33m⚠ Auto-allowed (non-interactive): ${toolName}\x1B[0m
@@ -18393,7 +18475,7 @@ Dangerous patterns: ${security.dangerousPatterns?.join(", ") || "unknown"}`,
     } else {
       try {
         const content = await tool.execute(input, ctx);
-        result = { content };
+        result = { content, isError: isErrorString(content) };
       } catch (err) {
         result = { content: `Error: ${err}`, isError: true };
       }
@@ -18434,11 +18516,11 @@ Dangerous patterns: ${security.dangerousPatterns?.join(", ") || "unknown"}`,
   });
   return result;
 }
-async function runBash(command, timeout = 30000) {
+async function runBash(command, timeout = 30000, cwd = process.cwd()) {
   try {
     const { stdout, stderr } = await execAsync(command, {
       timeout,
-      cwd: process.cwd(),
+      cwd,
       shell: "/bin/bash",
       maxBuffer: 10485760
     });
@@ -18492,7 +18574,7 @@ function formatSize(bytes) {
     return `${(bytes / 1048576).toFixed(1)}M`;
   return `${(bytes / 1073741824).toFixed(1)}G`;
 }
-var execAsync, promptChain, tools, CORE_TOOLS, TOOL_KEYWORDS, TASKS_FILE;
+var execAsync, ERROR_PREFIX_PATTERNS, promptChain, tools, CORE_TOOLS, TOOL_KEYWORDS, TASKS_FILE;
 var init_registry = __esm(() => {
   init_web();
   init_client3();
@@ -18505,6 +18587,19 @@ var init_registry = __esm(() => {
   init_rules_engine();
   init_feature_flags();
   execAsync = promisify(exec);
+  ERROR_PREFIX_PATTERNS = [
+    /^Access denied:/,
+    /^File not found:/,
+    /^Permission denied:/,
+    /^Security blocked:/,
+    /^Error reading\b/,
+    /^Error writing\b/,
+    /^Error editing\b/,
+    /^Error:/,
+    /^Tool .* not found$/,
+    /^Could not find the specified text/,
+    /^Exit code [1-9]\d*/
+  ];
   promptChain = Promise.resolve();
   tools = new Map;
   CORE_TOOLS = new Set([
@@ -18551,13 +18646,7 @@ var init_registry = __esm(() => {
     },
     execute: async (input, ctx) => {
       const bashCwd = input.cwd ? resolve2(process.cwd(), input.cwd) : ctx.cwd || process.cwd();
-      const origCwd = process.cwd();
-      try {
-        process.chdir(bashCwd);
-        return await runBash(input.command, input.timeout || 30000);
-      } finally {
-        process.chdir(origCwd);
-      }
+      return await runBash(input.command, input.timeout || 30000, bashCwd);
     }
   });
   registerTool({
@@ -19802,6 +19891,7 @@ import {
 } from "fs";
 import { join as join10 } from "path";
 import { homedir as homedir9 } from "os";
+import { randomUUID as randomUUID4 } from "crypto";
 function ensureSessionDir() {
   mkdirSync5(SESSION_DIR, { recursive: true });
 }
@@ -19878,7 +19968,7 @@ function deleteSession(id) {
 }
 function createSession(cwdOrOpts) {
   const opts = typeof cwdOrOpts === "string" ? { cwd: cwdOrOpts } : cwdOrOpts || {};
-  const id = `nole-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const id = `nole-${randomUUID4()}`;
   const now = new Date().toISOString();
   const session = {
     id,
@@ -20194,8 +20284,8 @@ function loadSettings() {
     streamResponses: true,
     showTimestamps: false,
     toolPermissions: "all",
-    temperature: 0.7,
-    maxTokens: 4096,
+    temperature: 1,
+    maxTokens: 16384,
     editor: process.env.EDITOR || "vim",
     shell: process.env.SHELL || "/bin/bash"
   };
@@ -20679,6 +20769,7 @@ var PRICING, COST_FILE, costTracker, STYLES, c, SPINNER_FRAMES;
 var init_cost = __esm(() => {
   PRICING = {
     "MiniMax-Text-01": { input: 0.01, output: 0.01 },
+    "MiniMax-M3": { input: 0.6, output: 2.4 },
     "MiniMax-M2.7": { input: 0.01, output: 0.01 },
     "MiniMax-M2.5": { input: 0.005, output: 0.005 },
     default: { input: 0.01, output: 0.01 }
@@ -21362,7 +21453,7 @@ var init_spawner2 = __esm(() => {
 });
 
 // src/loop/executor.ts
-import { randomUUID as randomUUID4 } from "crypto";
+import { randomUUID as randomUUID5 } from "crypto";
 function isActualFailure(result) {
   return FAILURE_SIGNATURES.some((r) => r.test(result));
 }
@@ -21459,7 +21550,7 @@ Return a JSON array of step descriptions:
       { role: "system", content: systemPrompt },
       { role: "user", content: `Goal: ${goal}
 CWD: ${cwd}` }
-    ], { max_tokens: 1000, temperature: 0 });
+    ], { max_tokens: 4000, temperature: 0 });
     const content = result.content.trim();
     let jsonStr = content;
     if (content.includes("```json")) {
@@ -21507,7 +21598,7 @@ Context:
 ${stepContext}
 
 What tools should I use to complete this step? Respond with specific tool calls.` }
-    ], { tools: toolDefs, max_tokens: 2000, temperature: 0 });
+    ], { tools: toolDefs, max_tokens: 4000, temperature: 0 });
     if (result.toolCalls && result.toolCalls.length > 0) {
       for (const tc of result.toolCalls) {
         if (options.verbose) {
@@ -21531,7 +21622,7 @@ What tools should I use to complete this step? Respond with specific tool calls.
             shouldContinue2 = false;
             break;
           }
-          const callId = tc.id || `call_${randomUUID4()}`;
+          const callId = tc.id || `call_${randomUUID5()}`;
           sessionMessages.push({
             role: "assistant",
             content: `Used ${tc.name} to ${tc.input.description || tc.input.command || "execute task"}`,
@@ -21598,8 +21689,9 @@ ${c2.cyan("◉")} ${bold("Starting autonomous loop")}`);
   }
   const settings = loadSettings();
   const { getMiniMaxToken } = await Promise.resolve().then(() => (init_src(), exports_src));
+  const { DEFAULT_MODEL: DEFAULT_MODEL2 } = await Promise.resolve().then(() => (init_env(), exports_env));
   const token = getMiniMaxToken();
-  const client = new LLMClient(token, settings.model || "MiniMax-M2.7");
+  const client = new LLMClient(token, settings.model || DEFAULT_MODEL2);
   const sessionMessages = [];
   if (checkpoint.state === "pending" || checkpoint.steps.length === 0) {
     console.log(`
@@ -28571,6 +28663,7 @@ Recent failures (${failures.length}):
         const { loadSession: load, saveSession: save } = await Promise.resolve().then(() => (init_manager(), exports_manager));
         const { LLMClient: LLMClient2 } = await Promise.resolve().then(() => (init_llm(), exports_llm));
         const { getMiniMaxToken: getMiniMaxToken2 } = await Promise.resolve().then(() => (init_src(), exports_src));
+        const { DEFAULT_MODEL: DEFAULT_MODEL2 } = await Promise.resolve().then(() => (init_env(), exports_env));
         const { getToolDefinitions: getToolDefinitions2, executeTool: executeTool2 } = await Promise.resolve().then(() => (init_registry(), exports_registry));
         const { loadSettings: loadSettings2 } = await Promise.resolve().then(() => (init_onboarding(), exports_onboarding));
         const session = load(ctx.sessionId);
@@ -28580,8 +28673,8 @@ Recent failures (${failures.length}):
         const token = getMiniMaxToken2();
         if (!token)
           return "No API key configured";
-        const client = new LLMClient2(token, settings.model || "MiniMax-M2.7");
-        client.setModel(settings.model || "MiniMax-M2.7");
+        const client = new LLMClient2(token, settings.model || DEFAULT_MODEL2);
+        client.setModel(settings.model || DEFAULT_MODEL2);
         session.messages.push({
           role: "user",
           content: lastFailedCommand,
@@ -29225,7 +29318,7 @@ Restart nole to use it, or /fork to keep the current one.`;
       if (args.length === 0) {
         return `Current Settings:
 
-  model:        ${current.model || "MiniMax-M2.7"}
+  model:        ${current.model || DEFAULT_MODEL}
   temperature:  ${current.temperature ?? 0.7}
   maxTokens:    ${current.maxTokens ?? 4096}
   maxTurns:     ${current.maxTurns ?? 50}
@@ -29322,7 +29415,7 @@ Usage: /settings <key> <value>`;
             return "?";
           }
         })();
-        return `Current model: ${s.model || "MiniMax-M2.7"} (${provider})
+        return `Current model: ${s.model || DEFAULT_MODEL} (${provider})
 
 Usage: /model <name>
 
@@ -29331,7 +29424,7 @@ Examples:
   /model anthropic/claude-sonnet-4  (OpenRouter)
   /model meta-llama/llama-4-scout   (OpenRouter)
   /model gpt-4o-mini                (OpenAI)
-  /model MiniMax-M2.7               (MiniMax)
+  /model MiniMax-M3                 (MiniMax)
 
 Provider auto-detected from model name.`;
       }
@@ -29460,7 +29553,7 @@ ${files.map((f) => "  " + f).join(`
       return `Session Context:
 
   Session:   ${session.id}
-  Model:     ${settings.model || "MiniMax-M2.7"}
+  Model:     ${settings.model || DEFAULT_MODEL}
   CWD:       ${session.cwd || ctx.cwd}${git2}
   Messages:  ${session.messages.length} (${userMsgs} user, ${assistantMsgs} assistant, ${toolMsgs} tool)
   Tokens:    [${bar}] ~${tokens}/${maxTokens} (${percent}%)
@@ -30232,7 +30325,7 @@ async function summarizeMessages(messages, client, keepRecent = 10) {
 ${transcript.slice(0, 8000)}`
       }
     ], {
-      max_tokens: 300,
+      max_tokens: 2000,
       temperature: 0
     });
     const summary = result.content.trim();
@@ -30386,7 +30479,8 @@ function expandAlias(input) {
   return input;
 }
 async function runRepl(opts) {
-  if (opts.verbose || feature("VERBOSE_OUTPUT")) {
+  const headless = !!opts.message;
+  if ((opts.verbose || feature("VERBOSE_OUTPUT")) && !headless) {
     setFeature("VERBOSE_OUTPUT", true);
     setVerbose(true);
     setShowTimings(feature("TOOL_TIMING"));
@@ -30431,7 +30525,7 @@ Then run ${bold("nole")} again.
   }
   const { OPENROUTER_API_KEY: OPENROUTER_API_KEY2, OPENAI_API_KEY: OPENAI_API_KEY2, MINIMAX_API_KEY: minimaxKey } = await Promise.resolve().then(() => (init_env(), exports_env));
   let primaryKey = token || minimaxKey;
-  let primaryModel = settings.model || "MiniMax-M2.7";
+  let primaryModel = settings.model || DEFAULT_MODEL;
   if (!primaryKey && OPENROUTER_API_KEY2) {
     primaryKey = OPENROUTER_API_KEY2;
     primaryModel = settings.model || "google/gemini-2.5-flash";
@@ -30462,9 +30556,11 @@ Then run ${bold("nole")} again.
     const lastForCwd = recent.find((s) => s.cwd === cwd2 && s.messages.length > 1);
     if (lastForCwd) {
       session = lastForCwd;
-      console.log(dim(`  Resuming session ${session.id.slice(0, 20)}... (${session.messages.length} messages)`));
-      console.log(dim(`  Use /fork to branch off, /compact to shrink context
+      if (!headless) {
+        console.log(dim(`  Resuming session ${session.id.slice(0, 20)}... (${session.messages.length} messages)`));
+        console.log(dim(`  Use /fork to branch off, /compact to shrink context
 `));
+      }
     } else {
       session = createSession(cwd2);
     }
@@ -30477,7 +30573,8 @@ Then run ${bold("nole")} again.
     const index = indexProject2(cwd2);
     if (index.fileCount > 0) {
       projectIndex = formatIndexForPrompt2(index);
-      console.log(dim(`  Indexed ${index.fileCount} files (${Object.keys(index.languages).join(", ")})`));
+      if (!headless)
+        console.log(dim(`  Indexed ${index.fileCount} files (${Object.keys(index.languages).join(", ")})`));
     }
   } catch {}
   const { getMemorySummary: getMemorySummary2 } = await Promise.resolve().then(() => (init_session_memory(), exports_session_memory));
@@ -30614,14 +30711,16 @@ ${memorySummary}` : ""}${resumeContext}`;
     }
   }
   saveSession(session);
-  console.clear();
   const providerName = client.getActiveProviderName();
-  console.log(getBanner(opts.cwd || process.cwd(), opts.verbose));
+  if (!headless) {
+    console.clear();
+    console.log(getBanner(opts.cwd || process.cwd(), opts.verbose));
+  }
   if (opts.verbose) {
     printContextHeader({
       sessionId: session.id,
       cwd: opts.cwd || process.cwd(),
-      model: "MiniMax-M2.7"
+      model: DEFAULT_MODEL
     });
   }
   const completer = (line) => {
@@ -30873,7 +30972,8 @@ ${truncated}
         }
       }
     }
-    console.log(`${c2.blue("➜ you")} │ ${expandedInput}`);
+    if (!headless)
+      console.log(`${c2.blue("➜ you")} │ ${expandedInput}`);
     session.messages.push({
       role: "user",
       content: expandedInput,
@@ -30882,14 +30982,22 @@ ${truncated}
     const toolDefs = getToolDefinitions(expandedInput);
     let responseText = "";
     let toolCalls = [];
-    console.log(`
+    if (!headless) {
+      console.log(`
 ${divider()}
 `);
-    console.log(`${c2.magenta("\uD83E\uDD16 nole")} │ `);
+      console.log(`${c2.magenta("\uD83E\uDD16 nole")} │ `);
+    }
     const startTime = Date.now();
     try {
       const MAX_TURNS = parseInt(process.env.NOLE_MAX_TURNS || "") || settings.maxTurns || 50;
       let turn = 0;
+      let effectiveMaxTokens = settings.maxTokens || DEFAULT_MAX_TOKENS;
+      let truncationBumps = 0;
+      const MAX_TRUNCATION_BUMPS = 2;
+      const TRUNCATION_BUDGET_CAP = 120000;
+      const thinkingMode = getThinkingMode();
+      let errorLatched = false;
       while (turn < MAX_TURNS) {
         let flushXmlBuffer = function() {
           if (xmlBuffer) {
@@ -30937,6 +31045,7 @@ ${divider()}
         const isTTY = !!process.stdout.isTTY;
         let spinnerInterval = null;
         let hasOutput = false;
+        let thinkingTail = "";
         const SPINNER_CHARS = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
         const VERBS = [
           "Thinking",
@@ -30977,7 +31086,8 @@ ${divider()}
             const verb = VERBS[currentVerbIdx];
             const elapsed2 = ((Date.now() - spinnerStartTime) / 1000).toFixed(0);
             try {
-              process.stdout.write(`\r${pink}${frame}${resetAnsi} ${pink}${verb}...${resetAnsi} ${dim(`(${elapsed2}s)`)}  `);
+              const status = thinkingTail ? dim(thinkingTail) : `${pink}${verb}...${resetAnsi}`;
+              process.stdout.write(`\r\x1B[K${pink}${frame}${resetAnsi} ${status} ${dim(`(${elapsed2}s)`)}`);
             } catch {}
             spinFrame++;
           }
@@ -30985,6 +31095,11 @@ ${divider()}
         const mdStream = createStreamingMarkdown();
         let xmlBuffer = "";
         let xmlBufferTimer = null;
+        const thinkingDecision = resolveThinking(thinkingMode, expandedInput, errorLatched);
+        if (process.env.NOLE_DEBUG) {
+          process.stderr.write(`[thinking] turn ${turn}: ${thinkingDecision.disable ? "OFF" : "ON"} — ${thinkingDecision.reason}
+`);
+        }
         const usage = await client.chatStream(session.messages.map((m) => {
           const msg = { role: m.role, content: m.content };
           if (m.tool_call_id)
@@ -30994,7 +31109,7 @@ ${divider()}
           if (m.tool_calls)
             msg.tool_calls = m.tool_calls;
           return msg;
-        }), { tools: toolDefs, max_tokens: settings.maxTokens || 4096 }, (chunk) => {
+        }), { tools: toolDefs, max_tokens: effectiveMaxTokens, disableThinking: thinkingDecision.disable }, (chunk) => {
           if (!hasOutput && spinnerInterval) {
             clearInterval(spinnerInterval);
             spinnerInterval = null;
@@ -31020,6 +31135,8 @@ ${divider()}
           }
         }, (tc) => {
           toolCalls.push({ id: tc.id || `tool_${Date.now()}`, name: tc.name, input: tc.input });
+        }, (t) => {
+          thinkingTail = (thinkingTail + t.replace(/\s+/g, " ")).slice(-80);
         });
         if (spinnerInterval) {
           clearInterval(spinnerInterval);
@@ -31057,6 +31174,17 @@ ${divider()}
             responseText = responseText.replace(/<invoke[\s\S]*?<\/invoke>/g, "").replace(/<\/?minimax:tool_call>/g, "").trim();
           }
         }
+        const truncatedEmpty = usage?.stopReason === "max_tokens" && toolCalls.length === 0 && responseText.trim() === "";
+        if (truncatedEmpty) {
+          if (truncationBumps < MAX_TRUNCATION_BUMPS) {
+            truncationBumps++;
+            effectiveMaxTokens = Math.min(effectiveMaxTokens * 2, TRUNCATION_BUDGET_CAP);
+            console.log(dim(`  Model hit the ${usage?.output ?? "?"}-token ceiling while reasoning before producing output. Retrying with a larger budget (${effectiveMaxTokens} tokens)...`));
+            continue;
+          }
+          console.error(c2.red("Error: the model exhausted its token budget while reasoning and produced no output, even after raising the budget. Try a more focused request or raise NOLE_MAX_TOKENS."));
+          break;
+        }
         const assistantMsg = {
           role: "assistant",
           content: responseText,
@@ -31072,7 +31200,7 @@ ${divider()}
         session.messages.push(assistantMsg);
         lastOutput = responseText;
         if (usage) {
-          costTracker.trackRequest(settings.model || "MiniMax-M2.7", usage.input, usage.output);
+          costTracker.trackRequest(settings.model || DEFAULT_MODEL, usage.input, usage.output);
         }
         if (toolCalls.length === 0)
           break;
@@ -31138,8 +31266,10 @@ ${divider()}
               maxLines
             }));
           } else {
-            if (result.isError)
+            if (result.isError) {
               toolErrorCount++;
+              errorLatched = true;
+            }
             await streamOutput(displayLines, maxLines, displayLines.length > 20 ? 5 : 0);
           }
           const status = result.isError ? "❌" : "✅";
@@ -31164,7 +31294,8 @@ ${c2.yellow("⚠")} Reached maximum ${MAX_TURNS} turns in agentic loop.
       const warning = pct > 80 ? " ⚠ context filling up" : "";
       const provider = client.getActiveProviderName();
       const providerTag = provider !== "minimax" ? ` · ${provider}` : "";
-      console.log(dim(`${elapsed}s · ~${totalTokens} tokens (${pct}%)${turnInfo}${toolInfo}${providerTag}${warning}`));
+      if (!headless)
+        console.log(dim(`${elapsed}s · ~${totalTokens} tokens (${pct}%)${turnInfo}${toolInfo}${providerTag}${warning}`));
       saveSession(session);
       const { extractMemoryFromConversation: extractMemoryFromConversation2 } = await Promise.resolve().then(() => (init_session_memory(), exports_session_memory));
       extractMemoryFromConversation2(session.messages, session.id).catch(() => {});
@@ -31224,6 +31355,9 @@ function parseArgs() {
         opts.message = args.slice(i + 1).join(" ");
         i = args.length;
         break;
+      case "--fast":
+        process.env.NOLE_THINKING = "auto";
+        break;
       case "--verbose":
       case "-v":
         opts.verbose = true;
@@ -31261,6 +31395,7 @@ ${dim("Options:")}
   -s, --session <id>    Resume a session
   -c, --cwd <path>       Working directory (default: cwd)
   -m, --message <text>   Run single message and exit
+  --fast                 Auto-skip M3's thinking on mechanical turns (put before -m)
   --verbose              Verbose output with timings
   --list-sessions        List all sessions
   --delete-session <id>  Delete a session
@@ -31301,6 +31436,7 @@ async function main() {
 var cancelRequested = false, isProcessing = false, lastUserMessage = "", lastOutput = "", activeClient = null, PLAN_INTENT_PATTERNS, HISTORY_FILE, MAX_HISTORY = 1000, ALIAS_FILE2;
 var init_src = __esm(() => {
   init_llm();
+  init_thinking_policy();
   init_registry();
   init_client3();
   init_commands2();
@@ -31315,6 +31451,7 @@ var init_src = __esm(() => {
   init_spinner();
   init_streaming();
   init_markdown();
+  init_env();
   _loadEnv(join28(homedir22(), "nole-code", ".env"));
   _loadEnv(join28(homedir22(), ".nole-code", ".env"));
   _loadEnv(join28(process.cwd(), ".env"));

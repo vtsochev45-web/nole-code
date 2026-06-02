@@ -5,7 +5,8 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join, resolve, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import * as readline from 'readline'
-import { LLMClient } from './api/llm.js'
+import { LLMClient, DEFAULT_MAX_TOKENS } from './api/llm.js'
+import { getThinkingMode, resolveThinking } from './utils/thinking-policy.js'
 import { getToolDefinitions, executeTool } from './tools/registry.js'
 import { loadMCPServers } from './mcp/client.js'
 import { parseCommand, getCommand } from './commands/index.js'
@@ -59,6 +60,7 @@ import {
   formatSummary, formatShortcuts, formatTopBar, formatCancelled
 } from './ui/output/streaming.js'
 import { renderMarkdown, createStreamingMarkdown } from './ui/markdown.js'
+import { DEFAULT_MODEL } from './utils/env.js'
 
 // Cancel flag — Ctrl+C during LLM call cancels the current request, not the process
 let cancelRequested = false
@@ -243,8 +245,12 @@ interface CliOptions {
 }
 
 async function runRepl(opts: CliOptions) {
+  // Headless / single-message mode (`-m`): suppress all interactive chrome
+  // (banner, screen-clear, project-index line, turn dividers, "you/nole"
+  // prefixes) so stdout carries only the model's answer — usable when piped.
+  const headless = !!opts.message
   // Initialize verbose output system
-  if (opts.verbose || feature('VERBOSE_OUTPUT')) {
+  if ((opts.verbose || feature('VERBOSE_OUTPUT')) && !headless) {
     setFeature('VERBOSE_OUTPUT', true)
     setVerbose(true)
     setShowTimings(feature('TOOL_TIMING'))
@@ -298,7 +304,7 @@ Then run ${bold('nole')} again.
   // Determine which API key to use — priority: MiniMax (OAuth or API key) > OpenRouter > OpenAI
   const { OPENROUTER_API_KEY, OPENAI_API_KEY, MINIMAX_API_KEY: minimaxKey } = await import('./utils/env.js')
   let primaryKey = token || minimaxKey
-  let primaryModel = settings.model || 'MiniMax-M2.7'
+  let primaryModel = settings.model || DEFAULT_MODEL
 
   // If no MiniMax, try OpenRouter
   if (!primaryKey && OPENROUTER_API_KEY) {
@@ -341,8 +347,10 @@ Then run ${bold('nole')} again.
     const lastForCwd = recent.find(s => s.cwd === cwd && s.messages.length > 1)
     if (lastForCwd) {
       session = lastForCwd
-      console.log(dim(`  Resuming session ${session.id.slice(0, 20)}... (${session.messages.length} messages)`))
-      console.log(dim(`  Use /fork to branch off, /compact to shrink context\n`))
+      if (!headless) {
+        console.log(dim(`  Resuming session ${session.id.slice(0, 20)}... (${session.messages.length} messages)`))
+        console.log(dim(`  Use /fork to branch off, /compact to shrink context\n`))
+      }
     } else {
       session = createSession(cwd)
     }
@@ -360,7 +368,7 @@ Then run ${bold('nole')} again.
     const index = indexProject(cwd)
     if (index.fileCount > 0) {
       projectIndex = formatIndexForPrompt(index)
-      console.log(dim(`  Indexed ${index.fileCount} files (${Object.keys(index.languages).join(', ')})`))
+      if (!headless) console.log(dim(`  Indexed ${index.fileCount} files (${Object.keys(index.languages).join(', ')})`))
     }
   } catch {}
 
@@ -496,16 +504,18 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
 
   saveSession(session)
 
-  console.clear()
   const providerName = client.getActiveProviderName()
-  console.log(getBanner(opts.cwd || process.cwd(), opts.verbose))
+  if (!headless) {
+    console.clear()
+    console.log(getBanner(opts.cwd || process.cwd(), opts.verbose))
+  }
 
   // Print verbose context
   if (opts.verbose) {
     printContextHeader({
       sessionId: session.id,
       cwd: opts.cwd || process.cwd(),
-      model: 'MiniMax-M2.7',
+      model: DEFAULT_MODEL,
     })
   }
 
@@ -786,7 +796,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
       }
     }
 
-    console.log(`${c.blue('➜ you')} │ ${expandedInput}`)
+    if (!headless) console.log(`${c.blue('➜ you')} │ ${expandedInput}`)
 
     session!.messages.push({
       role: 'user',
@@ -799,8 +809,10 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
     let toolCalls: Array<{ id?: string; name: string; input: Record<string, unknown> }> = []
 
     // Stream response
-    console.log(`\n${divider()}\n`)
-    console.log(`${c.magenta('🤖 nole')} │ `)
+    if (!headless) {
+      console.log(`\n${divider()}\n`)
+      console.log(`${c.magenta('🤖 nole')} │ `)
+    }
 
     const startTime = Date.now()
 
@@ -809,6 +821,22 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
       // Keep calling the LLM until it stops requesting tools
       const MAX_TURNS = parseInt(process.env.NOLE_MAX_TURNS || '') || settings.maxTurns || 50
       let turn = 0
+
+      // M3 thinks within the same output budget as its answer. On a hard turn the
+      // thinking can exhaust max_tokens before any answer/tool_use is emitted
+      // (stop_reason: max_tokens, empty content). We detect that and retry the
+      // turn with a progressively larger budget rather than treating the empty
+      // response as completion. effectiveMaxTokens only ever ratchets up.
+      let effectiveMaxTokens = settings.maxTokens || DEFAULT_MAX_TOKENS
+      let truncationBumps = 0
+      const MAX_TRUNCATION_BUMPS = 2
+      const TRUNCATION_BUDGET_CAP = 120000
+
+      // Thinking policy: in 'auto' mode (--fast) skip M3's reasoning pass on
+      // mechanical tasks, keep it for reasoning-heavy ones. Once a tool errors
+      // this run, errorLatched flips on so recovery turns get reasoning back.
+      const thinkingMode = getThinkingMode()
+      let errorLatched = false
 
       while (turn < MAX_TURNS) {
         turn++
@@ -855,6 +883,9 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
         const isTTY = !!process.stdout.isTTY
         let spinnerInterval: ReturnType<typeof setInterval> | null = null
         let hasOutput = false
+        // Last line of M3's streamed reasoning, shown dimmed in the spinner until
+        // the real answer starts (which clears the spinner line). Never hits stdout.
+        let thinkingTail = ''
         const SPINNER_CHARS = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
         const VERBS = [
           'Thinking', 'Reasoning', 'Analyzing',
@@ -882,7 +913,9 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
             const verb = VERBS[currentVerbIdx]
             const elapsed = ((Date.now() - spinnerStartTime) / 1000).toFixed(0)
             try {
-              process.stdout.write(`\r${pink}${frame}${resetAnsi} ${pink}${verb}...${resetAnsi} ${dim(`(${elapsed}s)`)}  `)
+              const status = thinkingTail ? dim(thinkingTail) : `${pink}${verb}...${resetAnsi}`
+              // \x1b[K clears to end of line — needed because the thinking tail varies in length.
+              process.stdout.write(`\r\x1b[K${pink}${frame}${resetAnsi} ${status} ${dim(`(${elapsed}s)`)}`)
             } catch {}
             spinFrame++
           }
@@ -905,6 +938,11 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
           }
         }
 
+        const thinkingDecision = resolveThinking(thinkingMode, expandedInput, errorLatched)
+        if (process.env.NOLE_DEBUG) {
+          process.stderr.write(`[thinking] turn ${turn}: ${thinkingDecision.disable ? 'OFF' : 'ON'} — ${thinkingDecision.reason}\n`)
+        }
+
         const usage = await client.chatStream(
           session!.messages.map(m => {
             const msg: any = { role: m.role, content: m.content }
@@ -913,7 +951,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
             if ((m as any).tool_calls) msg.tool_calls = (m as any).tool_calls
             return msg
           }),
-          { tools: toolDefs, max_tokens: settings.maxTokens || 4096 },
+          { tools: toolDefs, max_tokens: effectiveMaxTokens, disableThinking: thinkingDecision.disable },
           (chunk) => {
             if (!hasOutput && spinnerInterval) {
               clearInterval(spinnerInterval)
@@ -950,6 +988,10 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
           },
           (tc) => {
             toolCalls.push({ id: tc.id || `tool_${Date.now()}`, name: tc.name, input: tc.input })
+          },
+          (t) => {
+            // M3 reasoning preview — collapse to one line and keep the tail.
+            thinkingTail = (thinkingTail + t.replace(/\s+/g, ' ')).slice(-80)
           },
         )
 
@@ -1002,6 +1044,27 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
           }
         }
 
+        // Truncated-mid-reasoning guard: M3 ended at the token ceiling
+        // (stop_reason: max_tokens) having produced only thinking — no answer
+        // text, no tool call. This is NOT task completion; without this guard the
+        // empty response is saved and the "no tool calls" break below exits the
+        // loop silently as if done. Retry the turn with a larger budget; give up
+        // with a clear error if it persists.
+        const truncatedEmpty =
+          usage?.stopReason === 'max_tokens' &&
+          toolCalls.length === 0 &&
+          responseText.trim() === ''
+        if (truncatedEmpty) {
+          if (truncationBumps < MAX_TRUNCATION_BUMPS) {
+            truncationBumps++
+            effectiveMaxTokens = Math.min(effectiveMaxTokens * 2, TRUNCATION_BUDGET_CAP)
+            console.log(dim(`  Model hit the ${usage?.output ?? '?'}-token ceiling while reasoning before producing output. Retrying with a larger budget (${effectiveMaxTokens} tokens)...`))
+            continue
+          }
+          console.error(c.red('Error: the model exhausted its token budget while reasoning and produced no output, even after raising the budget. Try a more focused request or raise NOLE_MAX_TOKENS.'))
+          break
+        }
+
         // Save assistant response with tool_calls if present
         const assistantMsg: any = {
           role: 'assistant',
@@ -1022,7 +1085,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
 
         // Track API usage
         if (usage) {
-          costTracker.trackRequest(settings.model || 'MiniMax-M2.7', usage.input, usage.output)
+          costTracker.trackRequest(settings.model || DEFAULT_MODEL, usage.input, usage.output)
         }
 
         // No tool calls — LLM is done, exit loop
@@ -1097,7 +1160,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
               maxLines,
             }))
           } else {
-            if (result.isError) toolErrorCount++
+            if (result.isError) { toolErrorCount++; errorLatched = true } // recovery needs reasoning (auto mode)
             // Await so concurrent tool outputs don't interleave line-by-line.
             // The for-loop serialises display; streamOutput's per-line delays
             // would otherwise interleave with the next iteration's writes.
@@ -1127,7 +1190,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
       const warning = pct > 80 ? ' ⚠ context filling up' : ''
       const provider = client.getActiveProviderName()
       const providerTag = provider !== 'minimax' ? ` · ${provider}` : ''
-      console.log(dim(`${elapsed}s · ~${totalTokens} tokens (${pct}%)${turnInfo}${toolInfo}${providerTag}${warning}`))
+      if (!headless) console.log(dim(`${elapsed}s · ~${totalTokens} tokens (${pct}%)${turnInfo}${toolInfo}${providerTag}${warning}`))
 
       saveSession(session!)
 
@@ -1202,6 +1265,11 @@ function parseArgs(): CliOptions {
         opts.message = args.slice(i + 1).join(' ')
         i = args.length
         break
+      case '--fast':
+        // Auto thinking-policy: skip M3's reasoning pass on mechanical turns,
+        // keep it for reasoning-heavy tasks and error recovery. Place before -m.
+        process.env.NOLE_THINKING = 'auto'
+        break
       case '--verbose':
       case '-v':
         opts.verbose = true
@@ -1238,6 +1306,7 @@ ${dim('Options:')}
   -s, --session <id>    Resume a session
   -c, --cwd <path>       Working directory (default: cwd)
   -m, --message <text>   Run single message and exit
+  --fast                 Auto-skip M3's thinking on mechanical turns (put before -m)
   --verbose              Verbose output with timings
   --list-sessions        List all sessions
   --delete-session <id>  Delete a session
