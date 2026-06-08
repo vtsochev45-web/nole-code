@@ -178,9 +178,13 @@ export function spawnLoop(goal: string, cwd?: string): string {
       if (event) {
         displayProgress(event)
         
-        // Update checkpoint ID when saved
+        // Update checkpoint ID when saved. The child-emitted id flows into both
+        // loadCheckpoint() (a path-join sink) and a git commit message, so only
+        // accept it if it matches the known checkpoint-id format produced by
+        // createCheckpoint(`loop-<ts>-<rand>`). Anything else is treated as
+        // untrusted and ignored, keeping the trusted locally-generated id.
         if (event.type === 'checkpoint_saved') {
-          if (activeLoop) {
+          if (activeLoop && /^loop-[0-9]+-[a-z0-9]+$/.test(event.checkpointId)) {
             activeLoop.checkpointId = event.checkpointId
           }
         }
@@ -354,15 +358,19 @@ async function notifyComplete(checkpointId: string, success: boolean, errors: nu
   let commitHash = ''
   if (success) {
     try {
-      const { execSync } = require('child_process')
+      const { execSync, execFileSync } = require('child_process')
       const cwd = cp.context?.cwd || process.cwd()
-      
+
       // Check for changes
       const status = execSync('git status --short', { encoding: 'utf-8', cwd }).trim()
       if (status) {
         execSync('git add -A', { cwd })
+        // checkpointId is the locally-generated id (see startLoop) and is no
+        // longer overwritten by child-emitted values, but use execFileSync with
+        // an arg array regardless so the commit message can never be a shell
+        // injection vector.
         const commitMsg = `feat: complete loop ${checkpointId}`
-        commitHash = execSync(`git commit -m "${commitMsg}"`, { encoding: 'utf-8', cwd }).trim()
+        commitHash = execFileSync('git', ['commit', '-m', commitMsg], { encoding: 'utf-8', cwd }).trim()
         
         // Get the actual commit hash
         const hashResult = execSync('git rev-parse HEAD', { encoding: 'utf-8', cwd }).trim()

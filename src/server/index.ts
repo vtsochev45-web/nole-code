@@ -2,6 +2,7 @@
 // HTTP/WebSocket API server using Bun
 
 import { handleApiRequest, setServer, addWsClient, removeWsClient, broadcastTaskEvent } from './api.js'
+import { assertServerAuthConfigured } from './auth.js'
 import { existsSync, writeFileSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
@@ -71,8 +72,11 @@ function isPortInUse(port: number): boolean {
 
 // Start the server
 async function startServer(): Promise<string> {
+  // Fail closed: refuse to start the authenticated server without an API_KEY.
+  assertServerAuthConfigured()
+
   const port = getPort()
-  
+
   // Check if already running
   const existingPid = readPidFile()
   if (existingPid) {

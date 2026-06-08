@@ -2,7 +2,7 @@
 // All tools registered here for LLM use
 // Adapted from Nole Code's tool architecture
 
-import { exec } from 'child_process'
+import { exec, execFile } from 'child_process'
 import { promisify } from 'util'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'fs'
 import { join, relative, resolve } from 'path'
@@ -20,6 +20,63 @@ import { feature } from '../feature-flags/index.js'
 import type { ToolDefinition } from '../api/llm.js'
 
 const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
+
+// Run a binary with an explicit argument array (no shell). Mirrors runBash's
+// output/error formatting so callers that switch off shell-string interpolation
+// keep producing the same output for legitimate inputs.
+async function runExecFile(
+  file: string,
+  args: string[],
+  timeout = 30000,
+  cwd: string = process.cwd(),
+): Promise<string> {
+  try {
+    const { stdout, stderr } = await execFileAsync(file, args, {
+      timeout,
+      cwd,
+      maxBuffer: 10 * 1024 * 1024,
+    })
+    let out = stdout
+    if (stderr) {
+      const stderrClean = stderr.trim()
+      if (stderrClean) out += `\n${stderrClean}`
+    }
+    return out || '(no output)'
+  } catch (e: unknown) {
+    const err = e as { code?: number; message?: string; stdout?: string; stderr?: string; killed?: boolean }
+    const parts: string[] = []
+    if (err.killed) parts.push('Command timed out')
+    else if (err.code) parts.push(`Exit code ${err.code}`)
+    if (err.stdout) parts.push(err.stdout)
+    if (err.stderr) parts.push(err.stderr)
+    if (parts.length === 0) parts.push(err.message || 'Unknown error')
+    return parts.join('\n')
+  }
+}
+
+// Like runExecFile but returns stdout only and never throws, mirroring a
+// `cmd ... 2>/dev/null` shell idiom (stderr/permission noise suppressed).
+async function runExecFileStdout(
+  file: string,
+  args: string[],
+  timeout = 30000,
+  cwd: string = process.cwd(),
+): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync(file, args, {
+      timeout,
+      cwd,
+      maxBuffer: 10 * 1024 * 1024,
+    })
+    return stdout
+  } catch (e: unknown) {
+    // Non-zero exit (e.g. find hit unreadable dirs, diff found differences):
+    // return whatever stdout was captured, like 2>/dev/null would.
+    const err = e as { stdout?: string }
+    return err.stdout || ''
+  }
+}
 
 // Tools historically signal failure by returning a bare error-message string.
 // The wrapper at executeTool() then flagged those as success and the UI
@@ -648,14 +705,16 @@ registerTool({
     const searchDir = dirParts.length > 0 ? join(cwd, ...dirParts) : cwd
     const isRecursive = pattern.includes('**')
 
-    let cmd: string
-    if (isRecursive) {
-      cmd = `find "${searchDir}" -type f -name "${filePattern}" 2>/dev/null | head -100`
-    } else {
-      cmd = `find "${searchDir}" -maxdepth 1 -type f -name "${filePattern}" 2>/dev/null | head -100`
-    }
+    const findArgs = isRecursive
+      ? [searchDir, '-type', 'f', '-name', filePattern]
+      : [searchDir, '-maxdepth', '1', '-type', 'f', '-name', filePattern]
 
-    return runBash(cmd)
+    // No shell: searchDir/filePattern pass as argv elements, not interpolated.
+    // find writes permission errors to stderr; the previous `2>/dev/null`
+    // suppressed those, so take stdout only and cap at 100 lines in JS.
+    const out = await runExecFileStdout('find', findArgs)
+    const lines = out.split('\n').filter(Boolean).slice(0, 100)
+    return lines.length > 0 ? lines.join('\n') : '(no output)'
   },
 })
 
@@ -1374,11 +1433,16 @@ registerTool({
     const fileGlob = (input.glob as string) || '*'
     const dryRun = input.dry_run !== false // default to dry run
 
-    // Find matching files
-    const result = await runBash(
-      `find "${searchDir}" -type f -name "${fileGlob}" ! -path "*/node_modules/*" ! -path "*/.git/*" 2>/dev/null | head -50`
-    )
-    const files = result.trim().split('\n').filter(Boolean)
+    // No shell: searchDir/fileGlob pass as argv elements, not interpolated.
+    // Suppress find's stderr (matching the old 2>/dev/null) and cap at 50.
+    const result = await runExecFileStdout('find', [
+      searchDir,
+      '-type', 'f',
+      '-name', fileGlob,
+      '!', '-path', '*/node_modules/*',
+      '!', '-path', '*/.git/*',
+    ])
+    const files = result.trim().split('\n').filter(Boolean).slice(0, 50)
 
     const changes: string[] = []
     let totalMatches = 0
@@ -1510,13 +1574,23 @@ registerTool({
     required: [],
   },
   execute: async (input, _ctx) => {
-    const parts = ['git', 'diff']
-    if (input.staged) parts.push('--cached')
-    if (input.stat) parts.push('--stat')
-    if (input.ref) parts.push(String(input.ref))
-    if (input.file) parts.push('--', String(input.file))
+    // No shell: build an argv array. ref/file pass as discrete args, never
+    // interpolated into a command string.
+    const args = ['diff']
+    if (input.staged) args.push('--cached')
+    if (input.stat) args.push('--stat')
+    if (input.ref) {
+      const ref = String(input.ref)
+      // git refspecs only need this safe set; reject anything that could be a
+      // shell metacharacter or option-injection vector.
+      if (!/^[A-Za-z0-9_.~^:/\-]+$/.test(ref)) {
+        return `Invalid ref: ${ref}`
+      }
+      args.push(ref)
+    }
+    if (input.file) args.push('--', String(input.file))
 
-    const result = await runBash(parts.join(' ') + ' 2>/dev/null')
+    const result = await runExecFileStdout('git', args)
     return result.trim() || 'No differences'
   },
 })
@@ -1567,6 +1641,14 @@ registerTool({
     if (input.file) cmd += ` ${input.file}`
     if (input.filter) cmd += ` --filter "${input.filter}"`
 
+    // The test command is a full shell string (npm/npx/cargo/etc.), so it needs
+    // a shell — but input.file/input.filter are interpolated in, so gate the
+    // assembled command through the same security check that guards Bash.
+    const security = checkCommandSecurity(cmd)
+    if (!security.allowed && security.risk === 'critical') {
+      return `Blocked: ${security.reason}\nDangerous patterns: ${security.dangerousPatterns?.join(', ') || 'unknown'}`
+    }
+
     return runBash(cmd, 120000) // 2 minute timeout for tests
   },
 })
@@ -1586,6 +1668,13 @@ registerTool({
     const { spawn: spawnProc } = require('child_process')
     const command = input.command as string
     const name = (input.name as string) || command.split(' ')[0]
+
+    // Spawn runs an arbitrary background command via a shell, so it must pass
+    // the same critical-risk gate as the Bash tool before execution.
+    const security = checkCommandSecurity(command)
+    if (!security.allowed && security.risk === 'critical') {
+      return `Blocked: ${security.reason}\nDangerous patterns: ${security.dangerousPatterns?.join(', ') || 'unknown'}`
+    }
 
     const proc = spawnProc('/bin/bash', ['-c', command], {
       cwd: process.cwd(),
@@ -1636,7 +1725,9 @@ registerTool({
     if (!existsSync(f1)) return `File not found: ${f1}`
     if (!existsSync(f2)) return `File not found: ${f2}`
 
-    const result = await runBash(`diff --color=never -u "${f1}" "${f2}" 2>/dev/null`)
+    // No shell: f1/f2 pass as argv elements. diff exits 1 when files differ,
+    // which runExecFileStdout treats as normal (returns captured stdout).
+    const result = await runExecFileStdout('diff', ['--color=never', '-u', f1, f2])
     if (!result.trim()) return 'Files are identical'
 
     // Colorize the diff

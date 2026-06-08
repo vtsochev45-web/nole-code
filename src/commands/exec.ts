@@ -1,9 +1,9 @@
 // Nole Code - /exec command: Quick code evaluator
 
-import { exec } from 'child_process'
+import { execFile } from 'child_process'
 import { promisify } from 'util'
 
-const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 
 function isPythonExpression(expr: string): boolean {
   const trimmed = expr.trim()
@@ -19,12 +19,17 @@ function isPythonExpression(expr: string): boolean {
 
 async function evalJs(expr: string): Promise<string> {
   try {
-    // Run in isolated subprocess — no access to REPL process globals
-    const escaped = expr.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
-    const { stdout, stderr } = await execAsync(
-      `node -e 'try { const r = (0, eval)(\`${escaped}\`); console.log(r === undefined ? "undefined" : String(r)) } catch(e) { console.error(e.message); process.exit(1) }'`,
-      { timeout: 5000 }
-    )
+    // Run in isolated subprocess — no access to REPL process globals.
+    // No shell: the script is a fixed -e argument; the user expression is
+    // passed as a separate argv element and read via process.argv inside the
+    // child, so there is no string interpolation to escape out of.
+    const script =
+      'try { const r = (0, eval)(process.argv[1]); ' +
+      'console.log(r === undefined ? "undefined" : String(r)) } ' +
+      'catch (e) { console.error(e.message); process.exit(1) }'
+    const { stdout, stderr } = await execFileAsync('node', ['-e', script, expr], {
+      timeout: 5000,
+    })
     if (stderr) return `Error: ${stderr.trim()}`
     return stdout.trim() || 'undefined'
   } catch (e: any) {
@@ -35,7 +40,9 @@ async function evalJs(expr: string): Promise<string> {
 
 async function evalPython(expr: string): Promise<string> {
   try {
-    const { stdout, stderr } = await execAsync(`python3 -c "${expr.replace(/"/g, '\\"')}"`, { timeout: 5000 })
+    // No shell: expr passes as a discrete argv element to python3 -c, so
+    // quotes/metacharacters in the expression can't break out.
+    const { stdout, stderr } = await execFileAsync('python3', ['-c', expr], { timeout: 5000 })
     if (stderr && !stderr.includes('Warning')) {
       return `Error: ${stderr}`
     }

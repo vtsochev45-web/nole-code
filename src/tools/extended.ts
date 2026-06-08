@@ -1,7 +1,7 @@
 // Nole Code - Extended Tools
 // Additional tools adapted from Nole Code's leaked source
 
-import { execSync, spawn } from 'child_process'
+import { execSync, execFileSync, spawn } from 'child_process'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { homedir } from 'os'
@@ -326,7 +326,13 @@ export function notify(title: string, body: string, urgent = false): void {
     if (process.platform === 'darwin') {
       execSync(`osascript -e 'display notification "${body.replace(/"/g, '\\"')}" with title "${title.replace(/"/g, '\\"')}"'`, { stdio: 'ignore' })
     } else if (process.platform === 'linux') {
-      execSync(`notify-send ${urgent ? '-u critical' : ''} "${title}" "${body}"`, { stdio: 'ignore' })
+      // No shell: title/body pass as discrete argv elements, so they can't
+      // break out of the command.
+      execFileSync(
+        'notify-send',
+        [...(urgent ? ['-u', 'critical'] : []), title, body],
+        { stdio: 'ignore' },
+      )
     }
   } catch {
     // Fallback: just print
