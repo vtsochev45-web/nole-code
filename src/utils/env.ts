@@ -2,6 +2,7 @@
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
+import { resolveOAuthCredential, type OAuthProvider } from '../auth/oauth-bridge.js'
 
 // Load .env files (cwd first, then ~/.nole-code/, don't override existing)
 function loadEnvFile(path: string) {
@@ -42,24 +43,68 @@ export function isEnvTruthy(key: string): boolean {
 }
 
 // Provider configuration
+export type ProviderDynamicValue = string | (() => string)
 export interface ProviderConfig {
   name: string
   baseUrl: string
-  apiKey: string
+  apiKey: ProviderDynamicValue
   model: string
+  apiMode?: 'anthropic_messages' | 'chat_completions'
   headers?: Record<string, string>
 }
 
-export function getProviders(): ProviderConfig[] {
+export function getProviders(options: { oauthAuthPath?: string; nowMs?: number } = {}): ProviderConfig[] {
   const providers: ProviderConfig[] = []
 
+  const resolveOAuth = (provider: OAuthProvider) => resolveOAuthCredential(provider, {
+    ...(options.oauthAuthPath ? { authPath: options.oauthAuthPath } : {}),
+    ...(options.nowMs === undefined ? {} : { nowMs: options.nowMs }),
+  })
+  const liveToken = (provider: OAuthProvider) => () => {
+    const credential = resolveOAuth(provider)
+    if (!credential) throw new Error(`${provider} OAuth bridge is not configured`)
+    return credential.accessToken
+  }
+
+  // MiniMax OAuth (bridged via `nole auth import minimax`) beats MINIMAX_API_KEY.
+  let oauthMiniMax = false
+  try {
+    const credential = resolveOAuth('minimax')
+    if (credential) {
+      oauthMiniMax = true
+      providers.push({
+        name: 'minimax', baseUrl: credential.baseUrl, apiKey: liveToken('minimax'),
+        model: DEFAULT_MODEL, apiMode: 'anthropic_messages',
+        headers: { 'anthropic-version': '2023-06-01' },
+      })
+    }
+  } catch {}
+
+  // Claude/Anthropic OAuth (bridged via `nole auth import claude`).
+  try {
+    const credential = resolveOAuth('anthropic')
+    if (credential) {
+      providers.push({
+        name: 'anthropic', baseUrl: credential.baseUrl, apiKey: liveToken('anthropic'),
+        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6', apiMode: 'anthropic_messages',
+        headers: {
+          'anthropic-version': '2023-06-01',
+          'anthropic-beta': 'claude-code-20250219,oauth-2025-04-20',
+          'user-agent': 'claude-code/2.1.74 (external, cli)',
+          'x-app': 'cli',
+        },
+      })
+    }
+  } catch {}
+
   // MiniMax first — free, primary provider
-  if (MINIMAX_API_KEY) {
+  if (MINIMAX_API_KEY && !oauthMiniMax) {
     providers.push({
       name: 'minimax',
       baseUrl: 'https://api.minimax.io/anthropic/v1/messages',
       apiKey: MINIMAX_API_KEY,
       model: DEFAULT_MODEL,
+      apiMode: 'anthropic_messages',
       headers: { 'anthropic-version': '2023-06-01' },
     })
   }
@@ -87,9 +132,9 @@ export function getProviders(): ProviderConfig[] {
   return providers
 }
 
-// Check if any provider is configured
+// Check if any provider is configured (API key or OAuth bridge)
 export function hasAnyProvider(): boolean {
-  return !!(MINIMAX_API_KEY || OPENROUTER_API_KEY || OPENAI_API_KEY)
+  return !!(MINIMAX_API_KEY || OPENROUTER_API_KEY || OPENAI_API_KEY) || getProviders().length > 0
 }
 
 export const WP_USER = process.env.WP_USER || ''

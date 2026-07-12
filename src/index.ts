@@ -237,6 +237,7 @@ interface CliOptions {
   cwd?: string
   session?: string
   message?: string
+  model?: string
   verbose?: boolean
   compact?: boolean
   'list-sessions'?: boolean
@@ -304,17 +305,17 @@ Then run ${bold('nole')} again.
   // Determine which API key to use — priority: MiniMax (OAuth or API key) > OpenRouter > OpenAI
   const { OPENROUTER_API_KEY, OPENAI_API_KEY, MINIMAX_API_KEY: minimaxKey } = await import('./utils/env.js')
   let primaryKey = token || minimaxKey
-  let primaryModel = settings.model || DEFAULT_MODEL
+  let primaryModel = opts.model || settings.model || DEFAULT_MODEL
 
   // If no MiniMax, try OpenRouter
   if (!primaryKey && OPENROUTER_API_KEY) {
     primaryKey = OPENROUTER_API_KEY
-    primaryModel = settings.model || 'google/gemini-2.5-flash'
+    primaryModel = opts.model || settings.model || 'google/gemini-2.5-flash'
   }
   // If no MiniMax or OpenRouter, try OpenAI
   if (!primaryKey && OPENAI_API_KEY) {
     primaryKey = OPENAI_API_KEY
-    primaryModel = settings.model || 'gpt-4o-mini'
+    primaryModel = opts.model || settings.model || 'gpt-4o-mini'
   }
 
   const client = new LLMClient(primaryKey, primaryModel)
@@ -1260,6 +1261,9 @@ function parseArgs(): CliOptions {
       case '--cwd':
         opts.cwd = args[++i]
         break
+      case '--model':
+        opts.model = args[++i]
+        break
       case '-m':
       case '--message':
         opts.message = args.slice(i + 1).join(' ')
@@ -1300,12 +1304,15 @@ ${bold('Nole Code')} — AI Coding Assistant
 ${dim('Usage:')}
   nole [options]
   nole init              Create NOLE.md in current project
+  nole auth status       Show configured OAuth credential bridges
+  nole auth import <provider>  Bridge MiniMax or Claude OAuth credentials
   nole -m "do something" Run a single task and exit
 
 ${dim('Options:')}
   -s, --session <id>    Resume a session
   -c, --cwd <path>       Working directory (default: cwd)
   -m, --message <text>   Run single message and exit
+  --model <name>         Override model (e.g. MiniMax-M3, claude-sonnet-4-6)
   --fast                 Auto-skip M3's thinking on mechanical turns (put before -m)
   --verbose              Verbose output with timings
   --list-sessions        List all sessions
@@ -1344,6 +1351,14 @@ ${dim('Shortcuts:')}
 
 // ============ Main ============
 async function main() {
+  const args = process.argv.slice(2)
+  if (args[0] === 'auth') {
+    const { runAuthCli } = await import('./commands/auth.js')
+    const exitCode = await runAuthCli(args.slice(1))
+    process.exitCode = exitCode
+    return
+  }
+
   const opts = parseArgs()
   await runRepl(opts)
 }

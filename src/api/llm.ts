@@ -169,6 +169,11 @@ export class LLMClient {
     this.providers = getProviders()
   }
 
+  private providerApiKey(provider?: ProviderConfig): string {
+    if (!provider) return this.apiKey
+    return typeof provider.apiKey === 'function' ? provider.apiKey() : provider.apiKey
+  }
+
   getActiveProviderName(): string {
     return this.providers[this.activeProvider]?.name || 'minimax'
   }
@@ -176,7 +181,10 @@ export class LLMClient {
   setModel(model: string): void {
     this.model = model
     // Auto-detect provider from model name
-    if (model.startsWith('gpt-') || model.startsWith('o1') || model.startsWith('o3')) {
+    if (model.startsWith('claude-')) {
+      const idx = this.providers.findIndex(p => p.name === 'anthropic')
+      if (idx >= 0) this.activeProvider = idx
+    } else if (model.startsWith('gpt-') || model.startsWith('o1') || model.startsWith('o3')) {
       const idx = this.providers.findIndex(p => p.name === 'openai')
       if (idx >= 0) this.activeProvider = idx
     } else if (model.includes('/') || model.startsWith('google/') || model.startsWith('anthropic/') || model.startsWith('meta-llama/')) {
@@ -320,12 +328,19 @@ export class LLMClient {
     const chatUrl = activeP?.baseUrl || 'https://api.minimax.io/anthropic/v1/messages'
     const chatHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${this.apiKey}`,
+      'Authorization': `Bearer ${this.providerApiKey(activeP)}`,
       ...(activeP?.headers || { 'anthropic-version': '2023-06-01' }),
     }
 
-    // If active provider uses OpenAI format (not MiniMax), route through chatViaOpenAI
-    if (activeP && activeP.name !== 'minimax') {
+    // Real Anthropic API rejects requests with both temperature and top_p set
+    // (MiniMax's compat endpoint accepts both).
+    if (activeP?.name === 'anthropic') delete body.top_p
+
+    // Route only Chat Completions providers (openrouter, openai) through the
+    // OpenAI adapter — minimax and anthropic both speak the Anthropic messages
+    // format used below.
+    const activeMode = activeP?.apiMode || (activeP?.name === 'minimax' ? 'anthropic_messages' : 'chat_completions')
+    if (activeP && activeMode === 'chat_completions') {
       return this.chatViaOpenAI(messages, options, activeP)
     }
 
@@ -338,14 +353,20 @@ export class LLMClient {
     if (!response.ok) {
       const errorText = await response.text()
 
-      // Try fallback providers before giving up (skip the one that just failed)
+      // Try fallback providers before giving up (skip the one that just failed).
+      // Route each candidate by its own apiMode — anthropic_messages providers
+      // (minimax, anthropic) must use the native Messages-API path, not the
+      // OpenAI-shaped adapter.
       if (RETRY_STATUS.has(response.status) && this.providers.length > 1) {
         for (let p = 0; p < this.providers.length; p++) {
           if (p === this.activeProvider) continue  // skip the provider that failed
           const provider = this.providers[p]
+          const fallbackMode = provider.apiMode || (provider.name === 'minimax' ? 'anthropic_messages' : 'chat_completions')
           try {
             process.stderr.write(`\x1b[33m⟳ Falling back to ${provider.name}...\x1b[0m\n`)
-            const fallbackResult = await this.chatViaOpenAI(messages, options, provider)
+            const fallbackResult = fallbackMode === 'anthropic_messages'
+              ? await this.sendAnthropicMessagesRequest(provider, body)
+              : await this.chatViaOpenAI(messages, options, provider)
             this.activeProvider = p
             return fallbackResult
           } catch {}
@@ -503,9 +524,13 @@ export class LLMClient {
       const streamUrl = activeP?.baseUrl || 'https://api.minimax.io/anthropic/v1/messages'
       const streamHeaders: Record<string, string> = {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
+        'Authorization': `Bearer ${this.providerApiKey(activeP)}`,
         ...(activeP?.headers || { 'anthropic-version': '2023-06-01' }),
       }
+
+      // Real Anthropic API rejects requests with both temperature and top_p
+      // set (MiniMax's compat endpoint accepts both).
+      if (activeP?.name === 'anthropic') delete body.top_p
 
       const response = await fetchWithRetry(streamUrl, {
         method: 'POST',
@@ -629,6 +654,85 @@ export class LLMClient {
       return result.usage
     }
   }
+  // Native Anthropic Messages API call for a specific provider (minimax or
+  // anthropic) — used by the chat() fallback loop so an anthropic_messages
+  // candidate isn't sent through the OpenAI-shaped chatViaOpenAI() adapter,
+  // which would produce a malformed request against a /v1/messages endpoint.
+  // Reuses the request body already built by the caller (message conversion
+  // doesn't vary per-provider); only url/headers/apiKey/top_p differ.
+  private async sendAnthropicMessagesRequest(
+    provider: ProviderConfig,
+    requestBody: Record<string, unknown>,
+  ): Promise<{ content: string; toolCalls: ToolCall[]; usage: { input: number; output: number; stopReason?: string } }> {
+    const body = { ...requestBody }
+    // Real Anthropic API rejects requests with both temperature and top_p set.
+    if (provider.name === 'anthropic') delete body.top_p
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${this.providerApiKey(provider)}`,
+      ...(provider.headers || { 'anthropic-version': '2023-06-01' }),
+    }
+
+    const response = await fetchWithRetry(provider.baseUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`API error ${response.status}: ${parseApiError(errorText)}`)
+    }
+
+    let data: any
+    try {
+      data = await response.json()
+    } catch {
+      const text = await response.text().catch(() => '(empty)')
+      throw new Error(`API returned invalid JSON: ${text.slice(0, 200)}`)
+    }
+
+    if (data.error) {
+      throw new Error(`API error: ${data.error.message || JSON.stringify(data.error)}`)
+    }
+
+    let content = ''
+    const toolCalls: ToolCall[] = []
+    if (data.content) {
+      for (const block of data.content) {
+        if (block.type === 'text') {
+          content += block.text || ''
+        } else if (block.type === 'tool_use') {
+          toolCalls.push({
+            id: block.id || `tool_${Date.now()}`,
+            name: block.name,
+            input: block.input || {},
+          })
+        }
+      }
+    }
+
+    if (toolCalls.length === 0 && content.includes('<invoke')) {
+      const xmlParsed = parseXmlToolCalls(content)
+      if (xmlParsed.length > 0) {
+        toolCalls.push(...xmlParsed)
+        content = content.replace(/<invoke[\s\S]*?<\/invoke>/g, '').trim()
+        content = content.replace(/<\/?minimax:tool_call>/g, '').trim()
+      }
+    }
+
+    return {
+      content,
+      toolCalls,
+      usage: {
+        input: data.usage?.input_tokens || 0,
+        output: data.usage?.output_tokens || 0,
+        stopReason: data.stop_reason || undefined,
+      },
+    }
+  }
+
   // OpenAI-compatible API call (for OpenRouter, OpenAI, etc.)
   private async chatViaOpenAI(
     messages: Message[],
@@ -684,7 +788,7 @@ export class LLMClient {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${provider.apiKey}`,
+      'Authorization': `Bearer ${this.providerApiKey(provider)}`,
       ...(provider.headers || {}),
     }
 
