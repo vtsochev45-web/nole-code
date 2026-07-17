@@ -1,26 +1,12 @@
 // Tests for tool registry and execution
-import { describe, test, expect, beforeAll } from 'bun:test'
-import { existsSync, mkdirSync, symlinkSync, unlinkSync } from 'fs'
+import { describe, test, expect } from 'bun:test'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'path'
 import { getToolDefinitions, executeTool } from '../src/tools/registry.js'
 
-const TEST_PROJECT = '/tmp/nole-code'
-const PROJECT_ROOT = join(__dirname, '..')
-
-// Ensure /tmp/nole-code symlink exists for tool path resolution tests
-beforeAll(() => {
-  try {
-    if (existsSync(TEST_PROJECT)) {
-      const stat = { isDirectory: () => false, isSymbolicLink: () => false }
-      try { stat.isDirectory(); } catch { /* fallback */ }
-      // If it's a real directory (not a symlink), remove it
-    }
-    // Remove if exists (could be stale symlink or real dir from previous runs)
-    try { unlinkSync(TEST_PROJECT) } catch { /* ignore */ }
-    // Create symlink from /tmp/nole-code -> project root
-    symlinkSync(PROJECT_ROOT, TEST_PROJECT)
-  } catch { /* ignore - tests will fail meaningfully without it */ }
-})
+const TEST_PROJECT = join(import.meta.dir, '..')
+const TEST_SRC = join(TEST_PROJECT, 'src')
 
 describe('Tool Registry', () => {
   test('has all expected tools registered', () => {
@@ -76,7 +62,7 @@ describe('Bash Tool', () => {
 
 describe('Read Tool', () => {
   test('reads existing file', async () => {
-    const result = await executeTool('Read', { path: '/tmp/nole-code/package.json' }, { cwd: '/tmp/nole-code', sessionId: 'test' })
+    const result = await executeTool('Read', { path: join(TEST_PROJECT, 'package.json') }, { cwd: TEST_PROJECT, sessionId: 'test' })
     expect(result.content).toContain('nole-code')
     expect(result.isError).toBeFalsy()
   })
@@ -122,31 +108,41 @@ describe('Edit Tool', () => {
   })
 
   test('returns error when text not found', async () => {
-    const result = await executeTool('Edit', {
-      path: '/tmp/nole-code/package.json',
-      old_text: 'THIS_TEXT_DOES_NOT_EXIST_XYZ',
-      new_text: 'replacement'
-    }, { cwd: '/tmp/nole-code', sessionId: 'test' })
-    expect(result.content).toContain('Could not find')
+    const fixture = mkdtempSync(join(tmpdir(), 'nole-edit-test-'))
+    const path = join(fixture, 'fixture.txt')
+    writeFileSync(path, 'operator-owned content\n')
+
+    try {
+      const result = await executeTool('Edit', {
+        path,
+        old_text: 'THIS_TEXT_DOES_NOT_EXIST_XYZ',
+        new_text: 'replacement'
+      }, { cwd: fixture, sessionId: 'test' })
+
+      expect(result.content).toContain('Could not find')
+      expect(readFileSync(path, 'utf8')).toBe('operator-owned content\n')
+    } finally {
+      rmSync(fixture, { recursive: true, force: true })
+    }
   })
 })
 
 describe('Glob Tool', () => {
   test('finds TypeScript files', async () => {
-    const result = await executeTool('Glob', { pattern: '**/*.ts', cwd: '/tmp/nole-code/src' }, { cwd: '/tmp/nole-code', sessionId: 'test' })
+    const result = await executeTool('Glob', { pattern: '**/*.ts', cwd: TEST_SRC }, { cwd: TEST_PROJECT, sessionId: 'test' })
     expect(result.content).toContain('.ts')
     expect(result.content).toContain('index.ts')
   })
 
   test('finds files with directory prefix', async () => {
-    const result = await executeTool('Glob', { pattern: 'api/*.ts', cwd: '/tmp/nole-code/src' }, { cwd: '/tmp/nole-code/src', sessionId: 'test' })
+    const result = await executeTool('Glob', { pattern: 'api/*.ts', cwd: TEST_SRC }, { cwd: TEST_SRC, sessionId: 'test' })
     expect(result.content).toContain('llm.ts')
   })
 })
 
 describe('Grep Tool', () => {
   test('finds pattern in files', async () => {
-    const result = await executeTool('Grep', { pattern: 'LLMClient', path: '/tmp/nole-code/src/api/llm.ts' }, { cwd: '/tmp/nole-code', sessionId: 'test' })
+    const result = await executeTool('Grep', { pattern: 'LLMClient', path: join(TEST_SRC, 'api', 'llm.ts') }, { cwd: TEST_PROJECT, sessionId: 'test' })
     expect(result.content).toContain('LLMClient')
   })
 })

@@ -1,10 +1,13 @@
 // Tests for power tools
 import { describe, test, expect } from 'bun:test'
 import { getToolDefinitions, executeTool } from '../src/tools/registry.js'
-import { writeFileSync, mkdirSync, existsSync, unlinkSync, rmdirSync } from 'fs'
+import { writeFileSync, mkdirSync, existsSync, unlinkSync, rmdirSync, mkdtempSync, readFileSync, rmSync } from 'fs'
+import { tmpdir } from 'node:os'
 import { join } from 'path'
 
 const TEST_DIR = '/tmp/nole-power-test-' + Date.now()
+const PROJECT_ROOT = join(import.meta.dir, '..')
+const PROJECT_SRC = join(PROJECT_ROOT, 'src')
 
 describe('Power Tools Registration', () => {
   test('all new tools are registered', () => {
@@ -33,20 +36,20 @@ describe('Power Tools Registration', () => {
 
 describe('LS Tool', () => {
   test('lists current directory', async () => {
-    const result = await executeTool('LS', { path: '/tmp/nole-code/src' }, { cwd: '/tmp/nole-code', sessionId: 'test' })
+    const result = await executeTool('LS', { path: PROJECT_SRC }, { cwd: PROJECT_ROOT, sessionId: 'test' })
     expect(result.content).toContain('index.ts')
     expect(result.content).toContain('api/')
   })
 
   test('shows file sizes in long format', async () => {
-    const result = await executeTool('LS', { path: '/tmp/nole-code', long: true }, { cwd: '/tmp/nole-code', sessionId: 'test' })
+    const result = await executeTool('LS', { path: PROJECT_ROOT, long: true }, { cwd: PROJECT_ROOT, sessionId: 'test' })
     expect(result.content).toMatch(/\d+\.\d+[KMG]/)
   })
 })
 
 describe('Tree Tool', () => {
   test('shows directory tree', async () => {
-    const result = await executeTool('Tree', { path: '/tmp/nole-code/src', depth: 2 }, { cwd: '/tmp/nole-code', sessionId: 'test' })
+    const result = await executeTool('Tree', { path: PROJECT_SRC, depth: 2 }, { cwd: PROJECT_ROOT, sessionId: 'test' })
     expect(result.content).toContain('├──')
     expect(result.content).toContain('directories')
     expect(result.content).toContain('files')
@@ -81,22 +84,32 @@ describe('MultiEdit Tool', () => {
 
 describe('FindReplace Tool', () => {
   test('dry run shows matches without changing files', async () => {
-    const result = await executeTool('FindReplace', {
-      pattern: 'LLMClient',
-      replacement: 'AIClient',
-      path: '/tmp/nole-code/src/api',
-      glob: '*.ts',
-      dry_run: true,
-    }, { cwd: '/tmp/nole-code', sessionId: 'test' })
+    const fixture = mkdtempSync(join(tmpdir(), 'nole-find-replace-test-'))
+    const path = join(fixture, 'llm.ts')
+    const original = 'export class LLMClient {}\n'
+    writeFileSync(path, original)
 
-    expect(result.content).toContain('Would replace')
-    expect(result.content).toContain('llm.ts')
+    try {
+      const result = await executeTool('FindReplace', {
+        pattern: 'LLMClient',
+        replacement: 'AIClient',
+        path: fixture,
+        glob: '*.ts',
+        dry_run: true,
+      }, { cwd: fixture, sessionId: 'test' })
+
+      expect(result.content).toContain('Would replace')
+      expect(result.content).toContain('llm.ts')
+      expect(readFileSync(path, 'utf8')).toBe(original)
+    } finally {
+      rmSync(fixture, { recursive: true, force: true })
+    }
   })
 })
 
 describe('GitStatus Tool', () => {
   test('shows branch info', async () => {
-    const result = await executeTool('GitStatus', {}, { cwd: '/tmp/nole-code', sessionId: 'test' })
+    const result = await executeTool('GitStatus', {}, { cwd: PROJECT_ROOT, sessionId: 'test' })
     expect(result.content).toContain('Branch:')
     // Branch name is environment-dependent (feature branch locally, detached HEAD in CI),
     // so assert that branch info is reported rather than a specific branch name.
@@ -105,7 +118,7 @@ describe('GitStatus Tool', () => {
 
 describe('GitDiff Tool', () => {
   test('runs without error', async () => {
-    const result = await executeTool('GitDiff', { stat: true }, { cwd: '/tmp/nole-code', sessionId: 'test' })
+    const result = await executeTool('GitDiff', { stat: true }, { cwd: PROJECT_ROOT, sessionId: 'test' })
     expect(result.isError).toBeFalsy()
   })
 })

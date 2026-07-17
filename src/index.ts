@@ -4,6 +4,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join, resolve, dirname } from 'node:path'
 import { homedir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 import * as readline from 'readline'
 import { LLMClient, DEFAULT_MAX_TOKENS } from './api/llm.js'
 import { getThinkingMode, resolveThinking } from './utils/thinking-policy.js'
@@ -1237,18 +1238,33 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
 }
 
 // ============ CLI Definition ============
+function packageVersion(): string {
+  try {
+    const packagePath = join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json')
+    const metadata = JSON.parse(readFileSync(packagePath, 'utf8'))
+    if (typeof metadata.version === 'string' && metadata.version) return metadata.version
+  } catch {}
+  return 'unknown'
+}
+
 function parseArgs(): CliOptions {
   const opts: CliOptions = { cwd: process.cwd() }
   const args = process.argv.slice(2)
 
   // Handle subcommands first
   if (args[0] === 'init') {
-    const { createNoleMd } = require('./project/onboarding.js')
-    const cwd = args[1] || process.cwd()
-    const path = createNoleMd(cwd)
-    console.log(`Created ${path}`)
-    console.log('Edit this file to configure project context for Nole.')
-    process.exit(0)
+    try {
+      const { createNoleMd } = require('./project/onboarding.js')
+      const cwd = args[1] || process.cwd()
+      const path = createNoleMd(cwd)
+      console.log(`Created ${path}`)
+      console.log('Edit this file to configure project context for Nole.')
+      process.exit(0)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error(`Error: ${message}`)
+      process.exit(1)
+    }
   }
 
   for (let i = 0; i < args.length; i++) {
@@ -1275,7 +1291,6 @@ function parseArgs(): CliOptions {
         process.env.NOLE_THINKING = 'auto'
         break
       case '--verbose':
-      case '-v':
         opts.verbose = true
         break
       case '--list-sessions':
@@ -1292,8 +1307,9 @@ function parseArgs(): CliOptions {
         console.log(`Deleted session ${args[i - 1]}`)
         process.exit(0)
         break
+      case '-v':
       case '--version':
-        console.log('Nole Code v1.17.0')
+        console.log(`Nole Code v${packageVersion()}`)
         process.exit(0)
         break
       case '--help':

@@ -188,7 +188,14 @@ ${structure || '# Project directory structure'}
 `
 
   const path = join(cwd, 'NOLE.md')
-  writeFileSync(path, template, 'utf-8')
+  try {
+    writeFileSync(path, template, { encoding: 'utf-8', flag: 'wx' })
+  } catch (error) {
+    if ((error as { code?: string }).code === 'EEXIST') {
+      throw new Error(`NOLE.md already exists at ${path}; refusing to overwrite it`)
+    }
+    throw error
+  }
   return path
 }
 

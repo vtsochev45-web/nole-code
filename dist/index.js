@@ -20541,7 +20541,14 @@ ${structure || "# Project directory structure"}
 - Important things to know when working in this project
 `;
   const path = join12(cwd, "NOLE.md");
-  writeFileSync7(path, template, "utf-8");
+  try {
+    writeFileSync7(path, template, { encoding: "utf-8", flag: "wx" });
+  } catch (error2) {
+    if (error2.code === "EEXIST") {
+      throw new Error(`NOLE.md already exists at ${path}; refusing to overwrite it`);
+    }
+    throw error2;
+  }
   return path;
 }
 function loadProjectContext(cwd) {
@@ -30728,8 +30735,9 @@ __export(exports_src, {
   activeClient: () => activeClient
 });
 import { existsSync as existsSync29, readFileSync as readFileSync28, writeFileSync as writeFileSync14, mkdirSync as mkdirSync12 } from "fs";
-import { join as join29, resolve as resolve5 } from "node:path";
+import { join as join29, resolve as resolve5, dirname as dirname7 } from "node:path";
 import { homedir as homedir23 } from "node:os";
+import { fileURLToPath } from "node:url";
 import * as readline3 from "readline";
 function _loadEnv(path) {
   if (!existsSync29(path))
@@ -31704,16 +31712,31 @@ ${c2.yellow("⚠")} Reached maximum ${MAX_TURNS} turns in agentic loop.
   }
   prompt();
 }
+function packageVersion() {
+  try {
+    const packagePath = join29(dirname7(fileURLToPath(import.meta.url)), "..", "package.json");
+    const metadata = JSON.parse(readFileSync28(packagePath, "utf8"));
+    if (typeof metadata.version === "string" && metadata.version)
+      return metadata.version;
+  } catch {}
+  return "unknown";
+}
 function parseArgs() {
   const opts = { cwd: process.cwd() };
   const args = process.argv.slice(2);
   if (args[0] === "init") {
-    const { createNoleMd: createNoleMd2 } = (init_onboarding(), __toCommonJS(exports_onboarding));
-    const cwd2 = args[1] || process.cwd();
-    const path = createNoleMd2(cwd2);
-    console.log(`Created ${path}`);
-    console.log("Edit this file to configure project context for Nole.");
-    process.exit(0);
+    try {
+      const { createNoleMd: createNoleMd2 } = (init_onboarding(), __toCommonJS(exports_onboarding));
+      const cwd2 = args[1] || process.cwd();
+      const path = createNoleMd2(cwd2);
+      console.log(`Created ${path}`);
+      console.log("Edit this file to configure project context for Nole.");
+      process.exit(0);
+    } catch (error2) {
+      const message = error2 instanceof Error ? error2.message : String(error2);
+      console.error(`Error: ${message}`);
+      process.exit(1);
+    }
   }
   for (let i = 0;i < args.length; i++) {
     switch (args[i]) {
@@ -31737,7 +31760,6 @@ function parseArgs() {
         process.env.NOLE_THINKING = "auto";
         break;
       case "--verbose":
-      case "-v":
         opts.verbose = true;
         break;
       case "--list-sessions":
@@ -31755,8 +31777,9 @@ Sessions:`);
         console.log(`Deleted session ${args[i - 1]}`);
         process.exit(0);
         break;
+      case "-v":
       case "--version":
-        console.log("Nole Code v1.17.0");
+        console.log(`Nole Code v${packageVersion()}`);
         process.exit(0);
         break;
       case "--help":

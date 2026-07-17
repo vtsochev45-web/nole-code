@@ -1,5 +1,8 @@
 // Tests for new features: export, changes, plugins, @file
 import { describe, test, expect } from 'bun:test'
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { getCommand, parseCommand } from '../src/commands/index.js'
 import { getToolDefinitions } from '../src/tools/registry.js'
 
@@ -63,13 +66,54 @@ describe('@file syntax', () => {
 describe('NOLE.md auto-generation', () => {
   test('createNoleMd detects package.json', () => {
     const { createNoleMd } = require('../src/project/onboarding.js')
-    const path = createNoleMd('/tmp/nole-code')
-    expect(path).toContain('NOLE.md')
+    const fixture = mkdtempSync(join(tmpdir(), 'nole-feature-test-'))
 
-    const { readFileSync } = require('fs')
-    const content = readFileSync(path, 'utf-8')
-    // Should detect nole-code project info
-    expect(content).toContain('nole-code')
+    try {
+      writeFileSync(join(fixture, 'package.json'), JSON.stringify({
+        name: 'fixture-app',
+        description: 'isolated fixture project',
+        dependencies: { react: '19.0.0' },
+        devDependencies: { typescript: '5.9.3' },
+        scripts: { test: 'bun test' },
+      }))
+
+      const path = createNoleMd(fixture)
+      const content = readFileSync(path, 'utf-8')
+
+      expect(path).toBe(join(fixture, 'NOLE.md'))
+      expect(content).toContain('isolated fixture project')
+      expect(content).toContain('React, TypeScript')
+    } finally {
+      rmSync(fixture, { recursive: true, force: true })
+    }
+  })
+
+  test('refuses to overwrite an existing NOLE.md', () => {
+    const { createNoleMd } = require('../src/project/onboarding.js')
+    const fixture = mkdtempSync(join(tmpdir(), 'nole-feature-test-'))
+    const path = join(fixture, 'NOLE.md')
+    writeFileSync(path, 'operator-owned context\n')
+
+    try {
+      expect(() => createNoleMd(fixture)).toThrow('already exists')
+      expect(readFileSync(path, 'utf8')).toBe('operator-owned context\n')
+    } finally {
+      rmSync(fixture, { recursive: true, force: true })
+    }
+  })
+
+  test('refuses an existing NOLE.md symlink without creating its target', () => {
+    const { createNoleMd } = require('../src/project/onboarding.js')
+    const fixture = mkdtempSync(join(tmpdir(), 'nole-feature-test-'))
+    const target = join(fixture, 'outside.md')
+    symlinkSync(target, join(fixture, 'NOLE.md'))
+
+    try {
+      expect(() => createNoleMd(fixture)).toThrow('already exists')
+      expect(existsSync(target)).toBe(false)
+    } finally {
+      rmSync(fixture, { recursive: true, force: true })
+    }
   })
 })
 
