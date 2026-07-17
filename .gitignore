@@ -2,3 +2,7 @@
 node_modules/
 *.log
 *.tgz
+
+# Local rollback snapshots; current secured source and built dist are tracked.
+*.bak-pre-secfix-*
+dist.bak-pre-oauth-*/
