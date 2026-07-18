@@ -34,6 +34,7 @@ _loadEnv(join(process.cwd(), '.env'))            // cwd/.env (override if exists
 
 import { spawnAgent, onAgentMessage } from './agents/spawner.js'
 import { createTeam } from './agents/team.js'
+import { HEADLESS_OUTPUT_CONTRACT } from './prompts/headless.js'
 import './agents/delegate.js'  // Load agent delegation commands
 import { loadSession, saveSession, createSession, listSessions, deleteSession, forkSession, compactSession } from './session/manager.js'
 import { loadProjectContext, loadSettings } from './project/onboarding.js'
@@ -494,7 +495,7 @@ You have access to these tools. Call them when needed — do not ask for permiss
 ${projectIndex ? `\n${projectIndex}` : ''}
 ${projectContext ? `\n# Project Context (from NOLE.md)\n${projectContext}` : ''}
 ${projectInstructions ? `\n# Project Instructions\n${projectInstructions}` : ''}
-${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
+${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}${headless ? HEADLESS_OUTPUT_CONTRACT : ''}`
 
   // Initialize or update system prompt
   if (session.messages.length === 0) {

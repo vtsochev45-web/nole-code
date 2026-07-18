@@ -50,3 +50,15 @@ describe('styles.ts helpers honour non-TTY', () => {
     }
   })
 })
+
+describe('headless -m system prompt contract', () => {
+  test('contract demands verbatim templates and is wired into index.ts', async () => {
+    const { HEADLESS_OUTPUT_CONTRACT } = await import('../src/prompts/headless.js')
+    expect(HEADLESS_OUTPUT_CONTRACT).toContain('character-for-character')
+    expect(HEADLESS_OUTPUT_CONTRACT).toContain('STEP1=REFUSED:')
+    const { readFileSync } = await import('fs')
+    const src = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf-8')
+    expect(src).toContain('HEADLESS_OUTPUT_CONTRACT')
+    expect(src).toMatch(/headless \? HEADLESS_OUTPUT_CONTRACT : ''/)
+  })
+})
