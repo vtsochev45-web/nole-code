@@ -442,6 +442,19 @@ export class LLMClient {
     onToolCall?: (tc: ToolCall) => void,
     onThinking?: (text: string) => void,
   ): Promise<{ input: number; output: number; stopReason?: string }> {
+    // Everything below builds an Anthropic-shaped streaming request and parses
+    // an Anthropic SSE reply. An OpenAI-shaped provider (OpenRouter/OpenAI)
+    // streams chat.completion.chunk events, which match no Anthropic event
+    // type — the stream used to parse to nothing and return an empty success.
+    // Those providers delegate to chat(), which routes by apiMode and fails loud.
+    const streamProvider = this.providers[this.activeProvider]
+    if (streamProvider && streamProvider.apiMode !== 'anthropic_messages') {
+      const result = await this.chat(messages, options)
+      onChunk(result.content)
+      for (const tc of result.toolCalls) onToolCall?.(tc)
+      return result.usage
+    }
+
     const { tools, temperature = DEFAULT_TEMPERATURE, top_p = DEFAULT_TOP_P, max_tokens = DEFAULT_MAX_TOKENS, model } = options
 
     // Build Anthropic-format messages (same as chat())

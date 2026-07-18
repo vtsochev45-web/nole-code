@@ -647,6 +647,14 @@ class LLMClient {
     };
   }
   async chatStream(messages, options, onChunk, onToolCall, onThinking) {
+    const streamProvider = this.providers[this.activeProvider];
+    if (streamProvider && streamProvider.apiMode !== "anthropic_messages") {
+      const result = await this.chat(messages, options);
+      onChunk(result.content);
+      for (const tc of result.toolCalls)
+        onToolCall?.(tc);
+      return result.usage;
+    }
     const { tools, temperature = DEFAULT_TEMPERATURE, top_p = DEFAULT_TOP_P, max_tokens = DEFAULT_MAX_TOKENS, model } = options;
     const anthropicMessages = [];
     const validToolIds = new Set;
