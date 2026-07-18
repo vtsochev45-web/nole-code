@@ -810,7 +810,16 @@ export class LLMClient {
     }
 
     const data = await response.json() as any
-    const choice = data.choices?.[0]?.message || {}
+    // OpenRouter (and other OpenAI-shaped gateways) can return HTTP 200 with an
+    // error body (moderation, credits, invalid model). Treating that as an
+    // empty completion silently ends the agentic turn — fail loud instead.
+    if (data.error) {
+      throw new Error(`${provider.name} error: ${data.error.message || JSON.stringify(data.error).slice(0, 200)}`)
+    }
+    if (!data.choices?.[0]?.message) {
+      throw new Error(`${provider.name} returned no choices: ${JSON.stringify(data).slice(0, 200)}`)
+    }
+    const choice = data.choices[0].message
 
     let content = choice.content || ''
     const toolCalls: ToolCall[] = []

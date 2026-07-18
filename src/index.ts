@@ -66,6 +66,10 @@ import { DEFAULT_MODEL } from './utils/env.js'
 // Cancel flag — Ctrl+C during LLM call cancels the current request, not the process
 let cancelRequested = false
 let isProcessing = false
+// Set when a turn's agentic loop dies on an error (API failure, etc.) so
+// headless (-m) mode can exit non-zero — a swallowed error + exit 0 reads as
+// success to any caller (CI, harnesses, scripts).
+let lastTurnErrored = false
 let lastUserMessage = ''
 
 // Last LLM output for /pipe command
@@ -817,6 +821,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
     }
 
     const startTime = Date.now()
+    lastTurnErrored = false
 
     try {
       // ========== AGENTIC LOOP ==========
@@ -1201,6 +1206,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
       extractMemoryFromConversation(session!.messages, session!.id).catch(() => {})
 
     } catch (err) {
+      lastTurnErrored = true
       const msg = String(err)
       if (msg.includes('overloaded')) {
         printWarning('API is overloaded. Try again in a moment.')
@@ -1231,7 +1237,7 @@ ${memorySummary ? `\n# Session Memory\n${memorySummary}` : ''}${resumeContext}`
       const { mcpClient } = await import('./mcp/client.js')
       await mcpClient.disconnectAll()
     } catch { /* ignore */ }
-    process.exit(0)
+    process.exit(lastTurnErrored ? 1 : 0)
   }
 
   prompt()

@@ -957,7 +957,13 @@ class LLMClient {
       throw new Error(`${provider.name} error ${response.status}: ${error.slice(0, 200)}`);
     }
     const data = await response.json();
-    const choice = data.choices?.[0]?.message || {};
+    if (data.error) {
+      throw new Error(`${provider.name} error: ${data.error.message || JSON.stringify(data.error).slice(0, 200)}`);
+    }
+    if (!data.choices?.[0]?.message) {
+      throw new Error(`${provider.name} returned no choices: ${JSON.stringify(data).slice(0, 200)}`);
+    }
+    const choice = data.choices[0].message;
     let content = choice.content || "";
     const toolCalls = [];
     if (choice.tool_calls) {
@@ -31377,6 +31383,7 @@ ${divider()}
       console.log(`${c2.magenta("\uD83E\uDD16 nole")} │ `);
     }
     const startTime = Date.now();
+    lastTurnErrored = false;
     try {
       const MAX_TURNS = parseInt(process.env.NOLE_MAX_TURNS || "") || settings.maxTurns || 50;
       let turn = 0;
@@ -31688,6 +31695,7 @@ ${c2.yellow("⚠")} Reached maximum ${MAX_TURNS} turns in agentic loop.
       const { extractMemoryFromConversation: extractMemoryFromConversation2 } = await Promise.resolve().then(() => (init_session_memory(), exports_session_memory));
       extractMemoryFromConversation2(session.messages, session.id).catch(() => {});
     } catch (err) {
+      lastTurnErrored = true;
       const msg = String(err);
       if (msg.includes("overloaded")) {
         printWarning("API is overloaded. Try again in a moment.");
@@ -31713,7 +31721,7 @@ ${c2.yellow("⚠")} Reached maximum ${MAX_TURNS} turns in agentic loop.
       const { mcpClient: mcpClient2 } = await Promise.resolve().then(() => (init_client3(), exports_client));
       await mcpClient2.disconnectAll();
     } catch {}
-    process.exit(0);
+    process.exit(lastTurnErrored ? 1 : 0);
   }
   prompt();
 }
@@ -31849,7 +31857,7 @@ async function main() {
   const opts = parseArgs();
   await runRepl(opts);
 }
-var cancelRequested = false, isProcessing = false, lastUserMessage = "", lastOutput = "", activeClient = null, PLAN_INTENT_PATTERNS, HISTORY_FILE, MAX_HISTORY = 1000, ALIAS_FILE2;
+var cancelRequested = false, isProcessing = false, lastTurnErrored = false, lastUserMessage = "", lastOutput = "", activeClient = null, PLAN_INTENT_PATTERNS, HISTORY_FILE, MAX_HISTORY = 1000, ALIAS_FILE2;
 var init_src = __esm(() => {
   init_llm();
   init_thinking_policy();
