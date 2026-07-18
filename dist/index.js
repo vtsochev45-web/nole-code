@@ -21014,6 +21014,8 @@ class CostTracker {
   }
 }
 function applyStyle(text, styleName) {
+  if (!process.stdout.isTTY)
+    return text;
   const style = STYLES[styleName];
   if (!style)
     return text;
@@ -21115,6 +21117,8 @@ var init_cost = __esm(() => {
     dim: (text) => applyStyle(text, "dim"),
     bold: (text) => applyStyle(text, "bold"),
     hex: (text, color) => {
+      if (!process.stdout.isTTY)
+        return text;
       const colors = {
         red: 31,
         green: 32,
@@ -21442,19 +21446,19 @@ var init_checkpoint = __esm(() => {
 
 // src/ui/output/styles.ts
 function bold(text) {
-  return `${ESC}1m${text}${ESC}0m`;
+  return wrap("1", `${text}`);
 }
 function dim(text) {
-  return `${ESC}2m${text}${ESC}0m`;
+  return wrap("2", `${text}`);
 }
 function italic(text) {
-  return `${ESC}3m${text}${ESC}0m`;
+  return wrap("3", `${text}`);
 }
 function underline(text) {
-  return `${ESC}4m${text}${ESC}0m`;
+  return wrap("4", `${text}`);
 }
 function divider(char = "─", length = 80) {
-  return `${ESC}2m${char.repeat(length)}${ESC}0m`;
+  return wrap("2", `${char.repeat(length)}`);
 }
 function tokenBudgetDisplay(used, max) {
   const percent = Math.round(used / max * 100);
@@ -21462,42 +21466,42 @@ function tokenBudgetDisplay(used, max) {
   const filled = Math.round(used / max * barLength);
   const bar = "█".repeat(filled) + "░".repeat(barLength - filled);
   const color = percent > 80 ? "91" : percent > 60 ? "93" : "92";
-  return `${c2.dim("[")}${ESC}${color}m${bar}${ESC}0m${c2.dim(`] ${used}/${max} tokens (${percent}%)`)}`;
+  return `${c2.dim("[")}${wrap(color, bar)}${c2.dim(`] ${used}/${max} tokens (${percent}%)`)}`;
 }
-var ESC = "\x1B[", c2;
+var ESC = "\x1B[", wrap = (code, text) => process.stdout.isTTY ? `${wrap(code, text)}` : text, c2;
 var init_styles = __esm(() => {
   c2 = {
-    black: (text) => `${ESC}30m${text}${ESC}0m`,
-    red: (text) => `${ESC}31m${text}${ESC}0m`,
-    green: (text) => `${ESC}32m${text}${ESC}0m`,
-    yellow: (text) => `${ESC}33m${text}${ESC}0m`,
-    blue: (text) => `${ESC}34m${text}${ESC}0m`,
-    magenta: (text) => `${ESC}35m${text}${ESC}0m`,
-    cyan: (text) => `${ESC}36m${text}${ESC}0m`,
-    white: (text) => `${ESC}37m${text}${ESC}0m`,
-    gray: (text) => `${ESC}90m${text}${ESC}0m`,
-    brightRed: (text) => `${ESC}91m${text}${ESC}0m`,
-    brightGreen: (text) => `${ESC}92m${text}${ESC}0m`,
-    brightYellow: (text) => `${ESC}93m${text}${ESC}0m`,
-    brightBlue: (text) => `${ESC}94m${text}${ESC}0m`,
-    brightMagenta: (text) => `${ESC}95m${text}${ESC}0m`,
-    brightCyan: (text) => `${ESC}96m${text}${ESC}0m`,
-    primary: (text) => `${ESC}96m${text}${ESC}0m`,
-    secondary: (text) => `${ESC}33m${text}${ESC}0m`,
-    success: (text) => `${ESC}92m${text}${ESC}0m`,
-    error: (text) => `${ESC}91m${text}${ESC}0m`,
-    warning: (text) => `${ESC}93m${text}${ESC}0m`,
-    info: (text) => `${ESC}94m${text}${ESC}0m`,
-    user: (text) => `${ESC}94m${text}${ESC}0m`,
-    assistant: (text) => `${ESC}95m${text}${ESC}0m`,
-    tool: (text) => `${ESC}93m${text}${ESC}0m`,
-    system: (text) => `${ESC}90m${text}${ESC}0m`,
-    pink: (text) => `${ESC}38;5;206m${text}${ESC}0m`,
+    black: (text) => wrap("30", `${text}`),
+    red: (text) => wrap("31", `${text}`),
+    green: (text) => wrap("32", `${text}`),
+    yellow: (text) => wrap("33", `${text}`),
+    blue: (text) => wrap("34", `${text}`),
+    magenta: (text) => wrap("35", `${text}`),
+    cyan: (text) => wrap("36", `${text}`),
+    white: (text) => wrap("37", `${text}`),
+    gray: (text) => wrap("90", `${text}`),
+    brightRed: (text) => wrap("91", `${text}`),
+    brightGreen: (text) => wrap("92", `${text}`),
+    brightYellow: (text) => wrap("93", `${text}`),
+    brightBlue: (text) => wrap("94", `${text}`),
+    brightMagenta: (text) => wrap("95", `${text}`),
+    brightCyan: (text) => wrap("96", `${text}`),
+    primary: (text) => wrap("96", `${text}`),
+    secondary: (text) => wrap("33", `${text}`),
+    success: (text) => wrap("92", `${text}`),
+    error: (text) => wrap("91", `${text}`),
+    warning: (text) => wrap("93", `${text}`),
+    info: (text) => wrap("94", `${text}`),
+    user: (text) => wrap("94", `${text}`),
+    assistant: (text) => wrap("95", `${text}`),
+    tool: (text) => wrap("93", `${text}`),
+    system: (text) => wrap("90", `${text}`),
+    pink: (text) => wrap("38;5;206", `${text}`),
     bold,
     dim,
     italic,
     underline,
-    reset: () => `${ESC}0m`
+    reset: () => process.stdout.isTTY ? `${ESC}0m` : ""
   };
 });
 
@@ -28794,7 +28798,9 @@ __export(exports_markdown, {
   renderMarkdown: () => renderMarkdown,
   createStreamingMarkdown: () => createStreamingMarkdown
 });
-function renderMarkdown(text) {
+function renderMarkdown(text, plain = !process.stdout.isTTY) {
+  if (plain)
+    return text;
   const lines = text.split(`
 `);
   const output = [];
@@ -28852,9 +28858,21 @@ function renderInline(text) {
   text = text.replace(/~~(.+?)~~/g, `${DIM}$1${RESET}`);
   return text;
 }
-function createStreamingMarkdown() {
+function createStreamingMarkdown(opts) {
+  const plain = opts?.plain ?? !process.stdout.isTTY;
+  const write = opts?.out ?? ((s) => {
+    process.stdout.write(s);
+  });
   let buffer = "";
   let inCodeBlock = false;
+  if (plain) {
+    return {
+      write(chunk) {
+        write(chunk);
+      },
+      flush() {}
+    };
+  }
   return {
     write(chunk) {
       buffer += chunk;
@@ -28868,55 +28886,55 @@ function createStreamingMarkdown() {
           if (!inCodeBlock) {
             inCodeBlock = true;
             const lang = line.trim().slice(3).trim();
-            process.stdout.write(`${DIM}┌─${lang ? ` ${lang} ` : ""}${"─".repeat(Math.max(0, 60 - (lang?.length || 0)))}${RESET}
+            write(`${DIM}┌─${lang ? ` ${lang} ` : ""}${"─".repeat(Math.max(0, 60 - (lang?.length || 0)))}${RESET}
 `);
           } else {
             inCodeBlock = false;
-            process.stdout.write(`${DIM}└${"─".repeat(62)}${RESET}
+            write(`${DIM}└${"─".repeat(62)}${RESET}
 `);
           }
           continue;
         }
         if (inCodeBlock) {
-          process.stdout.write(`${DIM}│${RESET} ${GREEN}${line}${RESET}
+          write(`${DIM}│${RESET} ${GREEN}${line}${RESET}
 `);
           continue;
         }
         if (line.startsWith("### ")) {
-          process.stdout.write(`${BOLD}${CYAN}   ${line.slice(4)}${RESET}
+          write(`${BOLD}${CYAN}   ${line.slice(4)}${RESET}
 `);
           continue;
         }
         if (line.startsWith("## ")) {
-          process.stdout.write(`${BOLD}${CYAN}  ${line.slice(3)}${RESET}
+          write(`${BOLD}${CYAN}  ${line.slice(3)}${RESET}
 `);
           continue;
         }
         if (line.startsWith("# ")) {
-          process.stdout.write(`${BOLD}${CYAN}${line.slice(2)}${RESET}
+          write(`${BOLD}${CYAN}${line.slice(2)}${RESET}
 `);
           continue;
         }
         if (/^[-*_]{3,}\s*$/.test(line)) {
-          process.stdout.write(`${DIM}${"─".repeat(60)}${RESET}
+          write(`${DIM}${"─".repeat(60)}${RESET}
 `);
           continue;
         }
-        process.stdout.write(renderInline(line) + `
+        write(renderInline(line) + `
 `);
       }
     },
     flush() {
       if (buffer) {
         if (inCodeBlock) {
-          process.stdout.write(`${DIM}│${RESET} ${GREEN}${buffer}${RESET}`);
+          write(`${DIM}│${RESET} ${GREEN}${buffer}${RESET}`);
         } else {
-          process.stdout.write(renderInline(buffer));
+          write(renderInline(buffer));
         }
         buffer = "";
       }
       if (inCodeBlock) {
-        process.stdout.write(`
+        write(`
 ${DIM}└${"─".repeat(62)}${RESET}
 `);
       }

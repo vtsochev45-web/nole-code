@@ -183,6 +183,8 @@ const STYLES: Record<string, StyleConfig> = {
 }
 
 export function applyStyle(text: string, styleName: string): string {
+  // Non-TTY output (piped -m, CI, harnesses) must stay ANSI-free.
+  if (!process.stdout.isTTY) return text
   const style = STYLES[styleName]
   if (!style) return text
 
@@ -223,6 +225,7 @@ export const c = {
 
   // Chainable
   hex: (text: string, color: string) => {
+    if (!process.stdout.isTTY) return text
     const colors: Record<string, number> = {
       red: 31, green: 32, yellow: 33, blue: 34, magenta: 35, cyan: 36,
     }

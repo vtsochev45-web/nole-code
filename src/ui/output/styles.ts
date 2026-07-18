@@ -4,6 +4,10 @@
  */
 
 const ESC = '\x1b['
+// All styling is disabled when stdout is not a TTY (piped -m output, CI,
+// harnesses): machine consumers must receive plain text with no ANSI.
+const wrap = (code: string, text: string): string =>
+  process.stdout.isTTY ? `${wrap(code, text)}` : text
 const RESET = '${ESC}0m'
 const BOLD = '${ESC}1m'
 const DIM = '${ESC}2m'
@@ -44,60 +48,60 @@ const bgColors = {
 type ColorName = keyof typeof colors | keyof typeof bgColors
 
 function color(code: string): (text: string) => string {
-  return (text: string) => `${ESC}${code}m${text}${ESC}0m`
+  return (text: string) => `${wrap(code, text)}`
 }
 
 function bold(text: string): string {
-  return `${ESC}1m${text}${ESC}0m`
+  return wrap('1', `${text}`)
 }
 
 function dim(text: string): string {
-  return `${ESC}2m${text}${ESC}0m`
+  return wrap('2', `${text}`)
 }
 
 function italic(text: string): string {
-  return `${ESC}3m${text}${ESC}0m`
+  return wrap('3', `${text}`)
 }
 
 function underline(text: string): string {
-  return `${ESC}4m${text}${ESC}0m`
+  return wrap('4', `${text}`)
 }
 
 // Foreground colors
 const c = {
   // Basic colors
-  black: (text: string) => `${ESC}30m${text}${ESC}0m`,
-  red: (text: string) => `${ESC}31m${text}${ESC}0m`,
-  green: (text: string) => `${ESC}32m${text}${ESC}0m`,
-  yellow: (text: string) => `${ESC}33m${text}${ESC}0m`,
-  blue: (text: string) => `${ESC}34m${text}${ESC}0m`,
-  magenta: (text: string) => `${ESC}35m${text}${ESC}0m`,
-  cyan: (text: string) => `${ESC}36m${text}${ESC}0m`,
-  white: (text: string) => `${ESC}37m${text}${ESC}0m`,
-  gray: (text: string) => `${ESC}90m${text}${ESC}0m`,
+  black: (text: string) => wrap('30', `${text}`),
+  red: (text: string) => wrap('31', `${text}`),
+  green: (text: string) => wrap('32', `${text}`),
+  yellow: (text: string) => wrap('33', `${text}`),
+  blue: (text: string) => wrap('34', `${text}`),
+  magenta: (text: string) => wrap('35', `${text}`),
+  cyan: (text: string) => wrap('36', `${text}`),
+  white: (text: string) => wrap('37', `${text}`),
+  gray: (text: string) => wrap('90', `${text}`),
   
   // Bright colors
-  brightRed: (text: string) => `${ESC}91m${text}${ESC}0m`,
-  brightGreen: (text: string) => `${ESC}92m${text}${ESC}0m`,
-  brightYellow: (text: string) => `${ESC}93m${text}${ESC}0m`,
-  brightBlue: (text: string) => `${ESC}94m${text}${ESC}0m`,
-  brightMagenta: (text: string) => `${ESC}95m${text}${ESC}0m`,
-  brightCyan: (text: string) => `${ESC}96m${text}${ESC}0m`,
+  brightRed: (text: string) => wrap('91', `${text}`),
+  brightGreen: (text: string) => wrap('92', `${text}`),
+  brightYellow: (text: string) => wrap('93', `${text}`),
+  brightBlue: (text: string) => wrap('94', `${text}`),
+  brightMagenta: (text: string) => wrap('95', `${text}`),
+  brightCyan: (text: string) => wrap('96', `${text}`),
   
   // Semantic colors
-  primary: (text: string) => `${ESC}96m${text}${ESC}0m`,    // Cyan
-  secondary: (text: string) => `${ESC}33m${text}${ESC}0m`,  // Yellow/Orange
-  success: (text: string) => `${ESC}92m${text}${ESC}0m`,    // Green
-  error: (text: string) => `${ESC}91m${text}${ESC}0m`,      // Red
-  warning: (text: string) => `${ESC}93m${text}${ESC}0m`,    // Yellow
-  info: (text: string) => `${ESC}94m${text}${ESC}0m`,        // Blue
+  primary: (text: string) => wrap('96', `${text}`),    // Cyan
+  secondary: (text: string) => wrap('33', `${text}`),  // Yellow/Orange
+  success: (text: string) => wrap('92', `${text}`),    // Green
+  error: (text: string) => wrap('91', `${text}`),      // Red
+  warning: (text: string) => wrap('93', `${text}`),    // Yellow
+  info: (text: string) => wrap('94', `${text}`),        // Blue
   
   // Role colors
-  user: (text: string) => `${ESC}94m${text}${ESC}0m`,       // Blue
-  assistant: (text: string) => `${ESC}95m${text}${ESC}0m`,   // Magenta
-  tool: (text: string) => `${ESC}93m${text}${ESC}0m`,        // Yellow
-  system: (text: string) => `${ESC}90m${text}${ESC}0m`,      // Gray
-  pink: (text: string) => `${ESC}38;5;206m${text}${ESC}0m`, // Pink (256-colour)
+  user: (text: string) => wrap('94', `${text}`),       // Blue
+  assistant: (text: string) => wrap('95', `${text}`),   // Magenta
+  tool: (text: string) => wrap('93', `${text}`),        // Yellow
+  system: (text: string) => wrap('90', `${text}`),      // Gray
+  pink: (text: string) => wrap('38;5;206', `${text}`), // Pink (256-colour)
   
   // Style modifiers
   bold,
@@ -106,12 +110,12 @@ const c = {
   underline,
   
   // Reset
-  reset: () => `${ESC}0m`,
+  reset: () => (process.stdout.isTTY ? `${ESC}0m` : ''),
 }
 
 // Divider line
 function divider(char = '─', length = 80): string {
-  return `${ESC}2m${char.repeat(length)}${ESC}0m`
+  return wrap('2', `${char.repeat(length)}`)
 }
 
 // Box drawing
@@ -202,7 +206,7 @@ function formatToolResult(
 
 // Status indicator
 function statusIndicator(success: boolean, label?: string): string {
-  const icon = success ? `${ESC}92m✓${ESC}0m` : `${ESC}91m✗${ESC}0m`
+  const icon = success ? wrap('92', `✓`) : wrap('91', `✗`)
   const text = label ? ` ${label}` : ''
   return icon + text
 }
@@ -214,7 +218,7 @@ let spinnerIndex = 0
 function spin(): string {
   const frame = SPINNER_FRAMES[spinnerIndex % SPINNER_FRAMES.length]
   spinnerIndex++
-  return `${ESC}94m${frame}${ESC}0m`
+  return wrap('94', `${frame}`)
 }
 
 // Token budget display
@@ -226,7 +230,7 @@ function tokenBudgetDisplay(used: number, max: number): string {
   
   const color = percent > 80 ? '91' : percent > 60 ? '93' : '92'
   
-  return `${c.dim('[')}${ESC}${color}m${bar}${ESC}0m${c.dim(`] ${used}/${max} tokens (${percent}%)`)}`
+  return `${c.dim('[')}${wrap(color, bar)}${c.dim(`] ${used}/${max} tokens (${percent}%)`)}`
 }
 
 // Table formatter
@@ -259,11 +263,11 @@ function diff(
   const parts: string[] = []
   
   for (const line of deletions) {
-    parts.push(`${ESC}91m- ${line}${ESC}0m`)
+    parts.push(wrap('91', `- ${line}`))
   }
   
   for (const line of additions) {
-    parts.push(`${ESC}92m+ ${line}${ESC}0m`)
+    parts.push(wrap('92', `+ ${line}`))
   }
   
   return parts.join('\n')

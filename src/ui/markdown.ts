@@ -16,7 +16,10 @@ const GRAY = `${ESC}90m`
 const BLUE = `${ESC}34m`
 const MAGENTA = `${ESC}35m`
 
-export function renderMarkdown(text: string): string {
+export function renderMarkdown(text: string, plain = !process.stdout.isTTY): string {
+  // Non-TTY consumers (piped -m output, CI, the cli-trust-harness) must get
+  // the raw text verbatim — ANSI styling breaks machine parsing of claims.
+  if (plain) return text
   const lines = text.split('\n')
   const output: string[] = []
   let inCodeBlock = false
@@ -99,12 +102,25 @@ function renderInline(text: string): string {
  * Streaming markdown renderer — processes chunks and renders complete lines
  * as they arrive. Returns a flush function for the final partial line.
  */
-export function createStreamingMarkdown(): {
+export function createStreamingMarkdown(opts?: {
+  plain?: boolean
+  out?: (s: string) => void
+}): {
   write: (chunk: string) => void
   flush: () => void
 } {
+  const plain = opts?.plain ?? !process.stdout.isTTY
+  const write = opts?.out ?? ((s: string) => { process.stdout.write(s) })
   let buffer = ''
   let inCodeBlock = false
+
+  if (plain) {
+    // Verbatim passthrough for non-TTY consumers — no ANSI, no decoration.
+    return {
+      write(chunk: string) { write(chunk) },
+      flush() {},
+    }
+  }
 
   return {
     write(chunk: string) {
@@ -121,40 +137,40 @@ export function createStreamingMarkdown(): {
           if (!inCodeBlock) {
             inCodeBlock = true
             const lang = line.trim().slice(3).trim()
-            process.stdout.write(`${DIM}┌─${lang ? ` ${lang} ` : ''}${'─'.repeat(Math.max(0, 60 - (lang?.length || 0)))}${RESET}\n`)
+            write(`${DIM}┌─${lang ? ` ${lang} ` : ''}${'─'.repeat(Math.max(0, 60 - (lang?.length || 0)))}${RESET}\n`)
           } else {
             inCodeBlock = false
-            process.stdout.write(`${DIM}└${'─'.repeat(62)}${RESET}\n`)
+            write(`${DIM}└${'─'.repeat(62)}${RESET}\n`)
           }
           continue
         }
 
         if (inCodeBlock) {
-          process.stdout.write(`${DIM}│${RESET} ${GREEN}${line}${RESET}\n`)
+          write(`${DIM}│${RESET} ${GREEN}${line}${RESET}\n`)
           continue
         }
 
         // Headers
         if (line.startsWith('### ')) {
-          process.stdout.write(`${BOLD}${CYAN}   ${line.slice(4)}${RESET}\n`)
+          write(`${BOLD}${CYAN}   ${line.slice(4)}${RESET}\n`)
           continue
         }
         if (line.startsWith('## ')) {
-          process.stdout.write(`${BOLD}${CYAN}  ${line.slice(3)}${RESET}\n`)
+          write(`${BOLD}${CYAN}  ${line.slice(3)}${RESET}\n`)
           continue
         }
         if (line.startsWith('# ')) {
-          process.stdout.write(`${BOLD}${CYAN}${line.slice(2)}${RESET}\n`)
+          write(`${BOLD}${CYAN}${line.slice(2)}${RESET}\n`)
           continue
         }
 
         // HR
         if (/^[-*_]{3,}\s*$/.test(line)) {
-          process.stdout.write(`${DIM}${'─'.repeat(60)}${RESET}\n`)
+          write(`${DIM}${'─'.repeat(60)}${RESET}\n`)
           continue
         }
 
-        process.stdout.write(renderInline(line) + '\n')
+        write(renderInline(line) + '\n')
       }
     },
 
@@ -162,14 +178,14 @@ export function createStreamingMarkdown(): {
       // Render any remaining partial line
       if (buffer) {
         if (inCodeBlock) {
-          process.stdout.write(`${DIM}│${RESET} ${GREEN}${buffer}${RESET}`)
+          write(`${DIM}│${RESET} ${GREEN}${buffer}${RESET}`)
         } else {
-          process.stdout.write(renderInline(buffer))
+          write(renderInline(buffer))
         }
         buffer = ''
       }
       if (inCodeBlock) {
-        process.stdout.write(`\n${DIM}└${'─'.repeat(62)}${RESET}\n`)
+        write(`\n${DIM}└${'─'.repeat(62)}${RESET}\n`)
       }
     },
   }
