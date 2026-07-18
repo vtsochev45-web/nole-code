@@ -502,7 +502,7 @@ registerTool({
     const path = resolve(process.cwd(), input.path as string)
     const pathCheck = validatePath(input.path as string, process.cwd())
     if (!pathCheck.valid) return `Access denied: ${pathCheck.reason}`
-    if (!existsSync(path)) return `File not found: ${path}`
+    if (!existsSync(path)) return `File not found: ${path} (ENOENT: no such file or directory)`
 
     // Dedup: if this exact file was read recently (same path, no offset/limit), return cached
     const { getCachedFile, cacheFile } = await import('../services/compact/index.js')
@@ -616,7 +616,7 @@ registerTool({
     const path = resolve(process.cwd(), input.path as string)
     const pathCheck = validatePath(input.path as string, process.cwd())
     if (!pathCheck.valid) return `Access denied: ${pathCheck.reason}`
-    if (!existsSync(path)) return `File not found: ${path}`
+    if (!existsSync(path)) return `File not found: ${path} (ENOENT: no such file or directory)`
 
     try {
       let content = readFileSync(path, 'utf-8')
@@ -1318,7 +1318,7 @@ registerTool({
     const filePath = resolve(process.cwd(), input.path as string)
     const pathCheck = validatePath(input.path as string, process.cwd())
     if (!pathCheck.valid) return `Access denied: ${pathCheck.reason}`
-    if (!existsSync(filePath)) return `File not found: ${filePath}`
+    if (!existsSync(filePath)) return `File not found: ${filePath} (ENOENT: no such file or directory)`
 
     const edits = input.edits as Array<{ old_text: string; new_text: string }>
     let content = readFileSync(filePath, 'utf-8')
@@ -1729,8 +1729,8 @@ registerTool({
     const f1 = resolve(process.cwd(), input.file1 as string)
     const f2 = resolve(process.cwd(), input.file2 as string)
 
-    if (!existsSync(f1)) return `File not found: ${f1}`
-    if (!existsSync(f2)) return `File not found: ${f2}`
+    if (!existsSync(f1)) return `File not found: ${f1} (ENOENT: no such file or directory)`
+    if (!existsSync(f2)) return `File not found: ${f2} (ENOENT: no such file or directory)`
 
     // No shell: f1/f2 pass as argv elements. diff exits 1 when files differ,
     // which runExecFileStdout treats as normal (returns captured stdout).

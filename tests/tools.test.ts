@@ -158,3 +158,13 @@ describe('Tool Not Found', () => {
     expect(result.isError).toBe(true)
   })
 })
+
+describe('missing-file errors carry errno text', () => {
+  test('Read on a missing path reports ENOENT wording', async () => {
+    const { executeTool } = await import('../src/tools/registry.js')
+    const result = await executeTool('Read', { path: '/tmp/nole-enoent-probe-does-not-exist.txt' }, { cwd: '/tmp' })
+    expect(result.isError).toBe(true)
+    expect(String(result.content)).toMatch(/ENOENT: no such file or directory/)
+    expect(String(result.content)).toMatch(/^File not found:/)
+  })
+})

@@ -18953,7 +18953,7 @@ var init_registry = __esm(() => {
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
       if (!existsSync9(path))
-        return `File not found: ${path}`;
+        return `File not found: ${path} (ENOENT: no such file or directory)`;
       const { getCachedFile: getCachedFile2, cacheFile: cacheFile2 } = await Promise.resolve().then(() => (init_compact(), exports_compact));
       if (!input.offset && !input.limit) {
         const cached2 = getCachedFile2(path);
@@ -19069,7 +19069,7 @@ ${content}`;
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
       if (!existsSync9(path))
-        return `File not found: ${path}`;
+        return `File not found: ${path} (ENOENT: no such file or directory)`;
       try {
         let content = readFileSync9(path, "utf-8");
         const oldText = input.old_text;
@@ -19698,7 +19698,7 @@ ${dirCount} directories, ${fileCount} files`);
       if (!pathCheck.valid)
         return `Access denied: ${pathCheck.reason}`;
       if (!existsSync9(filePath))
-        return `File not found: ${filePath}`;
+        return `File not found: ${filePath} (ENOENT: no such file or directory)`;
       const edits = input.edits;
       let content = readFileSync9(filePath, "utf-8");
       const diffs = [];
@@ -20095,9 +20095,9 @@ ${output.slice(0, 500) || "(no output yet)"}`;
       const f1 = resolve2(process.cwd(), input.file1);
       const f2 = resolve2(process.cwd(), input.file2);
       if (!existsSync9(f1))
-        return `File not found: ${f1}`;
+        return `File not found: ${f1} (ENOENT: no such file or directory)`;
       if (!existsSync9(f2))
-        return `File not found: ${f2}`;
+        return `File not found: ${f2} (ENOENT: no such file or directory)`;
       const result = await runExecFileStdout("diff", ["--color=never", "-u", f1, f2]);
       if (!result.trim())
         return "Files are identical";
