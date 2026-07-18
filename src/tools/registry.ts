@@ -109,10 +109,17 @@ function isErrorString(s: string): boolean {
 let promptChain: Promise<unknown> = Promise.resolve()
 
 async function promptPermission(toolName: string, input: Record<string, unknown>, reason: string): Promise<boolean> {
-  // Auto-allow when not a TTY (background mode, piped, -m flag)
+  // Non-interactive (background mode, piped, -m flag): fail closed. A prompt
+  // can never be answered here, and auto-allowing meant any non-TTY invocation
+  // silently bypassed all permission checks. NOLE_AUTO_ALLOW=1 restores the
+  // old behaviour as an explicit, per-invocation opt-in.
   if (!process.stdin.isTTY) {
-    process.stderr.write(`\x1b[33m⚠ Auto-allowed (non-interactive): ${toolName}\x1b[0m\n`)
-    return true
+    if (process.env.NOLE_AUTO_ALLOW === '1') {
+      process.stderr.write(`\x1b[33m⚠ Auto-allowed (NOLE_AUTO_ALLOW=1): ${toolName}\x1b[0m\n`)
+      return true
+    }
+    process.stderr.write(`\x1b[31m✗ Denied (non-interactive, no TTY to prompt): ${toolName}. Set NOLE_AUTO_ALLOW=1 to allow.\x1b[0m\n`)
+    return false
   }
 
   const preview = toolName === 'Bash' && input.command
@@ -129,15 +136,15 @@ async function promptPermission(toolName: string, input: Record<string, unknown>
     process.stdout.write(
       `\n\x1b[33m⚠ Permission required:\x1b[0m ${toolName}(${preview})\n` +
       `  Reason: ${reason}\n` +
-      `  Allow? [y/n/a(lways)] (auto-allows in 30s) `
+      `  Allow? [y/n/a(lways)] (denies in 30s) `
     )
 
     return withStdinLock(async () => {
       const ch = await readOneKey(30000)
 
       if (ch === null) {
-        process.stdout.write('\n\x1b[33m⚠ Permission timeout, auto-allowed\x1b[0m\n')
-        return true
+        process.stdout.write('\n\x1b[33m⚠ Permission timeout, denied\x1b[0m\n')
+        return false
       }
 
       // Echo the keystroke + newline so the user sees what they pressed

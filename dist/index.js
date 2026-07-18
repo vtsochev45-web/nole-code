@@ -18540,9 +18540,14 @@ function isErrorString(s) {
 }
 async function promptPermission(toolName, input, reason) {
   if (!process.stdin.isTTY) {
-    process.stderr.write(`\x1B[33m⚠ Auto-allowed (non-interactive): ${toolName}\x1B[0m
+    if (process.env.NOLE_AUTO_ALLOW === "1") {
+      process.stderr.write(`\x1B[33m⚠ Auto-allowed (NOLE_AUTO_ALLOW=1): ${toolName}\x1B[0m
 `);
-    return true;
+      return true;
+    }
+    process.stderr.write(`\x1B[31m✗ Denied (non-interactive, no TTY to prompt): ${toolName}. Set NOLE_AUTO_ALLOW=1 to allow.\x1B[0m
+`);
+    return false;
   }
   const preview = toolName === "Bash" && input.command ? String(input.command).slice(0, 80) : JSON.stringify(input).slice(0, 80);
   const next = promptChain.then(async () => {
@@ -18551,14 +18556,14 @@ async function promptPermission(toolName, input, reason) {
     process.stdout.write(`
 \x1B[33m⚠ Permission required:\x1B[0m ${toolName}(${preview})
   Reason: ${reason}
-  Allow? [y/n/a(lways)] (auto-allows in 30s) `);
+  Allow? [y/n/a(lways)] (denies in 30s) `);
     return withStdinLock2(async () => {
       const ch = await readOneKey2(30000);
       if (ch === null) {
         process.stdout.write(`
-\x1B[33m⚠ Permission timeout, auto-allowed\x1B[0m
+\x1B[33m⚠ Permission timeout, denied\x1B[0m
 `);
-        return true;
+        return false;
       }
       const printable = ch === "\r" || ch === `
 ` ? "↵" : ch;

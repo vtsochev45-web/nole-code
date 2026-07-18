@@ -5,6 +5,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'path'
 import { getToolDefinitions, executeTool } from '../src/tools/registry.js'
 
+// These tests exercise tool execution, not the permission gate. Tests have no
+// TTY, and non-interactive runs now fail closed — opt in explicitly.
+process.env.NOLE_AUTO_ALLOW = '1'
+
 const TEST_PROJECT = join(import.meta.dir, '..')
 const TEST_SRC = join(TEST_PROJECT, 'src')
 

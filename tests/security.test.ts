@@ -1,6 +1,23 @@
 // Tests for security systems
 import { describe, test, expect } from 'bun:test'
 import { checkCommandSecurity, validatePath } from '../src/permissions/bash-security.js'
+import { executeTool } from '../src/tools/registry.js'
+
+describe('Non-interactive permission gate', () => {
+  test('denies confirmation-requiring Bash without TTY unless NOLE_AUTO_ALLOW=1', async () => {
+    const saved = process.env.NOLE_AUTO_ALLOW
+    delete process.env.NOLE_AUTO_ALLOW
+    try {
+      // `chmod` is not on the safe list, so it requires confirmation — which
+      // is impossible without a TTY and must therefore fail closed.
+      const result = await executeTool('Bash', { command: 'chmod 600 /tmp/nole-gate-test-nonexistent' }, { cwd: '/tmp' })
+      expect(result.isError).toBe(true)
+      expect(result.content).toContain('denied')
+    } finally {
+      if (saved !== undefined) process.env.NOLE_AUTO_ALLOW = saved
+    }
+  })
+})
 
 describe('Command Security', () => {
   test('allows safe read-only commands', () => {

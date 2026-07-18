@@ -5,6 +5,10 @@ import { writeFileSync, mkdirSync, existsSync, unlinkSync, rmdirSync, mkdtempSyn
 import { tmpdir } from 'node:os'
 import { join } from 'path'
 
+// These tests exercise tool execution, not the permission gate. Tests have no
+// TTY, and non-interactive runs now fail closed — opt in explicitly.
+process.env.NOLE_AUTO_ALLOW = '1'
+
 const TEST_DIR = '/tmp/nole-power-test-' + Date.now()
 const PROJECT_ROOT = join(import.meta.dir, '..')
 const PROJECT_SRC = join(PROJECT_ROOT, 'src')
